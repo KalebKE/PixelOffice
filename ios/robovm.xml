@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+    <executableName>${app.executable}</executableName>
+    <mainClass>com.pixeloffice.ios.IOSLauncher</mainClass>
+    <os>ios</os>
+    <arch>thumbv7</arch>
+    <target>ios</target>
+    <iosInfoPList>Info.plist.xml</iosInfoPList>
+    <resources>
+        <resource>
+            <directory>../assets</directory>
+        </resource>
+    </resources>
+    <forceLinkClasses>
+        <pattern>com.badlogic.gdx.backends.iosrobovm.IOSApplication</pattern>
+    </forceLinkClasses>
+    <frameworks>
+        <framework>UIKit</framework>
+        <framework>OpenGLES</framework>
+        <framework>QuartzCore</framework>
+        <framework>CoreGraphics</framework>
+        <framework>OpenAL</framework>
+        <framework>AudioToolbox</framework>
+        <framework>AVFoundation</framework>
+    </frameworks>
+</config>

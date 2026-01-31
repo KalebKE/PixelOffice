@@ -1,0 +1,135 @@
+{
+  "network": {
+    "host": "localhost",
+    "port": 9999,
+    "buffer_size": 4096,
+    "reconnect_delay": 5.0
+  },
+  "display": {
+    "width": 320,
+    "height": 240,
+    "fps": 30,
+    "title": "Pixel Office - Claude Code Visualization"
+  },
+  "office": {
+    "tile_size": 16,
+    "desk_positions": [
+      {"x": 32, "y": 80, "id": "desk_1"},
+      {"x": 96, "y": 80, "id": "desk_2"},
+      {"x": 160, "y": 80, "id": "desk_3"},
+      {"x": 224, "y": 80, "id": "desk_4"},
+      {"x": 32, "y": 160, "id": "desk_5"},
+      {"x": 96, "y": 160, "id": "desk_6"},
+      {"x": 160, "y": 160, "id": "desk_7"},
+      {"x": 224, "y": 160, "id": "desk_8"}
+    ],
+    "whiteboard_positions": [
+      {"x": 290, "y": 50, "id": "vending_1"},
+      {"x": 290, "y": 120, "id": "vending_2"}
+    ],
+    "pm_patrol_path": [
+      {"x": 64, "y": 130},
+      {"x": 128, "y": 130},
+      {"x": 192, "y": 130},
+      {"x": 256, "y": 130},
+      {"x": 256, "y": 200},
+      {"x": 192, "y": 200},
+      {"x": 128, "y": 200},
+      {"x": 64, "y": 200}
+    ]
+  },
+  "animation": {
+    "idle_frame_duration": 0.5,
+    "walk_frame_duration": 0.15,
+    "typing_frame_duration": 0.1,
+    "thinking_frame_duration": 0.3,
+    "ghost_frame_duration": 0.15
+  },
+  "sprites": {
+    "character_width": 16,
+    "character_height": 24,
+    "desk_width": 48,
+    "desk_height": 32,
+    "whiteboard_width": 24,
+    "whiteboard_height": 48,
+    "effect_size": 16,
+    "tile_size": 16,
+    "color_variants": ["blue", "green", "red", "purple"]
+  },
+  "sprite_sheet": {
+    "transparent_color": 12,
+    "palette": [
+      0, 1908563, 8267091, 34641, 11227702, 6248271, 12763079,
+      16773608, 16711757, 16753408, 16772135, 58422, 2731519,
+      8615580, 16742312, 16764074
+    ],
+    "characters": {
+      "blue_shirt": {"x": 0, "y": 104, "w": 16, "h": 24},
+      "glasses": {"x": 16, "y": 104, "w": 16, "h": 24},
+      "red_hair": {"x": 32, "y": 104, "w": 16, "h": 24},
+      "dark_hair": {"x": 48, "y": 104, "w": 16, "h": 24},
+      "blonde": {"x": 64, "y": 104, "w": 16, "h": 24}
+    },
+    "developer_variants": {
+      "blue": "blue_shirt",
+      "green": "glasses",
+      "red": "red_hair",
+      "purple": "dark_hair"
+    },
+    "project_manager": "blonde",
+    "project_owner": "dark_hair",
+    "animals": {
+      "cat": {"x": 80, "y": 112, "w": 16, "h": 16},
+      "dog": {"x": 96, "y": 112, "w": 16, "h": 16}
+    },
+    "furniture": {
+      "couch_orange": {"x": 0, "y": 48, "w": 48, "h": 24},
+      "couch_red": {"x": 48, "y": 48, "w": 48, "h": 24},
+      "couch_blue": {"x": 96, "y": 48, "w": 48, "h": 24},
+      "couch_gray": {"x": 144, "y": 48, "w": 24, "h": 24},
+      "desk": {"x": 0, "y": 72, "w": 48, "h": 32},
+      "desk_surface": {"x": 144, "y": 72, "w": 32, "h": 16},
+      "chair": {"x": 128, "y": 88, "w": 16, "h": 16},
+      "vending_red": {"x": 192, "y": 72, "w": 24, "h": 48},
+      "vending_blue": {"x": 159, "y": 123, "w": 24, "h": 34},
+      "fridge": {"x": 240, "y": 72, "w": 16, "h": 48},
+      "plant_small": {"x": 176, "y": 96, "w": 16, "h": 16},
+      "plant_large": {"x": 160, "y": 88, "w": 16, "h": 24},
+      "monitor": {"x": 144, "y": 88, "w": 16, "h": 16},
+      "window_with_note": {"x": 88, "y": 96, "w": 26, "h": 21},
+      "window": {"x": 0, "y": 24, "w": 32, "h": 24},
+      "elevator": {"x": 64, "y": 24, "w": 32, "h": 48},
+      "water_cooler": {"x": 147, "y": 140, "w": 9, "h": 17},
+      "small_table": {"x": 85, "y": 47, "w": 26, "h": 16},
+      "coffee_mug": {"x": 169, "y": 95, "w": 8, "h": 7},
+      "coffee_machine": {"x": 159, "y": 91, "w": 7, "h": 11}
+    },
+    "whiteboard": "vending_red",
+    "tiles": {
+      "floor_brick": {"x": 3, "y": 68, "w": 73, "h": 24},
+      "wall_gray": {"x": 208, "y": 112, "w": 16, "h": 16},
+      "wall_tile": {"x": 84, "y": 70, "w": 26, "h": 20}
+    },
+    "clouds": [
+      {"x": 0, "y": 0, "w": 256, "h": 38}
+    ]
+  },
+  "developer": {
+    "walk_speed": 40,
+    "thinking_duration": 3.0,
+    "despair_duration": 2.0
+  },
+  "project_manager": {
+    "patrol_speed": 30,
+    "interrupt_chance": 0.1,
+    "interrupt_duration": 3.0
+  },
+  "project_owner": {
+    "walk_speed": 35,
+    "question_timeout": 30.0
+  },
+  "demo": {
+    "enabled": true,
+    "sample_events_file": "tests/fixtures/sample_events.json"
+  }
+}
