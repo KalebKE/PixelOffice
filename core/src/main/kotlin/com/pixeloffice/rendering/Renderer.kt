@@ -294,6 +294,30 @@ class Renderer(
         batch.draw(wbFrame.region, worldX, screenY)
     }
 
+    fun drawRedBook(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("red_book") ?: return
+        val screenY = flipY(worldY, wbFrame.height)
+        batch.draw(wbFrame.region, worldX, screenY)
+    }
+
+    fun drawBlueBook(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("blue_book") ?: return
+        val screenY = flipY(worldY, wbFrame.height)
+        batch.draw(wbFrame.region, worldX, screenY)
+    }
+
+    fun drawGreenBook(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("green_book") ?: return
+        val screenY = flipY(worldY, wbFrame.height)
+        batch.draw(wbFrame.region, worldX, screenY)
+    }
+
+    fun drawNotes(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("notes") ?: return
+        val screenY = flipY(worldY, wbFrame.height)
+        batch.draw(wbFrame.region, worldX, screenY)
+    }
+
     fun drawArt(worldX: Float, worldY: Float) {
         val wbFrame = spriteSheet.getFurnitureFrame("art") ?: return
         val screenY = flipY(worldY, wbFrame.height)
@@ -829,6 +853,9 @@ class Renderer(
         drawMonitorLeft(65f, 192f)
         drawOrangeChairLeft(50f, 192f)
         drawDeskRight(85f, 196f)
+        drawRedBook(87f, 197f)
+        drawNotes(87f, 207f)
+
         drawSmallCalendar(110f, 190f)
         drawDeskWall(45f, 215f)
         drawDog(105f, 200f)
