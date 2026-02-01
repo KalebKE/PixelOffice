@@ -46,8 +46,9 @@ class Office(private val config: Config) {
     // Entity ID counter
     private var nextEntityId = 0
 
-    // Pathfinder for developer navigation
-    private val pathfinder = OfficePathfinder()
+    // Pathfinder for developer navigation (data-driven from config)
+    private val collisionMap = CollisionMap(config)
+    private val pathfinder: Pathfinder = DataDrivenPathfinder(collisionMap)
 
     init {
         setupLayout()
