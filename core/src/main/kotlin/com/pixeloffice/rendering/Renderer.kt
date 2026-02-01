@@ -70,7 +70,7 @@ class Renderer(
     // Animation constants
     companion object {
         const val BOB_SPEED = 8.0f
-        const val BOB_AMPLITUDE = 2.0f
+        const val BOB_AMPLITUDE = 1.0f
     }
 
     /**
@@ -294,16 +294,60 @@ class Renderer(
         batch.draw(wbFrame.region, worldX, screenY)
     }
 
-    fun drawComputer(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("computer") ?: return
+    fun drawArt(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("art") ?: return
         val screenY = flipY(worldY, wbFrame.height)
         batch.draw(wbFrame.region, worldX, screenY)
     }
 
-    fun drawMonitor(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("monitor") ?: return
+    fun drawSmallOrangeArt(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("small_art_orange") ?: return
         val screenY = flipY(worldY, wbFrame.height)
         batch.draw(wbFrame.region, worldX, screenY)
+    }
+
+    fun drawSmallBlueArt(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("small_art_blue") ?: return
+        val screenY = flipY(worldY, wbFrame.height)
+        batch.draw(wbFrame.region, worldX, screenY)
+    }
+
+    fun drawSmallCalendar(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("small_calendar") ?: return
+        val screenY = flipY(worldY, wbFrame.height)
+        batch.draw(wbFrame.region, worldX, screenY)
+    }
+
+    fun drawComputerLeft(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("computer") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawComputerRight(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("computer") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(
+            frame.region,
+            worldX + frame.width, screenY,
+            -frame.width.toFloat(), frame.height.toFloat()
+        )
+    }
+
+    fun drawMonitorLeft(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("monitor") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawMonitorRight(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("monitor") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(
+            frame.region,
+            worldX + frame.width, screenY,
+            -frame.width.toFloat(), frame.height.toFloat()
+        )
     }
 
     /**
@@ -760,22 +804,32 @@ class Renderer(
         drawBookshelf(290f, 80f)
 
         drawDeskWall(45f, 125f)
+        drawSmallOrangeArt(54f, 130f)
         drawDeskPartition(81f, 128f)
         drawDeskLeft(64f, 136f)
+        drawMonitorLeft(65f, 132f)
         drawBlackChairLeft(50f, 132f)
         drawDeskRight(85f, 136f)
+        drawComputerRight(86f, 132f)
         drawWhiteChairRight(105f, 132f)
         drawDeskWall(45f, 155f)
+        drawArt(52f, 160f)
         drawDeskPartition(81f, 158f)
         drawDeskLeft(64f, 166f)
+        drawComputerLeft(65f, 162f)
         drawGreenChairLeft(50f, 162f)
         drawBlueChairRight(97f, 162f)
         drawDeskRight(85f, 166f)
+        drawMonitorRight(86f, 162f)
         drawDeskWall(45f, 185f)
+        drawSmallBlueArt(110f, 160f)
+        drawSmallBlueArt(54f, 190f)
         drawDeskPartition(81f, 188f)
         drawDeskLeft(64f, 196f)
+        drawMonitorLeft(65f, 192f)
         drawOrangeChairLeft(50f, 192f)
         drawDeskRight(85f, 196f)
+        drawSmallCalendar(110f, 190f)
         drawDeskWall(45f, 215f)
         drawDog(105f, 200f)
         drawTree(76f, 218f)
@@ -783,32 +837,14 @@ class Renderer(
 
         drawDeskWall(175f, 125f)
 
-//        // Draw furniture
-//        @Suppress("UNCHECKED_CAST")
-//        val whiteboards = renderData["whiteboards"] as? List<Map<String, Any>> ?: emptyList()
-//        for (wb in whiteboards) {
-//            val x = (wb["x"] as? Number)?.toFloat() ?: 0f
-//            val y = (wb["y"] as? Number)?.toFloat() ?: 0f
-//            drawWhiteboard(x, y)
-//        }
+        // Collect and sort entities by y position for depth ordering
+        // In Y-up, higher Y = further back, so sort descending
+        val entities = mutableListOf<Map<String, Any>>()
 
-//        @Suppress("UNCHECKED_CAST")
-//        val desks = renderData["desks"] as? List<Map<String, Any>> ?: emptyList()
-//        for (desk in desks) {
-//            val x = (desk["x"] as? Number)?.toFloat() ?: 0f
-//            val y = (desk["y"] as? Number)?.toFloat() ?: 0f
-//            val occupied = desk["occupied"] as? Boolean ?: false
-//            drawDesk(x, y, occupied)
-//        }
-//
-//        // Collect and sort entities by y position for depth ordering
-//        // In Y-up, higher Y = further back, so sort descending
-//        val entities = mutableListOf<Map<String, Any>>()
-//
-//        @Suppress("UNCHECKED_CAST")
-//        val developers = renderData["developers"] as? List<Map<String, Any>> ?: emptyList()
-//        entities.addAll(developers)
-//
+        @Suppress("UNCHECKED_CAST")
+        val developers = renderData["developers"] as? List<Map<String, Any>> ?: emptyList()
+        entities.addAll(developers)
+
 //        @Suppress("UNCHECKED_CAST")
 //        val pm = renderData["project_manager"] as? Map<String, Any>
 //        if (pm != null) entities.add(pm)
@@ -816,23 +852,23 @@ class Renderer(
 //        @Suppress("UNCHECKED_CAST")
 //        val po = renderData["project_owner"] as? Map<String, Any>
 //        if (po != null) entities.add(po)
-//
-//        // Sort by y position (lower Y in world = draw first = behind)
-//        entities.sortBy { (it["y"] as? Number)?.toFloat() ?: 0f }
-//
-//        for (entity in entities) {
-//            val visible = entity["visible"] as? Boolean ?: true
-//            if (visible) {
-//                drawEntity(entity)
-//            }
-//        }
-//
-//        // Draw effects on top
-//        @Suppress("UNCHECKED_CAST")
-//        val effects = renderData["effects"] as? List<Map<String, Any>> ?: emptyList()
-//        for (effect in effects) {
-//            drawEntity(effect)
-//        }
+
+        // Sort by y position (lower Y in world = draw first = behind)
+        entities.sortBy { (it["y"] as? Number)?.toFloat() ?: 0f }
+
+        for (entity in entities) {
+            val visible = entity["visible"] as? Boolean ?: true
+            if (visible) {
+                drawEntity(entity)
+            }
+        }
+
+        // Draw effects on top
+        @Suppress("UNCHECKED_CAST")
+        val effects = renderData["effects"] as? List<Map<String, Any>> ?: emptyList()
+        for (effect in effects) {
+            drawEntity(effect)
+        }
 
         endBatch()
 

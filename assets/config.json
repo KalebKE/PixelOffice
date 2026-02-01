@@ -14,7 +14,7 @@
   "office": {
     "tile_size": 16,
     "desk_positions": [
-      {"x": 32, "y": 80, "id": "desk_1"},
+      {"x": 64, "y": 136, "id": "desk_1"},
       {"x": 96, "y": 80, "id": "desk_2"},
       {"x": 160, "y": 80, "id": "desk_3"},
       {"x": 224, "y": 80, "id": "desk_4"},
@@ -24,7 +24,7 @@
       {"x": 224, "y": 160, "id": "desk_8"}
     ],
     "whiteboard_positions": [
-      {"x": 290, "y": 50, "id": "vending_1"},
+      {"x": 73, "y": 83, "id": "vending_1"},
       {"x": 290, "y": 120, "id": "vending_2"}
     ],
     "pm_patrol_path": [
@@ -64,7 +64,7 @@
       8615580, 16742312, 16764074
     ],
     "characters": {
-      "blue_shirt": {"x": 0, "y": 104, "w": 16, "h": 24},
+      "blue_shirt": {"x": 2, "y": 105, "w": 15, "h": 23},
       "glasses": {"x": 16, "y": 104, "w": 16, "h": 24},
       "red_hair": {"x": 32, "y": 104, "w": 16, "h": 24},
       "dark_hair": {"x": 48, "y": 104, "w": 16, "h": 24},
@@ -114,7 +114,11 @@
       "coffee_machine": {"x": 159, "y": 91, "w": 7, "h": 11},
       "whiteboard": {"x": 234, "y": 81, "w": 17, "h": 11},
       "blue_trash_can": {"x": 136, "y": 143, "w": 9, "h": 14},
-      "clock": {"x": 159, "y": 108, "w": 19, "h": 6}
+      "clock": {"x": 159, "y": 108, "w": 19, "h": 6},
+      "art": {"x": 239, "y": 94, "w": 11, "h": 8},
+      "small_art_orange": {"x": 230, "y": 94, "w": 6, "h": 8},
+      "small_art_blue": {"x": 222, "y": 94, "w": 6, "h": 8},
+      "small_calendar": {"x": 183, "y": 107, "w": 6, "h": 8}
     },
     "tiles": {
       "floor_brick": {"x": 3, "y": 68, "w": 73, "h": 24},
@@ -126,7 +130,7 @@
     ]
   },
   "developer": {
-    "walk_speed": 40,
+    "walk_speed": 15,
     "thinking_duration": 3.0,
     "despair_duration": 2.0
   },
@@ -136,7 +140,7 @@
     "interrupt_duration": 3.0
   },
   "project_owner": {
-    "walk_speed": 35,
+    "walk_speed": 10,
     "question_timeout": 30.0
   },
   "demo": {
