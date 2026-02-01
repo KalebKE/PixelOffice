@@ -1,6 +1,7 @@
 package com.pixeloffice.entities
 
 import com.pixeloffice.states.DeveloperStateMachine
+import com.pixeloffice.world.Office
 import com.pixeloffice.world.OfficePathfinder
 
 /**
@@ -28,6 +29,8 @@ class Developer(
     // Position references
     private var deskPosition: Pair<Float, Float>? = null
     private var whiteboardPosition: Pair<Float, Float>? = null
+    private var assignedWhiteboardId: String? = null
+    private var office: Office? = null
 
     // Walk target
     private var walkTarget: Pair<Float, Float>? = null
@@ -145,11 +148,32 @@ class Developer(
 
     fun getDeskPosition(): Pair<Float, Float>? = deskPosition
 
-    fun setWhiteboardPosition(x: Float, y: Float) {
+    fun setWhiteboardPosition(x: Float, y: Float, whiteboardId: String? = null) {
         whiteboardPosition = Pair(x, y)
+        assignedWhiteboardId = whiteboardId
     }
 
     fun getWhiteboardPosition(): Pair<Float, Float>? = whiteboardPosition
+
+    fun getAssignedWhiteboardId(): String? = assignedWhiteboardId
+
+    fun setOffice(office: Office) {
+        this.office = office
+    }
+
+    fun getOffice(): Office? = office
+
+    fun claimWhiteboard() {
+        assignedWhiteboardId?.let { id ->
+            office?.claimWhiteboard(id)
+        }
+    }
+
+    fun releaseWhiteboard() {
+        assignedWhiteboardId?.let { id ->
+            office?.releaseWhiteboard(id)
+        }
+    }
 
     // Walking
 
@@ -214,6 +238,8 @@ class Developer(
             onSpawnBubble?.let { spawner ->
                 thoughtBubble = spawner(this)
             }
+        } else if (!show && thoughtBubble != null) {
+            thoughtBubble?.hide()
         }
     }
 

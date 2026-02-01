@@ -46,7 +46,6 @@ class ThinkingState(private val duration: Float = 3.0f) : State<Developer>(Devel
 
     override fun enter(entity: Developer, prevState: State<Developer>?) {
         entity.setAnimation("thinking")
-        entity.showThoughtBubble(true)
         timer = 0f
     }
 
@@ -58,9 +57,7 @@ class ThinkingState(private val duration: Float = 3.0f) : State<Developer>(Devel
         return null
     }
 
-    override fun exit(entity: Developer, nextState: State<Developer>?) {
-        entity.showThoughtBubble(false)
-    }
+    override fun exit(entity: Developer, nextState: State<Developer>?) {}
 
     override fun onEvent(entity: Developer, event: String, data: Any?): String? {
         return when (event) {
@@ -78,6 +75,8 @@ class ThinkingState(private val duration: Float = 3.0f) : State<Developer>(Devel
 class WalkingToWhiteboardState : State<Developer>(DeveloperStateNames.WALKING_TO_WHITEBOARD) {
     override fun enter(entity: Developer, prevState: State<Developer>?) {
         entity.setAnimation("walking")
+        // Claim the whiteboard before walking
+        entity.claimWhiteboard()
         entity.getWhiteboardPosition()?.let { (x, y) ->
             entity.walkToWithPathfinding(x, y)
         }
@@ -109,6 +108,7 @@ class AtWhiteboardState(private val duration: Float = 5.0f) : State<Developer>(D
 
     override fun enter(entity: Developer, prevState: State<Developer>?) {
         entity.setAnimation("thinking")
+        entity.showThoughtBubble(true)
         timer = 0f
     }
 
@@ -120,7 +120,10 @@ class AtWhiteboardState(private val duration: Float = 5.0f) : State<Developer>(D
         return null
     }
 
-    override fun exit(entity: Developer, nextState: State<Developer>?) {}
+    override fun exit(entity: Developer, nextState: State<Developer>?) {
+        entity.showThoughtBubble(false)
+        entity.releaseWhiteboard()
+    }
 
     override fun onEvent(entity: Developer, event: String, data: Any?): String? {
         return when (event) {
