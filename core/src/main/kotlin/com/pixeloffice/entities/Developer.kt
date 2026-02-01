@@ -243,6 +243,34 @@ class Developer(
         }
     }
 
+    /**
+     * Show annoyed bubble when PM interrupts.
+     */
+    fun showAnnoyedBubble() {
+        if (thoughtBubble == null) {
+            onSpawnBubble?.let { spawner ->
+                thoughtBubble = spawner(this)
+            }
+        }
+        thoughtBubble?.bubbleType = "annoyed"
+        showBubble = true
+        thoughtBubble?.show()
+    }
+
+    /**
+     * Show a specific type of thought bubble.
+     */
+    fun showBubbleOfType(bubbleType: String) {
+        if (thoughtBubble == null) {
+            onSpawnBubble?.let { spawner ->
+                thoughtBubble = spawner(this)
+            }
+        }
+        thoughtBubble?.bubbleType = bubbleType
+        showBubble = true
+        thoughtBubble?.show()
+    }
+
     fun spawnGhost() {
         onSpawnGhost?.let { spawner ->
             ghost = spawner(this)

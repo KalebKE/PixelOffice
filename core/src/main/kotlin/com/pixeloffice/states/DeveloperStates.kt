@@ -227,6 +227,8 @@ class BeingInterruptedState(private val duration: Float = 3.0f) : State<Develope
         entity.setAnimation("idle")
         timer = 0f
         previousState = prevState?.name ?: DeveloperStateNames.IDLE
+        // Show annoyed bubble when PM interrupts
+        entity.showAnnoyedBubble()
     }
 
     override fun update(entity: Developer, dt: Float): String? {
@@ -237,7 +239,10 @@ class BeingInterruptedState(private val duration: Float = 3.0f) : State<Develope
         return null
     }
 
-    override fun exit(entity: Developer, nextState: State<Developer>?) {}
+    override fun exit(entity: Developer, nextState: State<Developer>?) {
+        // Hide the annoyed bubble when interrupt ends
+        entity.showThoughtBubble(false)
+    }
 
     override fun onEvent(entity: Developer, event: String, data: Any?): String? {
         return when (event) {

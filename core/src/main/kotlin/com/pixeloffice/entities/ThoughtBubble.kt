@@ -13,7 +13,8 @@ class ThoughtBubble(
     entityId: String = "",
     private val frameDuration: Float = 0.3f,
     private val bobAmount: Float = 2f,
-    private val bobSpeed: Float = 3f
+    private val bobSpeed: Float = 3f,
+    var bubbleType: String = "thinking"  // thinking, blah, question, annoyed
 ) : BaseEntity(x, y, entityId) {
 
     private var baseY = y
@@ -57,7 +58,8 @@ class ThoughtBubble(
             "y" to y,
             "animation" to currentAnimation,
             "frame" to currentFrame,
-            "visible" to visible
+            "visible" to visible,
+            "bubble_type" to bubbleType
         )
     }
 
