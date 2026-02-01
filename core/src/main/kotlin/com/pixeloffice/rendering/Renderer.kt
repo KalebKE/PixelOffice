@@ -294,6 +294,18 @@ class Renderer(
         batch.draw(wbFrame.region, worldX, screenY)
     }
 
+    fun drawComputer(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("computer") ?: return
+        val screenY = flipY(worldY, wbFrame.height)
+        batch.draw(wbFrame.region, worldX, screenY)
+    }
+
+    fun drawMonitor(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("monitor") ?: return
+        val screenY = flipY(worldY, wbFrame.height)
+        batch.draw(wbFrame.region, worldX, screenY)
+    }
+
     /**
      * Draw blue vending machine.
      */
