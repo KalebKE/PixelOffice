@@ -37,6 +37,32 @@ data class Position(
 )
 
 @Serializable
+data class CollisionRect(
+    val x: Int = 0,
+    val y: Int = 0,
+    val w: Int,
+    val h: Int
+)
+
+@Serializable
+data class FurnitureItem(
+    val id: String,
+    val type: String,
+    val x: Int,
+    val y: Int,
+    val collision: CollisionRect? = null
+)
+
+@Serializable
+data class WalkableZone(
+    val id: String,
+    val x: Int,
+    val y: Int,
+    val w: Int,
+    val h: Int
+)
+
+@Serializable
 data class OfficeConfig(
     @SerialName("tile_size")
     val tileSize: Int = 16,
@@ -45,7 +71,10 @@ data class OfficeConfig(
     @SerialName("whiteboard_positions")
     val whiteboardPositions: List<Position> = emptyList(),
     @SerialName("pm_patrol_path")
-    val pmPatrolPath: List<Position> = emptyList()
+    val pmPatrolPath: List<Position> = emptyList(),
+    val furniture: List<FurnitureItem> = emptyList(),
+    @SerialName("walkable_zones")
+    val walkableZones: List<WalkableZone> = emptyList()
 )
 
 @Serializable

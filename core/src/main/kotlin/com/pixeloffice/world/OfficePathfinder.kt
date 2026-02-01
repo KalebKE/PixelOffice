@@ -12,8 +12,10 @@ package com.pixeloffice.world
  * - Right desk column: X=175-255 (desks at X=194, 215)
  * - Center aisle: X=125-175 (safe to walk through)
  * - Desk rows at Y=136, 166, 196 (first row at Y=125 is the wall)
+ *
+ * @deprecated Use DataDrivenPathfinder instead for config-based pathfinding.
  */
-class OfficePathfinder {
+class OfficePathfinder : Pathfinder {
 
     companion object {
         // Exit corridors on left and right sides of desk clusters
@@ -56,7 +58,7 @@ class OfficePathfinder {
      * @param endY Destination Y position
      * @return List of waypoints to follow (including final destination)
      */
-    fun calculatePath(startX: Float, startY: Float, endX: Float, endY: Float): List<Pair<Float, Float>> {
+    override fun calculatePath(startX: Float, startY: Float, endX: Float, endY: Float): List<Pair<Float, Float>> {
         val path = mutableListOf<Pair<Float, Float>>()
 
         // Determine if we're in the desk area (below corridor)

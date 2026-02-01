@@ -1,6 +1,6 @@
 package com.pixeloffice.entities
 
-import com.pixeloffice.world.OfficePathfinder
+import com.pixeloffice.world.Pathfinder
 import kotlin.random.Random
 
 /**
@@ -19,7 +19,7 @@ class ProjectManager(
 ) : BaseEntity(x, y, entityId) {
 
     // Pathfinding
-    private var pathfinder: OfficePathfinder? = null
+    private var pathfinder: Pathfinder? = null
     private var deskTargets = mutableListOf<Triple<String, Float, Float>>()  // id, x, y
     private var remainingDesks = mutableListOf<Triple<String, Float, Float>>()
     private var currentPath = mutableListOf<Pair<Float, Float>>()
@@ -42,7 +42,7 @@ class ProjectManager(
     // Callback for when PM is at a developer's desk
     var onInterruptDeveloper: ((Developer) -> Unit)? = null
 
-    fun setPathfinder(pf: OfficePathfinder) {
+    fun setPathfinder(pf: Pathfinder) {
         pathfinder = pf
     }
 

@@ -2,7 +2,7 @@ package com.pixeloffice.entities
 
 import com.pixeloffice.states.DeveloperStateMachine
 import com.pixeloffice.world.Office
-import com.pixeloffice.world.OfficePathfinder
+import com.pixeloffice.world.Pathfinder
 
 /**
  * A developer sprite representing a Claude agent.
@@ -39,7 +39,7 @@ class Developer(
     // Waypoint-based pathfinding
     private var waypointPath: MutableList<Pair<Float, Float>> = mutableListOf()
     private var currentWaypointIndex = 0
-    private var pathfinder: OfficePathfinder? = null
+    private var pathfinder: Pathfinder? = null
 
     // State machine
     private val stateMachine = DeveloperStateMachine(
@@ -218,7 +218,7 @@ class Developer(
     /**
      * Set the pathfinder for waypoint-based navigation.
      */
-    fun setPathfinder(pf: OfficePathfinder) {
+    fun setPathfinder(pf: Pathfinder) {
         pathfinder = pf
     }
 
