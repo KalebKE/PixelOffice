@@ -106,7 +106,6 @@ data class SpriteSheetConfig(
     val projectOwner: String = "dark_hair",
     val animals: Map<String, SpriteRect> = emptyMap(),
     val furniture: Map<String, SpriteRect> = emptyMap(),
-    val whiteboard: String = "vending_red",
     val tiles: Map<String, SpriteRect> = emptyMap(),
     val clouds: List<SpriteRect> = emptyList()
 ) {
@@ -118,8 +117,6 @@ data class SpriteSheetConfig(
     }
 
     fun getFurniture(name: String): SpriteRect? = furniture[name]
-
-    fun getWhiteboard(): SpriteRect? = furniture[whiteboard]
 
     fun getTile(name: String): SpriteRect? = tiles[name]
 }
