@@ -45,6 +45,9 @@ class Office(private val config: Config) {
     // Entity ID counter
     private var nextEntityId = 0
 
+    // Pathfinder for developer navigation
+    private val pathfinder = OfficePathfinder()
+
     init {
         setupLayout()
     }
@@ -111,6 +114,9 @@ class Office(private val config: Config) {
         whiteboard?.let {
             developer.setWhiteboardPosition(it.x, it.y)
         }
+
+        // Set up pathfinder for navigation
+        developer.setPathfinder(pathfinder)
 
         // Set up effect spawners
         developer.setGhostSpawner { dev -> spawnGhost(dev) }

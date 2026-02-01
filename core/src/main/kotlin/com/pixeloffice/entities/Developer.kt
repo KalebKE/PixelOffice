@@ -1,6 +1,7 @@
 package com.pixeloffice.entities
 
 import com.pixeloffice.states.DeveloperStateMachine
+import com.pixeloffice.world.OfficePathfinder
 
 /**
  * A developer sprite representing a Claude agent.
@@ -32,6 +33,11 @@ class Developer(
     private var walkTarget: Pair<Float, Float>? = null
     private var reachedTarget = false
 
+    // Waypoint-based pathfinding
+    private var waypointPath: MutableList<Pair<Float, Float>> = mutableListOf()
+    private var currentWaypointIndex = 0
+    private var pathfinder: OfficePathfinder? = null
+
     // State machine
     private val stateMachine = DeveloperStateMachine(
         this,
@@ -61,12 +67,27 @@ class Developer(
         // Update state machine
         stateMachine.update(dt)
 
-        // Handle walking
-        walkTarget?.let { (targetX, targetY) ->
+        // Handle waypoint-based walking
+        if (waypointPath.isNotEmpty() && currentWaypointIndex < waypointPath.size) {
+            val (targetX, targetY) = waypointPath[currentWaypointIndex]
             val reached = moveTowards(targetX, targetY, walkSpeed, dt)
             if (reached) {
-                reachedTarget = true
-                walkTarget = null
+                currentWaypointIndex++
+                if (currentWaypointIndex >= waypointPath.size) {
+                    // Reached final waypoint
+                    reachedTarget = true
+                    waypointPath.clear()
+                    currentWaypointIndex = 0
+                }
+            }
+        } else {
+            // Handle legacy single-target walking
+            walkTarget?.let { (targetX, targetY) ->
+                val reached = moveTowards(targetX, targetY, walkSpeed, dt)
+                if (reached) {
+                    reachedTarget = true
+                    walkTarget = null
+                }
             }
         }
 
@@ -141,8 +162,40 @@ class Developer(
 
     fun stopWalking() {
         walkTarget = null
+        waypointPath.clear()
+        currentWaypointIndex = 0
         velocity.x = 0f
         velocity.y = 0f
+    }
+
+    /**
+     * Set a multi-waypoint path for the developer to follow.
+     */
+    fun setWalkPath(path: List<Pair<Float, Float>>) {
+        waypointPath = path.toMutableList()
+        currentWaypointIndex = 0
+        reachedTarget = false
+    }
+
+    /**
+     * Calculate and set a path to the target using the pathfinder.
+     * Falls back to direct walking if no pathfinder is set.
+     */
+    fun walkToWithPathfinding(targetX: Float, targetY: Float) {
+        val pf = pathfinder
+        if (pf != null) {
+            val path = pf.calculatePath(x, y, targetX, targetY)
+            setWalkPath(path)
+        } else {
+            setWalkTarget(targetX, targetY)
+        }
+    }
+
+    /**
+     * Set the pathfinder for waypoint-based navigation.
+     */
+    fun setPathfinder(pf: OfficePathfinder) {
+        pathfinder = pf
     }
 
     // State machine interface

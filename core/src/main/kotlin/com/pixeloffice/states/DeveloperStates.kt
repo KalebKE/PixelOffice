@@ -79,7 +79,7 @@ class WalkingToWhiteboardState : State<Developer>(DeveloperStateNames.WALKING_TO
     override fun enter(entity: Developer, prevState: State<Developer>?) {
         entity.setAnimation("walking")
         entity.getWhiteboardPosition()?.let { (x, y) ->
-            entity.setWalkTarget(x, y)
+            entity.walkToWithPathfinding(x, y)
         }
     }
 
@@ -138,7 +138,7 @@ class WalkingToDeskState : State<Developer>(DeveloperStateNames.WALKING_TO_DESK)
     override fun enter(entity: Developer, prevState: State<Developer>?) {
         entity.setAnimation("walking")
         entity.getDeskPosition()?.let { (x, y) ->
-            entity.setWalkTarget(x, y)
+            entity.walkToWithPathfinding(x, y)
         }
     }
 
