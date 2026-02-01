@@ -15,7 +15,7 @@
     "tile_size": 16,
     "desk_positions": [
       {"x": 64, "y": 130, "id": "desk_1"},
-      {"x": 96, "y": 80, "id": "desk_2"},
+      {"x": 64, "y": 160, "id": "desk_2"},
       {"x": 160, "y": 80, "id": "desk_3"},
       {"x": 224, "y": 80, "id": "desk_4"},
       {"x": 32, "y": 160, "id": "desk_5"},
@@ -24,8 +24,9 @@
       {"x": 224, "y": 160, "id": "desk_8"}
     ],
     "whiteboard_positions": [
-      {"x": 73, "y": 83, "id": "vending_1"},
-      {"x": 290, "y": 120, "id": "vending_2"}
+      {"x": 73, "y": 83, "id": "white_board_1"},
+      {"x": 180, "y": 83, "id": "white_board_2"},
+      {"x": 205, "y": 83, "id": "white_board_3"}
     ],
     "pm_patrol_path": [
       {"x": 64, "y": 130},
@@ -65,8 +66,8 @@
     ],
     "characters": {
       "blue_shirt": {"x": 2, "y": 105, "w": 15, "h": 23},
-      "glasses": {"x": 16, "y": 104, "w": 16, "h": 24},
-      "red_hair": {"x": 32, "y": 104, "w": 16, "h": 24},
+      "glasses": {"x": 40, "y": 107, "w": 13, "h": 21},
+      "red_hair": {"x": 3, "y": 132, "w": 17, "h": 23},
       "dark_hair": {"x": 48, "y": 104, "w": 16, "h": 24},
       "blonde": {"x": 64, "y": 104, "w": 16, "h": 24}
     },
@@ -76,17 +77,17 @@
       "red": "red_hair",
       "purple": "dark_hair"
     },
-    "project_manager": "blonde",
+    "project_manager": "red_hair",
     "project_owner": "dark_hair",
     "animals": {
-      "cat": {"x": 80, "y": 112, "w": 16, "h": 16},
+      "cat": {"x": 65, "y": 129, "w": 16, "h": 13},
       "dog": {"x": 59, "y": 146, "w": 24, "h": 11}
     },
     "furniture": {
-      "couch_orange": {"x": 0, "y": 48, "w": 48, "h": 24},
-      "couch_red": {"x": 120, "y": 121, "w": 33, "h": 16},
-      "couch_blue": {"x": 96, "y": 48, "w": 48, "h": 24},
-      "couch_gray": {"x": 144, "y": 48, "w": 24, "h": 24},
+      "couch_green": {"x": 120, "y": 102, "w": 33, "h": 15},
+      "couch_orange": {"x": 120, "y": 121, "w": 33, "h": 15},
+      "couch_blue": {"x": 120, "y": 83, "w": 33, "h": 15},
+      "couch_gray": {"x": 120, "y": 66, "w": 33, "h": 15},
       "desk_left": {"x": 188, "y": 63, "w": 17, "h": 19},
       "desk_right": {"x": 213, "y": 63, "w": 17, "h": 19},
       "desk_wall": {"x": 171, "y": 44, "w": 79, "h": 17},
@@ -110,10 +111,13 @@
       "elevator": {"x": 64, "y": 24, "w": 32, "h": 48},
       "water_cooler": {"x": 147, "y": 140, "w": 9, "h": 17},
       "small_table": {"x": 85, "y": 47, "w": 26, "h": 16},
+      "large_table": {"x": 115, "y": 47, "w": 40, "h": 16},
       "coffee_mug": {"x": 169, "y": 95, "w": 8, "h": 7},
       "coffee_machine": {"x": 159, "y": 91, "w": 7, "h": 11},
       "whiteboard": {"x": 234, "y": 81, "w": 17, "h": 11},
       "blue_trash_can": {"x": 136, "y": 143, "w": 9, "h": 14},
+      "green_trash_can": {"x": 116, "y": 143, "w": 9, "h": 14},
+      "red_trash_can": {"x": 126, "y": 143, "w": 9, "h": 14},
       "clock": {"x": 159, "y": 108, "w": 19, "h": 6},
       "art": {"x": 239, "y": 94, "w": 11, "h": 8},
       "small_art_orange": {"x": 230, "y": 94, "w": 6, "h": 8},
@@ -122,7 +126,11 @@
       "red_book": {"x": 211, "y": 119, "w": 11, "h": 8},
       "blue_book": {"x": 211, "y": 129, "w": 11, "h": 8},
       "green_book": {"x": 211, "y": 139, "w": 11, "h": 8},
-      "notes": {"x": 211, "y": 151, "w": 10, "h": 6}
+      "notes": {"x": 211, "y": 151, "w": 10, "h": 6},
+      "document": {"x": 192, "y": 107, "w": 6, "h": 9},
+      "printer": {"x": 200, "y": 107, "w": 9, "h": 9},
+      "post_it_notes": {"x": 217, "y": 107, "w": 6, "h": 8},
+      "notice": {"x": 105, "y": 103, "w": 4, "h": 5}
     },
     "tiles": {
       "floor_brick": {"x": 3, "y": 68, "w": 73, "h": 24},

@@ -71,6 +71,27 @@ class Renderer(
     companion object {
         const val BOB_SPEED = 8.0f
         const val BOB_AMPLITUDE = 1.0f
+
+        // Desk column base X positions
+        const val LEFT_COLUMN_X = 45f
+        const val RIGHT_COLUMN_X = 175f
+
+        // Desk row Y positions (wall positions)
+        val DESK_ROW_Y_POSITIONS = listOf(125f, 155f, 185f, 215f)
+
+        /**
+         * Calculate actual desk positions for character assignment.
+         * @param columnX Base X position of the column (LEFT_COLUMN_X or RIGHT_COLUMN_X)
+         * @param rowIndex Row index (0-3)
+         * @param isLeftDesk true for left desk, false for right desk
+         * @return Pair of (x, y) coordinates for the desk
+         */
+        fun getDeskPosition(columnX: Float, rowIndex: Int, isLeftDesk: Boolean): Pair<Float, Float> {
+            val wallY = DESK_ROW_Y_POSITIONS[rowIndex]
+            val deskX = if (isLeftDesk) columnX + 19f else columnX + 40f
+            val deskY = wallY + 11f
+            return Pair(deskX, deskY)
+        }
     }
 
     /**
@@ -279,8 +300,26 @@ class Renderer(
         batch.draw(wbFrame.region, worldX, screenY)
     }
 
-    fun drawRedCouch(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("couch_red") ?: return
+    fun drawOrangeCouch(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("couch_orange") ?: return
+        val screenY = flipY(worldY, wbFrame.height)
+        batch.draw(wbFrame.region, worldX, screenY)
+    }
+
+    fun drawGreenCouch(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("couch_green") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawGrayCouch(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("couch_gray") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawPrinter(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("printer") ?: return
         val screenY = flipY(worldY, wbFrame.height)
         batch.draw(wbFrame.region, worldX, screenY)
     }
@@ -314,6 +353,24 @@ class Renderer(
 
     fun drawNotes(worldX: Float, worldY: Float) {
         val wbFrame = spriteSheet.getFurnitureFrame("notes") ?: return
+        val screenY = flipY(worldY, wbFrame.height)
+        batch.draw(wbFrame.region, worldX, screenY)
+    }
+
+    fun drawPostItNotes(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("post_it_notes") ?: return
+        val screenY = flipY(worldY, wbFrame.height)
+        batch.draw(wbFrame.region, worldX, screenY)
+    }
+
+    fun drawNotice(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("notice") ?: return
+        val screenY = flipY(worldY, wbFrame.height)
+        batch.draw(wbFrame.region, worldX, screenY)
+    }
+
+    fun drawDocument(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("document") ?: return
         val screenY = flipY(worldY, wbFrame.height)
         batch.draw(wbFrame.region, worldX, screenY)
     }
@@ -474,6 +531,12 @@ class Renderer(
         batch.draw(frame.region, worldX, screenY)
     }
 
+    fun drawLargeTable(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("large_table") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
     fun drawCoffeeMug(worldX: Float, worldY: Float) {
         val frame = spriteSheet.getFurnitureFrame("coffee_mug") ?: return
         val screenY = flipY(worldY, frame.height)
@@ -488,6 +551,18 @@ class Renderer(
 
     fun drawBlueTrashCan(worldX: Float, worldY: Float) {
         val frame = spriteSheet.getFurnitureFrame("blue_trash_can") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawRedTrashCan(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("red_trash_can") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawGreenTrashCan(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("green_trash_can") ?: return
         val screenY = flipY(worldY, frame.height)
         batch.draw(frame.region, worldX, screenY)
     }
@@ -523,6 +598,12 @@ class Renderer(
 
     fun drawDog(worldX: Float, worldY: Float) {
         val frame = spriteSheet.getAnimalFrame("dog") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawCat(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getAnimalFrame("cat") ?: return
         val screenY = flipY(worldY, frame.height)
         batch.draw(frame.region, worldX, screenY)
     }
@@ -800,6 +881,89 @@ class Renderer(
     }
 
     /**
+     * Draws the first desk row (Y=125) with orange art decoration.
+     */
+    private fun drawDeskRow1(baseX: Float) {
+        val wallY = 125f
+        drawDeskWall(baseX, wallY)
+        drawSmallOrangeArt(baseX + 9f, wallY + 5f)
+        drawDeskPartition(baseX + 36f, wallY + 3f)
+        drawDeskLeft(baseX + 19f, wallY + 11f)
+        drawMonitorLeft(baseX + 20f, wallY + 7f)
+        drawBlackChairLeft(baseX + 5f, wallY + 7f)
+        drawDeskRight(baseX + 40f, wallY + 11f)
+        drawComputerRight(baseX + 41f, wallY + 7f)
+        drawWhiteChairRight(baseX + 60f, wallY + 7f)
+    }
+
+    /**
+     * Draws the second desk row (Y=155) with art decoration.
+     */
+    private fun drawDeskRow2(baseX: Float, isLeftColumn: Boolean = true) {
+        val wallY = 155f
+        drawDeskWall(baseX, wallY)
+        drawNotice(baseX + 60f, wallY + -24)
+        if(!isLeftColumn) {
+            drawPostItNotes(baseX + 70f, wallY + 5)
+        }
+        drawArt(baseX + 7f, wallY + 5f)
+        drawDeskPartition(baseX + 36f, wallY + 3f)
+        drawDeskLeft(baseX + 19f, wallY + 11f)
+        drawComputerLeft(baseX + 20f, wallY + 7f)
+        drawGreenChairLeft(baseX + 5f, wallY + 7f)
+        drawDeskRight(baseX + 40f, wallY + 11f)
+        drawMonitorRight(baseX + 41f, wallY + 7f)
+        drawBlueChairRight(baseX + 52f, wallY + 7f)
+    }
+
+    /**
+     * Draws the third desk row (Y=185) with blue art decorations.
+     */
+    private fun drawDeskRow3(baseX: Float) {
+        val wallY = 185f
+        drawDeskWall(baseX, wallY)
+        drawSmallBlueArt(baseX + 9f, wallY + 5f)
+        drawDeskPartition(baseX + 36f, wallY + 3f)
+        drawDeskLeft(baseX + 19f, wallY + 11f)
+        drawMonitorLeft(baseX + 20f, wallY + 7f)
+        drawOrangeChairLeft(baseX + 5f, wallY + 7f)
+        drawDeskRight(baseX + 40f, wallY + 11f)
+        drawRedBook(baseX + 42f, wallY + 12f)
+        drawNotes(baseX + 42f, wallY + 22f)
+    }
+
+    /**
+     * Draws the fourth desk row (Y=215) with desk wall only (minimal decorations).
+     */
+    private fun drawDeskRow4(baseX: Float) {
+        val wallY = 215f
+        drawDeskWall(baseX, wallY)
+    }
+
+    /**
+     * Draws a complete column of desk rows at the specified base X position.
+     * Left column has 4 desk rows. Right column has 3 desk rows plus a lounge area.
+     * Each row contains a desk wall, partition, left/right desks, chairs, and decorations.
+     */
+    private fun drawDeskColumn(baseX: Float, isLeftColumn: Boolean) {
+        drawDeskRow1(baseX)
+        drawDeskRow2(baseX, isLeftColumn)
+        if (isLeftColumn) {
+            drawDeskRow3(baseX)
+            drawDeskRow4(baseX)
+        } else {
+            // Right column row 3: desk wall + art + lounge furniture
+            val row3Y = 185f
+            drawDeskWall(baseX, row3Y)
+            drawSmallBlueArt(baseX + 9f, row3Y + 5f)
+            drawGreenCouch(baseX + 22f, row3Y + 10f)
+            drawRedTrashCan(baseX + 56f, row3Y + 10f)
+            drawTree(baseX + 66f, row3Y + 5f)
+            // No row 4 - removed entirely
+        }
+    }
+
+    /**
      * Draw the complete scene from render data.
      */
     fun drawScene(renderData: Map<String, Any>) {
@@ -823,46 +987,30 @@ class Renderer(
         drawTree(162f, 90f)
         drawWhiteboard(180f, 83f)
         drawWhiteboard(205f, 83f)
-        drawRedCouch(225f,95f)
+        drawOrangeCouch(225f,95f)
         drawBlueTrashCan(260f, 95f)
         drawBookshelf(290f, 80f)
 
-        drawDeskWall(45f, 125f)
-        drawSmallOrangeArt(54f, 130f)
-        drawDeskPartition(81f, 128f)
-        drawDeskLeft(64f, 136f)
-        drawMonitorLeft(65f, 132f)
-        drawBlackChairLeft(50f, 132f)
-        drawDeskRight(85f, 136f)
-        drawComputerRight(86f, 132f)
-        drawWhiteChairRight(105f, 132f)
-        drawDeskWall(45f, 155f)
-        drawArt(52f, 160f)
-        drawDeskPartition(81f, 158f)
-        drawDeskLeft(64f, 166f)
-        drawComputerLeft(65f, 162f)
-        drawGreenChairLeft(50f, 162f)
-        drawBlueChairRight(97f, 162f)
-        drawDeskRight(85f, 166f)
-        drawMonitorRight(86f, 162f)
-        drawDeskWall(45f, 185f)
-        drawSmallBlueArt(110f, 160f)
-        drawSmallBlueArt(54f, 190f)
-        drawDeskPartition(81f, 188f)
-        drawDeskLeft(64f, 196f)
-        drawMonitorLeft(65f, 192f)
-        drawOrangeChairLeft(50f, 192f)
-        drawDeskRight(85f, 196f)
-        drawRedBook(87f, 197f)
-        drawNotes(87f, 207f)
+        // Left desk column (X=45f)
+        drawDeskColumn(LEFT_COLUMN_X, isLeftColumn = true)
 
+        // Right desk column (X=175f)
+        drawDeskColumn(RIGHT_COLUMN_X, isLeftColumn = false)
+
+        // Additional decorations not part of desk columns
+        drawSmallBlueArt(110f, 160f)
         drawSmallCalendar(110f, 190f)
-        drawDeskWall(45f, 215f)
         drawDog(105f, 200f)
+        drawCat(165f, 190f)
         drawTree(76f, 218f)
 
+        drawLargeTable(193f, 220f)
+        drawPrinter(215f, 221f)
+        drawDocument(205f, 222f)
 
-        drawDeskWall(175f, 125f)
+        drawTree(305f, 123f)
+        drawTree(305f, 153f)
+        drawTree(305f, 188f)
 
         // Collect and sort entities by y position for depth ordering
         // In Y-up, higher Y = further back, so sort descending
@@ -872,10 +1020,10 @@ class Renderer(
         val developers = renderData["developers"] as? List<Map<String, Any>> ?: emptyList()
         entities.addAll(developers)
 
-//        @Suppress("UNCHECKED_CAST")
-//        val pm = renderData["project_manager"] as? Map<String, Any>
-//        if (pm != null) entities.add(pm)
-//
+        @Suppress("UNCHECKED_CAST")
+        val pm = renderData["project_manager"] as? Map<String, Any>
+        if (pm != null) entities.add(pm)
+
 //        @Suppress("UNCHECKED_CAST")
 //        val po = renderData["project_owner"] as? Map<String, Any>
 //        if (po != null) entities.add(po)

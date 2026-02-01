@@ -338,16 +338,17 @@ class PixelOfficeGame : ApplicationAdapter() {
         // Initialize demo on first frame
         if (!demoInitialized && demoTimer > 0.1f) {
             demoInitialized = true
-            // Spawn first developer
-            office.spawnDeveloper("demo_agent_1")
+            // Spawn first developer (blue variant at desk_1)
+            office.spawnDeveloper("demo_agent_1", colorVariant = 0)
+            // Spawn second developer (green/glasses variant at desk_2)
+            office.spawnDeveloper("demo_agent_2", colorVariant = 1)
             // Spawn project manager
             office.spawnProjectManager()
         }
 
-        // Cycle through states for the first developer
+        // Cycle through states for all developers
         val developers = office.getAllDevelopers()
         if (developers.isNotEmpty()) {
-            val dev = developers[0]
             val cycleTime = demoTimer % 20f
 
             val newState = when {
@@ -361,7 +362,24 @@ class PixelOfficeGame : ApplicationAdapter() {
             }
 
             if (newState.isNotEmpty()) {
-                dev.handleEvent(newState)
+                // Send event to developers with staggered timing
+                developers.forEachIndexed { index, dev ->
+                    // Stagger by 1 second per developer
+                    val staggeredCycleTime = (demoTimer - index * 1f) % 20f
+                    val staggeredState = when {
+                        staggeredCycleTime < 0f -> "" // Not started yet
+                        staggeredCycleTime < 3f -> "thinking_started"
+                        staggeredCycleTime < 6f -> "walk_to_whiteboard"
+                        staggeredCycleTime < 9f -> "done"
+                        staggeredCycleTime < 12f -> "code_writing_started"
+                        staggeredCycleTime < 15f -> "tests_failed"
+                        staggeredCycleTime < 18f -> "despair_complete"
+                        else -> ""
+                    }
+                    if (staggeredState.isNotEmpty()) {
+                        dev.handleEvent(staggeredState)
+                    }
+                }
 
                 // Trigger camera shake only when transitioning TO tests_failed
                 if (newState == "tests_failed" && demoPrevState != "tests_failed") {

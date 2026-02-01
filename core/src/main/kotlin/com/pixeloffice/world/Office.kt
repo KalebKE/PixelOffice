@@ -34,6 +34,7 @@ class Office(private val config: Config) {
     // Layout
     private val desks = mutableMapOf<String, Desk>()
     private val whiteboards = mutableMapOf<String, Whiteboard>()
+    private val occupiedWhiteboards = mutableSetOf<String>()
     private val tileSize = config.office.tileSize
 
     // Entities
@@ -112,8 +113,10 @@ class Office(private val config: Config) {
         // Set up positions
         developer.setDeskPosition(desk.x, desk.y)
         whiteboard?.let {
-            developer.setWhiteboardPosition(it.x, it.y)
+            developer.setWhiteboardPosition(it.x, it.y, it.id)
+            claimWhiteboard(it.id)
         }
+        developer.setOffice(this)
 
         // Set up pathfinder for navigation
         developer.setPathfinder(pathfinder)
@@ -163,6 +166,9 @@ class Office(private val config: Config) {
         var minDist = Float.MAX_VALUE
 
         for (wb in whiteboards.values) {
+            // Skip occupied whiteboards
+            if (occupiedWhiteboards.contains(wb.id)) continue
+
             val dx = wb.x - x
             val dy = wb.y - y
             val dist = sqrt(dx * dx + dy * dy)
@@ -174,6 +180,14 @@ class Office(private val config: Config) {
         }
 
         return nearest
+    }
+
+    fun claimWhiteboard(whiteboardId: String) {
+        occupiedWhiteboards.add(whiteboardId)
+    }
+
+    fun releaseWhiteboard(whiteboardId: String) {
+        occupiedWhiteboards.remove(whiteboardId)
     }
 
     // PM management
@@ -257,7 +271,7 @@ class Office(private val config: Config) {
     private fun spawnThoughtBubble(developer: Developer): ThoughtBubble {
         val bubble = ThoughtBubble(
             x = developer.x + 8,
-            y = developer.y - 16,
+            y = developer.y - 11,
             entityId = generateEntityId("bubble")
         )
         bubble.show()
