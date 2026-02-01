@@ -14,7 +14,7 @@
   "office": {
     "tile_size": 16,
     "desk_positions": [
-      {"x": 64, "y": 136, "id": "desk_1"},
+      {"x": 64, "y": 130, "id": "desk_1"},
       {"x": 96, "y": 80, "id": "desk_2"},
       {"x": 160, "y": 80, "id": "desk_3"},
       {"x": 224, "y": 80, "id": "desk_4"},
@@ -118,7 +118,11 @@
       "art": {"x": 239, "y": 94, "w": 11, "h": 8},
       "small_art_orange": {"x": 230, "y": 94, "w": 6, "h": 8},
       "small_art_blue": {"x": 222, "y": 94, "w": 6, "h": 8},
-      "small_calendar": {"x": 183, "y": 107, "w": 6, "h": 8}
+      "small_calendar": {"x": 183, "y": 107, "w": 6, "h": 8},
+      "red_book": {"x": 211, "y": 119, "w": 11, "h": 8},
+      "blue_book": {"x": 211, "y": 129, "w": 11, "h": 8},
+      "green_book": {"x": 211, "y": 139, "w": 11, "h": 8},
+      "notes": {"x": 211, "y": 151, "w": 10, "h": 6}
     },
     "tiles": {
       "floor_brick": {"x": 3, "y": 68, "w": 73, "h": 24},
