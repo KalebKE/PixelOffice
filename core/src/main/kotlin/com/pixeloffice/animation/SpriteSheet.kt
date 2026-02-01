@@ -87,6 +87,7 @@ class SpriteSheet(
         createThoughtBubbleSprites()
         createGhostSprites()
         createFurnitureSprites()
+        createAnimalSprites()
         createTileSprites()
 
         initialized = true
@@ -230,19 +231,23 @@ class SpriteSheet(
             ))
             sprites[name] = sprite
         }
+    }
 
-        // Create whiteboard sprite (references another furniture item)
-        val whiteboardRect = cfg.getWhiteboard()
-        if (whiteboardRect != null) {
-            val sprite = SpriteDefinition(name = "whiteboard", width = whiteboardRect.w, height = whiteboardRect.h)
-            val frame = SpriteFrame.fromRect(tex, whiteboardRect)
+    private fun createAnimalSprites() {
+        val tex = texture ?: return
+        val cfg = config ?: return
+
+        // Create sprites for all animal items in config
+        for ((name, rect) in cfg.animals) {
+            val sprite = SpriteDefinition(name = name, width = rect.w, height = rect.h)
+            val frame = SpriteFrame.fromRect(tex, rect)
             sprite.addAnimation(Animation(
                 name = "default",
                 frames = listOf(frame),
                 frameDuration = 1.0f,
                 loop = false
             ))
-            sprites["whiteboard"] = sprite
+            sprites["animal_$name"] = sprite
         }
     }
 
@@ -302,6 +307,11 @@ class SpriteSheet(
 
     fun getFurnitureFrame(name: String): SpriteFrame? {
         val sprite = sprites[name] ?: return null
+        return sprite.animations["default"]?.frames?.firstOrNull()
+    }
+
+    fun getAnimalFrame(name: String): SpriteFrame? {
+        val sprite = sprites["animal_$name"] ?: return null
         return sprite.animations["default"]?.frames?.firstOrNull()
     }
 

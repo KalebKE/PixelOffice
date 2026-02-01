@@ -208,7 +208,13 @@ class Renderer(
         // In Y-down: wall starts at y=44. In Y-up we need to convert each row
         drawWall(44)
 
-        drawWindowWithNote(40f, 40f)
+        drawWindowWithNote(40f, 70f)
+        drawLeftDoor(120f, 75f)
+        drawRightDoor(136f, 75f)
+
+        drawClock(126f, 65f)
+
+        drawWindow(250f, 70f)
     }
 
     /**
@@ -258,7 +264,7 @@ class Renderer(
     /**
      * Draw a desk using sprite from PNG.
      */
-    fun drawDesk(worldX: Float, worldY: Float, occupied: Boolean = false) {
+    fun drawDeskLeft(worldX: Float, worldY: Float, occupied: Boolean = false) {
         val deskFrame = spriteSheet.getFurnitureFrame("desk") ?: return
         val screenY = flipY(worldY, deskFrame.height)
         batch.draw(deskFrame.region, worldX, screenY)
@@ -273,11 +279,102 @@ class Renderer(
         batch.draw(wbFrame.region, worldX, screenY)
     }
 
+    fun drawRedCouch(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("couch_red") ?: return
+        val screenY = flipY(worldY, wbFrame.height)
+        batch.draw(wbFrame.region, worldX, screenY)
+    }
+
+    /**
+     * Draw a whiteboard/vending machine.
+     */
+    fun drawTree(worldX: Float, worldY: Float) {
+        val wbFrame = spriteSheet.getFurnitureFrame("tree") ?: return
+        val screenY = flipY(worldY, wbFrame.height)
+        batch.draw(wbFrame.region, worldX, screenY)
+    }
+
     /**
      * Draw blue vending machine.
      */
-    fun drawBlueVendingMachine(worldX: Float, worldY: Float) {
+    fun drawVendingMachine(worldX: Float, worldY: Float) {
         val frame = spriteSheet.getFurnitureFrame("vending_blue") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawBookshelf(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("bookshelf") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawDeskWall(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("desk_wall") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawDeskLeft(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("desk_left") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawDeskRight(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("desk_right") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawDeskPartition(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("desk_partition") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawClock(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("clock") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawWhiteChairRight(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("chair_white") ?: return
+        val screenY = flipY(worldY, frame.height)
+        // Draw flipped on X axis
+        batch.draw(
+            frame.region,
+            worldX + frame.width, screenY,
+            -frame.width.toFloat(), frame.height.toFloat()
+        )
+    }
+
+    fun drawBlueChairRight(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("chair_blue") ?: return
+        val screenY = flipY(worldY, frame.height)
+        // Draw flipped on X axis
+        batch.draw(
+            frame.region,
+            worldX + frame.width, screenY,
+            -frame.width.toFloat(), frame.height.toFloat()
+        )
+    }
+
+    fun drawBlackChairLeft(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("chair_black") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawGreenChairLeft(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("chair_green") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawOrangeChairLeft(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("chair_orange") ?: return
         val screenY = flipY(worldY, frame.height)
         batch.draw(frame.region, worldX, screenY)
     }
@@ -309,8 +406,43 @@ class Renderer(
         batch.draw(frame.region, worldX, screenY)
     }
 
+    fun drawBlueTrashCan(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("blue_trash_can") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawLeftDoor(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("door") ?: return
+        val screenY = flipY(worldY, frame.height)
+        // Draw flipped on X axis
+        batch.draw(
+            frame.region,
+            worldX + frame.width, screenY,
+            -frame.width.toFloat(), frame.height.toFloat()
+        )
+    }
+
+    fun drawRightDoor(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("door") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
     fun drawWindowWithNote(worldX: Float, worldY: Float) {
         val frame = spriteSheet.getFurnitureFrame("window_with_note") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawWindow(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getFurnitureFrame("window") ?: return
+        val screenY = flipY(worldY, frame.height)
+        batch.draw(frame.region, worldX, screenY)
+    }
+
+    fun drawDog(worldX: Float, worldY: Float) {
+        val frame = spriteSheet.getAnimalFrame("dog") ?: return
         val screenY = flipY(worldY, frame.height)
         batch.draw(frame.region, worldX, screenY)
     }
@@ -601,11 +733,43 @@ class Renderer(
         drawFloor()
 
         // Draw vending machine and water cooler
-        drawBlueVendingMachine(5f, 78f)
+        drawVendingMachine(5f, 78f)
         drawWaterCooler(31f, 95f)
         drawSmallTable(41f, 95f)
         drawCoffeeMug(43f, 98f)
         drawCoffeeMachine(53f, 93f)
+        drawWhiteboard(73f, 83f)
+        drawTree(95f, 90f)
+        drawTree(162f, 90f)
+        drawWhiteboard(180f, 83f)
+        drawWhiteboard(205f, 83f)
+        drawRedCouch(225f,95f)
+        drawBlueTrashCan(260f, 95f)
+        drawBookshelf(290f, 80f)
+
+        drawDeskWall(45f, 125f)
+        drawDeskPartition(81f, 128f)
+        drawDeskLeft(64f, 136f)
+        drawBlackChairLeft(50f, 132f)
+        drawDeskRight(85f, 136f)
+        drawWhiteChairRight(105f, 132f)
+        drawDeskWall(45f, 155f)
+        drawDeskPartition(81f, 158f)
+        drawDeskLeft(64f, 166f)
+        drawGreenChairLeft(50f, 162f)
+        drawBlueChairRight(97f, 162f)
+        drawDeskRight(85f, 166f)
+        drawDeskWall(45f, 185f)
+        drawDeskPartition(81f, 188f)
+        drawDeskLeft(64f, 196f)
+        drawOrangeChairLeft(50f, 192f)
+        drawDeskRight(85f, 196f)
+        drawDeskWall(45f, 215f)
+        drawDog(105f, 200f)
+        drawTree(76f, 218f)
+
+
+        drawDeskWall(175f, 125f)
 
 //        // Draw furniture
 //        @Suppress("UNCHECKED_CAST")
