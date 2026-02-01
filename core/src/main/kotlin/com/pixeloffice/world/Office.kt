@@ -204,16 +204,38 @@ class Office(private val config: Config) {
                 interruptDuration = config.projectManager.interruptDuration
             )
 
-            // Set patrol path
-            val patrolPoints = config.office.pmPatrolPath.map { p ->
-                Pair(p.x.toFloat(), p.y.toFloat())
+            // Set up pathfinder for navigation
+            projectManager?.setPathfinder(pathfinder)
+
+            // Set desk targets for patrol
+            val deskList = desks.values.map { desk ->
+                Triple(desk.id, desk.x, desk.y)
             }
-            if (patrolPoints.isNotEmpty()) {
-                projectManager?.setPatrolPath(patrolPoints)
+            projectManager?.setDeskTargets(deskList)
+
+            // Set up bubble spawner for PM
+            projectManager?.setBubbleSpawner { pm, bubbleType ->
+                spawnPMThoughtBubble(pm, bubbleType)
             }
+
+            // Set initial position to upper corridor
+            projectManager?.x = 64f
+            projectManager?.y = 110f
         }
 
         return projectManager!!
+    }
+
+    private fun spawnPMThoughtBubble(pm: ProjectManager, bubbleType: String): ThoughtBubble {
+        val bubble = ThoughtBubble(
+            x = pm.x + 8,
+            y = pm.y - 16,
+            entityId = generateEntityId("pm_bubble"),
+            bubbleType = bubbleType
+        )
+        bubble.show()
+        effects.add(bubble)
+        return bubble
     }
 
     /**

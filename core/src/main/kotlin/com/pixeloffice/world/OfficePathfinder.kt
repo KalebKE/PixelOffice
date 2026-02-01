@@ -3,25 +3,48 @@ package com.pixeloffice.world
 /**
  * Calculates navigation paths around office obstacles.
  *
- * Developers need to navigate around desk walls and partitions
+ * Characters need to navigate around desk walls and partitions
  * instead of walking through them. This pathfinder creates
  * waypoint-based paths using hardcoded office layout knowledge.
+ *
+ * Office layout:
+ * - Left desk column: X=45-125 (desks at X=64, 85)
+ * - Right desk column: X=175-255 (desks at X=194, 215)
+ * - Center aisle: X=125-175 (safe to walk through)
+ * - Desk rows at Y=136, 166, 196 (first row at Y=125 is the wall)
  */
 class OfficePathfinder {
 
     companion object {
         // Exit corridors on left and right sides of desk clusters
-        const val LEFT_EXIT_X = 30f
-        const val RIGHT_EXIT_X = 120f
+        const val LEFT_COLUMN_EXIT_X = 30f      // Exit left of left column
+        const val LEFT_COLUMN_RIGHT_X = 130f    // Exit right of left column (center aisle)
+        const val RIGHT_COLUMN_LEFT_X = 165f    // Exit left of right column (center aisle)
+        const val RIGHT_COLUMN_EXIT_X = 260f    // Exit right of right column
 
-        // Safe corridor above desk walls (walls are at Y=125)
+        // Safe corridor above desk walls (walls start at Y=125)
         const val UPPER_CORRIDOR_Y = 110f
 
-        // X coordinate dividing left and right desk clusters
-        const val PARTITION_X = 81f
+        // X boundaries for columns
+        const val LEFT_COLUMN_MIN_X = 45f
+        const val LEFT_COLUMN_MAX_X = 125f
+        const val RIGHT_COLUMN_MIN_X = 175f
+        const val RIGHT_COLUMN_MAX_X = 255f
 
-        // Desk row Y coordinate
-        const val DESK_ROW_Y = 136f
+        // Center aisle
+        const val CENTER_AISLE_X = 150f
+    }
+
+    /**
+     * Determine which column a position is in.
+     * @return "left", "right", or "center"
+     */
+    private fun getColumn(x: Float): String {
+        return when {
+            x < LEFT_COLUMN_MAX_X -> "left"
+            x > RIGHT_COLUMN_MIN_X -> "right"
+            else -> "center"
+        }
     }
 
     /**
@@ -40,58 +63,82 @@ class OfficePathfinder {
         val startInDeskArea = startY > UPPER_CORRIDOR_Y
         val endInDeskArea = endY > UPPER_CORRIDOR_Y
 
-        // Determine which side of the partition we're on
-        val startOnLeft = startX < PARTITION_X
-        val endOnLeft = endX < PARTITION_X
+        // Determine which column we're in
+        val startColumn = getColumn(startX)
+        val endColumn = getColumn(endX)
 
-        if (startInDeskArea && !endInDeskArea) {
-            // Moving from desk area to upper area (e.g., to whiteboard)
-            // Step 1: Exit to the corridor (left or right based on desk side)
-            val exitX = if (startOnLeft) LEFT_EXIT_X else RIGHT_EXIT_X
-            path.add(Pair(exitX, startY))
-
-            // Step 2: Move up to the corridor
-            path.add(Pair(exitX, UPPER_CORRIDOR_Y))
-
-            // Step 3: Go to destination
+        // If both in center aisle or upper corridor, go direct
+        if (!startInDeskArea && !endInDeskArea) {
             path.add(Pair(endX, endY))
-
-        } else if (!startInDeskArea && endInDeskArea) {
-            // Moving from upper area to desk area (e.g., returning to desk)
-            // Step 1: Move to the appropriate corridor exit point
-            val exitX = if (endOnLeft) LEFT_EXIT_X else RIGHT_EXIT_X
-            path.add(Pair(exitX, UPPER_CORRIDOR_Y))
-
-            // Step 2: Move down to desk row level
-            path.add(Pair(exitX, endY))
-
-            // Step 3: Go to destination desk
-            path.add(Pair(endX, endY))
-
-        } else if (startInDeskArea && endInDeskArea && startOnLeft != endOnLeft) {
-            // Moving between desk clusters (crossing the partition)
-            // Step 1: Exit current desk cluster
-            val startExitX = if (startOnLeft) LEFT_EXIT_X else RIGHT_EXIT_X
-            path.add(Pair(startExitX, startY))
-
-            // Step 2: Move up to corridor
-            path.add(Pair(startExitX, UPPER_CORRIDOR_Y))
-
-            // Step 3: Move across to other side's exit
-            val endExitX = if (endOnLeft) LEFT_EXIT_X else RIGHT_EXIT_X
-            path.add(Pair(endExitX, UPPER_CORRIDOR_Y))
-
-            // Step 4: Move down to desk row
-            path.add(Pair(endExitX, endY))
-
-            // Step 5: Go to destination
-            path.add(Pair(endX, endY))
-
-        } else {
-            // Simple case: no obstacles in the way, go directly
-            path.add(Pair(endX, endY))
+            return path
         }
 
+        // If in center aisle, can move freely vertically
+        if (startColumn == "center" && endColumn == "center") {
+            path.add(Pair(endX, endY))
+            return path
+        }
+
+        // Moving from desk area to upper area
+        if (startInDeskArea && !endInDeskArea) {
+            val exitX = getExitX(startX, startColumn)
+            path.add(Pair(exitX, startY))
+            path.add(Pair(exitX, UPPER_CORRIDOR_Y))
+            path.add(Pair(endX, endY))
+            return path
+        }
+
+        // Moving from upper area to desk area
+        if (!startInDeskArea && endInDeskArea) {
+            val entryX = getExitX(endX, endColumn)
+            path.add(Pair(entryX, UPPER_CORRIDOR_Y))
+            path.add(Pair(entryX, endY))
+            path.add(Pair(endX, endY))
+            return path
+        }
+
+        // Both in desk area
+        if (startInDeskArea && endInDeskArea) {
+            // Same column - can move directly within the column if using aisle
+            if (startColumn == endColumn) {
+                val exitX = getExitX(startX, startColumn)
+                // Move to aisle, then down/up, then to desk
+                path.add(Pair(exitX, startY))
+                path.add(Pair(exitX, endY))
+                path.add(Pair(endX, endY))
+            } else {
+                // Different columns - need to go through corridor
+                val startExitX = getExitX(startX, startColumn)
+                val endEntryX = getExitX(endX, endColumn)
+
+                path.add(Pair(startExitX, startY))
+                path.add(Pair(startExitX, UPPER_CORRIDOR_Y))
+                path.add(Pair(endEntryX, UPPER_CORRIDOR_Y))
+                path.add(Pair(endEntryX, endY))
+                path.add(Pair(endX, endY))
+            }
+            return path
+        }
+
+        // Fallback: direct path
+        path.add(Pair(endX, endY))
         return path
+    }
+
+    /**
+     * Get the exit X coordinate for a column.
+     */
+    private fun getExitX(x: Float, column: String): Float {
+        return when (column) {
+            "left" -> {
+                // Use center aisle exit for left column (closer to center)
+                LEFT_COLUMN_RIGHT_X
+            }
+            "right" -> {
+                // Use center aisle exit for right column
+                RIGHT_COLUMN_LEFT_X
+            }
+            else -> x  // Center aisle - stay at current X
+        }
     }
 }

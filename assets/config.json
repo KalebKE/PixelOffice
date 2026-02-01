@@ -14,29 +14,21 @@
   "office": {
     "tile_size": 16,
     "desk_positions": [
-      {"x": 64, "y": 130, "id": "desk_1"},
-      {"x": 64, "y": 160, "id": "desk_2"},
-      {"x": 160, "y": 80, "id": "desk_3"},
-      {"x": 224, "y": 80, "id": "desk_4"},
-      {"x": 32, "y": 160, "id": "desk_5"},
-      {"x": 96, "y": 160, "id": "desk_6"},
-      {"x": 160, "y": 160, "id": "desk_7"},
-      {"x": 224, "y": 160, "id": "desk_8"}
+      {"x": 64, "y": 136, "id": "desk_1"},
+      {"x": 85, "y": 136, "id": "desk_2"},
+      {"x": 194, "y": 136, "id": "desk_3"},
+      {"x": 215, "y": 136, "id": "desk_4"},
+      {"x": 64, "y": 166, "id": "desk_5"},
+      {"x": 85, "y": 166, "id": "desk_6"},
+      {"x": 194, "y": 166, "id": "desk_7"},
+      {"x": 215, "y": 166, "id": "desk_8"},
+      {"x": 64, "y": 196, "id": "desk_9"},
+      {"x": 85, "y": 196, "id": "desk_10"}
     ],
     "whiteboard_positions": [
       {"x": 73, "y": 83, "id": "white_board_1"},
       {"x": 180, "y": 83, "id": "white_board_2"},
       {"x": 205, "y": 83, "id": "white_board_3"}
-    ],
-    "pm_patrol_path": [
-      {"x": 64, "y": 130},
-      {"x": 128, "y": 130},
-      {"x": 192, "y": 130},
-      {"x": 256, "y": 130},
-      {"x": 256, "y": 200},
-      {"x": 192, "y": 200},
-      {"x": 128, "y": 200},
-      {"x": 64, "y": 200}
     ]
   },
   "animation": {
@@ -147,7 +139,7 @@
     "despair_duration": 2.0
   },
   "project_manager": {
-    "patrol_speed": 30,
+    "patrol_speed": 15,
     "interrupt_chance": 0.1,
     "interrupt_duration": 3.0
   },

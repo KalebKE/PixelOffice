@@ -688,8 +688,22 @@ class Renderer(
 
     /**
      * Draw a thought bubble effect (procedural).
+     * @param bubbleType Type of bubble: "thinking", "blah", "question", "annoyed"
      */
-    fun drawThoughtBubble(worldX: Float, worldY: Float, frameIndex: Int) {
+    fun drawThoughtBubble(worldX: Float, worldY: Float, frameIndex: Int, bubbleType: String = "thinking") {
+        when (bubbleType) {
+            "thinking" -> drawThinkingBubble(worldX, worldY, frameIndex)
+            "blah" -> drawBlahBubble(worldX, worldY, frameIndex)
+            "question" -> drawQuestionBubble(worldX, worldY, frameIndex)
+            "annoyed" -> drawAnnoyedBubble(worldX, worldY, frameIndex)
+            else -> drawThinkingBubble(worldX, worldY, frameIndex)
+        }
+    }
+
+    /**
+     * Draw thinking bubble with animated dots.
+     */
+    private fun drawThinkingBubble(worldX: Float, worldY: Float, frameIndex: Int) {
         endBatch()
 
         // Convert to screen coordinates (bubble is ~20px tall)
@@ -726,6 +740,144 @@ class Renderer(
 
         beginShapes()
         // Small connecting bubbles (below main bubble in screen coords)
+        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.circle(worldX - 2, screenY + 6, 2f)
+        shapeRenderer.circle(worldX - 4, screenY + 2, 1f)
+        endShapes()
+
+        beginBatch()
+    }
+
+    /**
+     * Draw speech bubble with "blah" lines (PM talking).
+     */
+    private fun drawBlahBubble(worldX: Float, worldY: Float, frameIndex: Int) {
+        endBatch()
+
+        val screenY = flipY(worldY, 20)
+        val pulse = (sin(time * 4) * 1).toInt()
+
+        // Speech bubble (slightly larger, more oval)
+        beginShapes()
+        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.circle(worldX + 8, screenY + 12 - pulse, 10f)
+        endShapes()
+
+        beginShapes(ShapeRenderer.ShapeType.Line)
+        shapeRenderer.color = Colors.DARK_GRAY
+        shapeRenderer.circle(worldX + 8, screenY + 12 - pulse, 10f)
+        endShapes()
+
+        // Speech lines inside (horizontal lines to represent talking)
+        beginShapes()
+        shapeRenderer.color = Colors.DARK_GRAY
+        val lineY = screenY + 12 - pulse
+        shapeRenderer.rectLine(worldX + 2, lineY + 2, worldX + 14, lineY + 2, 1f)
+        shapeRenderer.rectLine(worldX + 4, lineY - 1, worldX + 12, lineY - 1, 1f)
+        shapeRenderer.rectLine(worldX + 3, lineY - 4, worldX + 13, lineY - 4, 1f)
+        endShapes()
+
+        // Speech bubble tail (pointing down-left)
+        beginShapes()
+        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.triangle(
+            worldX, screenY + 6,
+            worldX + 4, screenY + 6,
+            worldX - 2, screenY + 2
+        )
+        endShapes()
+
+        beginShapes(ShapeRenderer.ShapeType.Line)
+        shapeRenderer.color = Colors.DARK_GRAY
+        shapeRenderer.line(worldX, screenY + 6, worldX - 2, screenY + 2)
+        shapeRenderer.line(worldX - 2, screenY + 2, worldX + 4, screenY + 6)
+        endShapes()
+
+        beginBatch()
+    }
+
+    /**
+     * Draw question bubble with "?" symbol.
+     */
+    private fun drawQuestionBubble(worldX: Float, worldY: Float, frameIndex: Int) {
+        endBatch()
+
+        val screenY = flipY(worldY, 20)
+        val pulse = (sin(time * 4) * 1).toInt()
+
+        // Main bubble
+        beginShapes()
+        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.circle(worldX + 8, screenY + 12 - pulse, 8f)
+        endShapes()
+
+        beginShapes(ShapeRenderer.ShapeType.Line)
+        shapeRenderer.color = Colors.DARK_GRAY
+        shapeRenderer.circle(worldX + 8, screenY + 12 - pulse, 8f)
+        endShapes()
+
+        // Question mark drawn with shapes
+        beginShapes()
+        shapeRenderer.color = Colors.DARK_PURPLE
+        // Top curve of ?
+        shapeRenderer.circle(worldX + 8, screenY + 15 - pulse, 3f)
+        // Clear center to make it hollow
+        endShapes()
+
+        beginShapes()
+        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.circle(worldX + 8, screenY + 15 - pulse, 1.5f)
+        endShapes()
+
+        beginShapes()
+        shapeRenderer.color = Colors.DARK_PURPLE
+        // Stem of ?
+        shapeRenderer.rect(worldX + 7, screenY + 10 - pulse, 2f, 3f)
+        // Dot of ?
+        shapeRenderer.circle(worldX + 8, screenY + 8 - pulse, 1f)
+        endShapes()
+
+        // Small connecting bubbles
+        beginShapes()
+        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.circle(worldX - 2, screenY + 6, 2f)
+        shapeRenderer.circle(worldX - 4, screenY + 2, 1f)
+        endShapes()
+
+        beginBatch()
+    }
+
+    /**
+     * Draw annoyed bubble with "!" symbol.
+     */
+    private fun drawAnnoyedBubble(worldX: Float, worldY: Float, frameIndex: Int) {
+        endBatch()
+
+        val screenY = flipY(worldY, 20)
+        val pulse = (sin(time * 6) * 2).toInt()  // Faster, more agitated pulse
+
+        // Main bubble (slightly red-tinted for annoyance)
+        beginShapes()
+        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.circle(worldX + 8, screenY + 12 - pulse, 8f)
+        endShapes()
+
+        beginShapes(ShapeRenderer.ShapeType.Line)
+        shapeRenderer.color = Colors.RED
+        shapeRenderer.circle(worldX + 8, screenY + 12 - pulse, 8f)
+        endShapes()
+
+        // Exclamation mark
+        beginShapes()
+        shapeRenderer.color = Colors.RED
+        // Stem of !
+        shapeRenderer.rect(worldX + 7, screenY + 10 - pulse, 2f, 6f)
+        // Dot of !
+        shapeRenderer.circle(worldX + 8, screenY + 8 - pulse, 1.2f)
+        endShapes()
+
+        // Small connecting bubbles
+        beginShapes()
         shapeRenderer.color = Colors.WHITE
         shapeRenderer.circle(worldX - 2, screenY + 6, 2f)
         shapeRenderer.circle(worldX - 4, screenY + 2, 1f)
@@ -854,6 +1006,12 @@ class Renderer(
                     renderInfo["facing"] as? String ?: "down",
                     "pm"
                 )
+                // Draw children (thought bubble)
+                @Suppress("UNCHECKED_CAST")
+                val pmChildren = renderInfo["children"] as? List<Map<String, Any>> ?: emptyList()
+                for (child in pmChildren) {
+                    drawEntity(child)
+                }
             }
             "project_owner" -> {
                 drawCharacter(
@@ -867,7 +1025,8 @@ class Renderer(
             "thought_bubble" -> {
                 drawThoughtBubble(
                     x, y,
-                    (renderInfo["frame"] as? Number)?.toInt() ?: 0
+                    (renderInfo["frame"] as? Number)?.toInt() ?: 0,
+                    renderInfo["bubble_type"] as? String ?: "thinking"
                 )
             }
             "ghost" -> {
