@@ -1,6 +1,9 @@
 package com.pixeloffice.world
 
 import com.pixeloffice.core.Config
+import com.pixeloffice.core.WalkableZone
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Tile types for pathfinding grid.
@@ -10,6 +13,11 @@ enum class TileType {
     BLOCKED,
     OUT_OF_BOUNDS
 }
+
+/**
+ * Rectangle for pixel-level collision checking.
+ */
+data class CollisionRect(val x: Int, val y: Int, val w: Int, val h: Int)
 
 /**
  * Tile-based collision grid built from furniture config.
@@ -32,6 +40,9 @@ class CollisionMap(private val config: Config) {
 
     private val grid: Array<Array<TileType>> = Array(gridHeight) { Array(gridWidth) { TileType.OUT_OF_BOUNDS } }
 
+    // Collision rectangles for pixel-level line-of-sight checking
+    private val collisionRects = mutableListOf<CollisionRect>()
+
     init {
         buildGrid()
     }
@@ -45,13 +56,16 @@ class CollisionMap(private val config: Config) {
             markRectWalkable(zone.x, zone.y, zone.w, zone.h)
         }
 
-        // Then, mark furniture as blocked
+        // Then, mark furniture as blocked and store collision rects
         for (furniture in config.office.furniture) {
             val collision = furniture.collision ?: continue
 
             // Collision rect is relative to furniture position
             val worldX = furniture.x + collision.x
             val worldY = furniture.y + collision.y
+
+            // Store for pixel-level collision checking
+            collisionRects.add(CollisionRect(worldX, worldY, collision.w, collision.h))
 
             markRectBlocked(worldX, worldY, collision.w, collision.h)
         }
@@ -245,4 +259,81 @@ class CollisionMap(private val config: Config) {
             println(row)
         }
     }
+
+    /**
+     * Find the walkable zone containing a world position.
+     */
+    fun findZoneAt(worldX: Float, worldY: Float): WalkableZone? {
+        return config.office.walkableZones.firstOrNull { zone ->
+            worldX >= zone.x && worldX < zone.x + zone.w &&
+            worldY >= zone.y && worldY < zone.y + zone.h
+        }
+    }
+
+    /**
+     * Get all walkable zones.
+     */
+    fun getWalkableZones(): List<WalkableZone> = config.office.walkableZones
+
+    /**
+     * Check if a line segment intersects any collision rectangle.
+     * Used for pixel-level line-of-sight checking.
+     */
+    fun lineIntersectsCollision(x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
+        for (rect in collisionRects) {
+            if (lineIntersectsRect(x1, y1, x2, y2, rect)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * Check if a line segment intersects a rectangle using Liang-Barsky algorithm.
+     */
+    private fun lineIntersectsRect(x1: Float, y1: Float, x2: Float, y2: Float, rect: CollisionRect): Boolean {
+        val rectLeft = rect.x.toFloat()
+        val rectTop = rect.y.toFloat()
+        val rectRight = (rect.x + rect.w).toFloat()
+        val rectBottom = (rect.y + rect.h).toFloat()
+
+        val dx = x2 - x1
+        val dy = y2 - y1
+
+        // Parametric clipping values
+        var tMin = 0f
+        var tMax = 1f
+
+        // Check each edge: left, right, top, bottom
+        val edges = listOf(
+            Pair(-dx, x1 - rectLeft),   // left edge
+            Pair(dx, rectRight - x1),   // right edge
+            Pair(-dy, y1 - rectTop),    // top edge
+            Pair(dy, rectBottom - y1)   // bottom edge
+        )
+
+        for ((p, q) in edges) {
+            when {
+                p == 0f -> {
+                    // Line is parallel to this edge
+                    if (q < 0) return false // Line is outside
+                }
+                p < 0 -> {
+                    // Line enters this edge
+                    val t = q / p
+                    tMin = max(tMin, t)
+                }
+                else -> {
+                    // Line exits this edge
+                    val t = q / p
+                    tMax = min(tMax, t)
+                }
+            }
+
+            if (tMin > tMax) return false
+        }
+
+        return true
+    }
+
 }

@@ -97,6 +97,7 @@ abstract class BaseEntity(
         if (distance > 0) {
             velocity.x = (dx / distance) * speed
             velocity.y = (dy / distance) * speed
+
             x += velocity.x * dt
             y += velocity.y * dt
 

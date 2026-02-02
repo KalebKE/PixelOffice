@@ -9,6 +9,8 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.pixeloffice.animation.SpriteFrame
 import com.pixeloffice.animation.SpriteSheet
+import com.pixeloffice.core.WalkableZone
+import com.pixeloffice.world.NavLine
 import kotlin.math.sin
 
 /**
@@ -66,6 +68,8 @@ class Renderer(
     private var showDebug = false
     private var connectionStatus = "Disconnected"
     private var fps = 0
+    private var walkableZones: List<WalkableZone> = emptyList()
+    private var lineNetwork: List<NavLine> = emptyList()
 
     // Animation constants
     companion object {
@@ -961,6 +965,37 @@ class Renderer(
         batch.end()
     }
 
+    /**
+     * Draw walkable zone fills for debugging.
+     * Uses semi-transparent yellow to show collision corridors.
+     */
+    private fun drawWalkableZones() {
+        if (!showDebug || walkableZones.isEmpty()) return
+
+        // Enable blending for transparency
+        Gdx.gl.glEnable(GL20.GL_BLEND)
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
+
+        beginShapes(ShapeRenderer.ShapeType.Filled)
+        // Yellow with high opacity (0.7 alpha)
+        shapeRenderer.color = Color(Colors.YELLOW.r, Colors.YELLOW.g, Colors.YELLOW.b, 0.7f)
+
+        for (zone in walkableZones) {
+            // Convert Y-down world coords to Y-up screen coords
+            // Zone bottom in world = zone.y + zone.h
+            val screenY = flipY(zone.y.toFloat() + zone.h, 0)
+            shapeRenderer.rect(
+                zone.x.toFloat(),
+                screenY,
+                zone.w.toFloat(),
+                zone.h.toFloat()
+            )
+        }
+
+        endShapes()
+        Gdx.gl.glDisable(GL20.GL_BLEND)
+    }
+
     fun setConnectionStatus(status: String) {
         connectionStatus = status
     }
@@ -971,6 +1006,54 @@ class Renderer(
 
     fun toggleDebug() {
         showDebug = !showDebug
+    }
+
+    fun setWalkableZones(zones: List<WalkableZone>) {
+        walkableZones = zones
+    }
+
+    fun setLineNetwork(lines: List<NavLine>) {
+        lineNetwork = lines
+    }
+
+    /**
+     * Draw line network for debugging.
+     * Shows navigation lines in red with small circles at intersection points.
+     */
+    private fun drawLineNetwork() {
+        if (!showDebug || lineNetwork.isEmpty()) return
+
+        beginShapes(ShapeRenderer.ShapeType.Line)
+        shapeRenderer.color = Colors.RED
+
+        for (line in lineNetwork) {
+            // Convert Y-down world coords to Y-up screen coords
+            val fromScreenY = flipY(line.from.y, 0)
+            val toScreenY = flipY(line.to.y, 0)
+            shapeRenderer.line(line.from.x, fromScreenY, line.to.x, toScreenY)
+        }
+
+        endShapes()
+
+        // Draw small circles at intersection points
+        beginShapes(ShapeRenderer.ShapeType.Filled)
+        shapeRenderer.color = Colors.RED
+
+        val drawnPoints = mutableSetOf<String>()
+        for (line in lineNetwork) {
+            if (line.from.id !in drawnPoints) {
+                val screenY = flipY(line.from.y, 0)
+                shapeRenderer.circle(line.from.x, screenY, 2f)
+                drawnPoints.add(line.from.id)
+            }
+            if (line.to.id !in drawnPoints) {
+                val screenY = flipY(line.to.y, 0)
+                shapeRenderer.circle(line.to.x, screenY, 2f)
+                drawnPoints.add(line.to.id)
+            }
+        }
+
+        endShapes()
     }
 
     /**
@@ -1205,6 +1288,10 @@ class Renderer(
         }
 
         endBatch()
+
+        // Draw debug overlays
+        drawWalkableZones()
+        drawLineNetwork()
 
         // Draw UI overlay
         drawUIOverlay()

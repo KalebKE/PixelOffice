@@ -46,9 +46,9 @@ class Office(private val config: Config) {
     // Entity ID counter
     private var nextEntityId = 0
 
-    // Pathfinder for developer navigation (data-driven from config)
-    private val collisionMap = CollisionMap(config)
-    private val pathfinder: Pathfinder = DataDrivenPathfinder(collisionMap)
+    // Line-based pathfinder for developer navigation
+    private val lineNetwork = LineNetwork(config)
+    private val pathfinder: Pathfinder = LinePathfinder(lineNetwork)
 
     init {
         setupLayout()
@@ -376,6 +376,11 @@ class Office(private val config: Config) {
 
         return data
     }
+
+    /**
+     * Get the line network for debug rendering.
+     */
+    fun getLineNetwork(): LineNetwork = lineNetwork
 
     /**
      * Get all renderable entities in z-order.
