@@ -960,6 +960,11 @@ class Renderer(
             font.color = Colors.WHITE
             font.draw(batch, "FPS: $fps", 4f, height - 18f)
             font.draw(batch, "Time: ${String.format("%.1f", time)}s", 4f, height - 32f)
+
+            // Cursor position (convert screen Y-down to world Y-up)
+            val mouseX = Gdx.input.x
+            val mouseY = height.toInt() - Gdx.input.y
+            font.draw(batch, "Cursor: $mouseX, $mouseY", 4f, height - 46f)
         }
 
         batch.end()

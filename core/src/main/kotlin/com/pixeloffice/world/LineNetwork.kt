@@ -113,9 +113,25 @@ class LineNetwork(private val config: Config) {
             }
         }
 
-        // Desk points
-        for (desk in config.office.deskPositions) {
-            addPoint(NavPoint(desk.x.toFloat(), desk.y.toFloat(), desk.id))
+        // Desk points - position based on which aisle they connect to
+        val deskWidth = 17  // Actual desk sprite width (desk_left/desk_right are 17px)
+        for (rowY in deskRowYs) {
+            val rowDesks = config.office.deskPositions.filter { it.y == rowY }
+            val leftDesks = rowDesks.filter { it.x < centerAisleX }.sortedBy { it.x }
+            val rightDesks = rowDesks.filter { it.x >= centerAisleX }.sortedByDescending { it.x }
+
+            // Left column: leftmost connects left (top-left), others connect right (top-right)
+            for ((index, desk) in leftDesks.withIndex()) {
+                val deskX = if (index == 0) desk.x.toFloat() else desk.x.toFloat() + deskWidth
+                addPoint(NavPoint(deskX, desk.y.toFloat(), desk.id))
+            }
+
+            // Right column: rightmost connects right (top-right), others connect left (top-left)
+            for ((index, desk) in rightDesks.withIndex()) {
+                val connectsRight = index == 0 && rowY <= 166  // right aisle only exists for y <= 166
+                val deskX = if (connectsRight) desk.x.toFloat() + deskWidth else desk.x.toFloat()
+                addPoint(NavPoint(deskX, desk.y.toFloat(), desk.id))
+            }
         }
     }
 
