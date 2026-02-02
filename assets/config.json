@@ -31,7 +31,17 @@
       {"x": 205, "y": 83, "id": "white_board_3"}
     ],
     "walkable_zones": [
-      {"id": "floor", "x": 0, "y": 104, "w": 320, "h": 136}
+      {"id": "whiteboard_area", "x": 65, "y": 83, "w": 160, "h": 21},
+      {"id": "top_corridor", "x": 0, "y": 104, "w": 320, "h": 21},
+      {"id": "left_aisle", "x": 0, "y": 104, "w": 44, "h": 136},
+      {"id": "center_aisle", "x": 124, "y": 104, "w": 51, "h": 136},
+      {"id": "right_aisle", "x": 254, "y": 104, "w": 66, "h": 136},
+      {"id": "bottom_right_corridor", "x": 175, "y": 210, "w": 145, "h": 30},
+      {"id": "left_desk_row_1", "x": 44, "y": 136, "w": 80, "h": 19},
+      {"id": "left_desk_row_2", "x": 44, "y": 166, "w": 80, "h": 19},
+      {"id": "left_desk_row_3", "x": 44, "y": 196, "w": 80, "h": 24},
+      {"id": "right_desk_row_1", "x": 175, "y": 136, "w": 79, "h": 19},
+      {"id": "right_desk_row_2", "x": 175, "y": 166, "w": 79, "h": 19}
     ],
     "furniture": [
       {"id": "vending_machine", "type": "vending_blue", "x": 5, "y": 78,
@@ -50,20 +60,6 @@
        "collision": {"x": 0, "y": 5, "w": 9, "h": 9}},
       {"id": "bookshelf", "type": "bookshelf", "x": 290, "y": 80,
        "collision": {"x": 0, "y": 15, "w": 24, "h": 16}},
-      {"id": "desk_wall_l1", "type": "desk_wall", "x": 45, "y": 125,
-       "collision": {"x": 0, "y": 0, "w": 79, "h": 30}},
-      {"id": "desk_wall_l2", "type": "desk_wall", "x": 45, "y": 155,
-       "collision": {"x": 0, "y": 0, "w": 79, "h": 30}},
-      {"id": "desk_wall_l3", "type": "desk_wall", "x": 45, "y": 185,
-       "collision": {"x": 0, "y": 0, "w": 79, "h": 30}},
-      {"id": "desk_wall_l4", "type": "desk_wall", "x": 45, "y": 215,
-       "collision": {"x": 0, "y": 0, "w": 79, "h": 17}},
-      {"id": "desk_wall_r1", "type": "desk_wall", "x": 175, "y": 125,
-       "collision": {"x": 0, "y": 0, "w": 79, "h": 30}},
-      {"id": "desk_wall_r2", "type": "desk_wall", "x": 175, "y": 155,
-       "collision": {"x": 0, "y": 0, "w": 79, "h": 30}},
-      {"id": "desk_wall_r3", "type": "desk_wall", "x": 175, "y": 185,
-       "collision": {"x": 0, "y": 0, "w": 79, "h": 25}},
       {"id": "green_couch", "type": "couch_green", "x": 197, "y": 195,
        "collision": {"x": 0, "y": 5, "w": 33, "h": 10}},
       {"id": "large_table", "type": "large_table", "x": 193, "y": 220,
@@ -75,7 +71,17 @@
       {"id": "tree_5", "type": "tree", "x": 305, "y": 153,
        "collision": {"x": 2, "y": 10, "w": 10, "h": 9}},
       {"id": "tree_6", "type": "tree", "x": 305, "y": 188,
-       "collision": {"x": 2, "y": 10, "w": 10, "h": 9}}
+       "collision": {"x": 2, "y": 10, "w": 10, "h": 9}},
+      {"id": "left_desk_wall_1", "type": "desk_wall", "x": 45, "y": 125,
+       "collision": {"x": 0, "y": 0, "w": 79, "h": 11}},
+      {"id": "left_desk_wall_2", "type": "desk_wall", "x": 45, "y": 155,
+       "collision": {"x": 0, "y": 0, "w": 79, "h": 11}},
+      {"id": "left_desk_wall_3", "type": "desk_wall", "x": 45, "y": 185,
+       "collision": {"x": 0, "y": 0, "w": 79, "h": 11}},
+      {"id": "right_desk_wall_1", "type": "desk_wall", "x": 175, "y": 125,
+       "collision": {"x": 0, "y": 0, "w": 79, "h": 11}},
+      {"id": "right_desk_wall_2", "type": "desk_wall", "x": 175, "y": 155,
+       "collision": {"x": 0, "y": 0, "w": 79, "h": 11}}
     ]
   },
   "animation": {

@@ -92,6 +92,8 @@ class PixelOfficeGame : ApplicationAdapter() {
             spriteSheet
         )
         renderer.initialize()
+        renderer.setWalkableZones(config.office.walkableZones)
+        renderer.setLineNetwork(office.getLineNetwork().getAllLines())
 
         // Initialize camera
         camera = GameCamera(
