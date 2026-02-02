@@ -171,9 +171,15 @@ class LineNetwork(private val config: Config) {
                 }
             }
 
-            // Right side: all desks connect to center aisle
-            for (desk in rightDesks) {
-                addLine("center_aisle_y$rowY", desk.id)
+            // Right side: rightmost desk → right aisle (if exists), others → center aisle
+            for ((index, desk) in rightDesks.sortedByDescending { it.x }.withIndex()) {
+                if (index == 0 && points.containsKey("right_aisle_y$rowY")) {
+                    // Rightmost desk connects to right aisle
+                    addLine("right_aisle_y$rowY", desk.id)
+                } else {
+                    // Other right desks connect to center aisle
+                    addLine("center_aisle_y$rowY", desk.id)
+                }
             }
         }
     }
