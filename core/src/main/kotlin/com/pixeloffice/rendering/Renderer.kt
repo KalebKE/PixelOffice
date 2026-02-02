@@ -1127,12 +1127,45 @@ class Renderer(
         }
     }
 
+    // ==================== Desk Wall Methods ====================
+    // These draw ONLY the desk wall at each Y position
+
     /**
-     * Draws the first desk row (Y=125) with orange art decoration.
+     * Draws the desk wall for row 1 (Y=125).
      */
-    private fun drawDeskRow1(baseX: Float) {
+    private fun drawDeskWall1(baseX: Float) {
+        drawDeskWall(baseX, 125f)
+    }
+
+    /**
+     * Draws the desk wall for row 2 (Y=155).
+     */
+    private fun drawDeskWall2(baseX: Float) {
+        drawDeskWall(baseX, 155f)
+    }
+
+    /**
+     * Draws the desk wall for row 3 (Y=185).
+     */
+    private fun drawDeskWall3(baseX: Float) {
+        drawDeskWall(baseX, 185f)
+    }
+
+    /**
+     * Draws the desk wall for row 4 (Y=215).
+     */
+    private fun drawDeskWall4(baseX: Float) {
+        drawDeskWall(baseX, 215f)
+    }
+
+    // ==================== Desk Furniture Methods ====================
+    // These draw all furniture for each row EXCEPT the wall
+
+    /**
+     * Draws furniture for desk row 1 (Y=125) - desks, chairs, monitors, decorations.
+     */
+    private fun drawDeskFurniture1(baseX: Float) {
         val wallY = 125f
-        drawDeskWall(baseX, wallY)
         drawSmallOrangeArt(baseX + 9f, wallY + 5f)
         drawDeskPartition(baseX + 36f, wallY + 3f)
         drawDeskLeft(baseX + 19f, wallY + 11f)
@@ -1144,14 +1177,13 @@ class Renderer(
     }
 
     /**
-     * Draws the second desk row (Y=155) with art decoration.
+     * Draws furniture for desk row 2 (Y=155) - desks, chairs, monitors, decorations.
      */
-    private fun drawDeskRow2(baseX: Float, isLeftColumn: Boolean = true) {
+    private fun drawDeskFurniture2(baseX: Float, isLeftColumn: Boolean = true) {
         val wallY = 155f
-        drawDeskWall(baseX, wallY)
-        drawNotice(baseX + 60f, wallY + -24)
-        if(!isLeftColumn) {
-            drawPostItNotes(baseX + 70f, wallY + 5)
+        drawNotice(baseX + 60f, wallY - 24f)
+        if (!isLeftColumn) {
+            drawPostItNotes(baseX + 70f, wallY + 5f)
         }
         drawArt(baseX + 7f, wallY + 5f)
         drawDeskPartition(baseX + 36f, wallY + 3f)
@@ -1164,11 +1196,10 @@ class Renderer(
     }
 
     /**
-     * Draws the third desk row (Y=185) with blue art decorations.
+     * Draws furniture for desk row 3 (Y=185) in the LEFT column - desks, chairs, etc.
      */
-    private fun drawDeskRow3(baseX: Float) {
+    private fun drawDeskFurniture3Left(baseX: Float) {
         val wallY = 185f
-        drawDeskWall(baseX, wallY)
         drawSmallBlueArt(baseX + 9f, wallY + 5f)
         drawDeskPartition(baseX + 36f, wallY + 3f)
         drawDeskLeft(baseX + 19f, wallY + 11f)
@@ -1180,38 +1211,92 @@ class Renderer(
     }
 
     /**
-     * Draws the fourth desk row (Y=215) with desk wall only (minimal decorations).
+     * Draws furniture for desk row 3 (Y=185) in the RIGHT column - lounge area.
      */
-    private fun drawDeskRow4(baseX: Float) {
-        val wallY = 215f
-        drawDeskWall(baseX, wallY)
+    private fun drawDeskFurniture3Right(baseX: Float) {
+        val wallY = 185f
+        drawSmallBlueArt(baseX + 9f, wallY + 5f)
+        drawGreenCouch(baseX + 22f, wallY + 10f)
+        drawRedTrashCan(baseX + 56f, wallY + 10f)
+        drawTree(baseX + 66f, wallY + 5f)
     }
 
+    // Row 4 has no furniture, only the wall
+
     /**
-     * Draws a complete column of desk rows at the specified base X position.
-     * Left column has 4 desk rows. Right column has 3 desk rows plus a lounge area.
-     * Each row contains a desk wall, partition, left/right desks, chairs, and decorations.
+     * Draws desk furniture for a specific wall Y position.
+     * Called during interleaved rendering after the wall is drawn.
      */
-    private fun drawDeskColumn(baseX: Float, isLeftColumn: Boolean) {
-        drawDeskRow1(baseX)
-        drawDeskRow2(baseX, isLeftColumn)
-        if (isLeftColumn) {
-            drawDeskRow3(baseX)
-            drawDeskRow4(baseX)
-        } else {
-            // Right column row 3: desk wall + art + lounge furniture
-            val row3Y = 185f
-            drawDeskWall(baseX, row3Y)
-            drawSmallBlueArt(baseX + 9f, row3Y + 5f)
-            drawGreenCouch(baseX + 22f, row3Y + 10f)
-            drawRedTrashCan(baseX + 56f, row3Y + 10f)
-            drawTree(baseX + 66f, row3Y + 5f)
-            // No row 4 - removed entirely
+    private fun drawDeskFurnitureForRow(wallY: Float) {
+        when (wallY) {
+            125f -> {
+                drawDeskFurniture1(LEFT_COLUMN_X)
+                drawDeskFurniture1(RIGHT_COLUMN_X)
+            }
+            155f -> {
+                drawDeskFurniture2(LEFT_COLUMN_X, isLeftColumn = true)
+                drawDeskFurniture2(RIGHT_COLUMN_X, isLeftColumn = false)
+            }
+            185f -> {
+                drawDeskFurniture3Left(LEFT_COLUMN_X)
+                drawDeskFurniture3Right(RIGHT_COLUMN_X)
+            }
+            215f -> {
+                // Row 4 has no furniture, just the wall (left column only)
+            }
         }
     }
 
     /**
+     * Draws desk walls for a specific wall Y position.
+     * Called during interleaved rendering before furniture.
+     */
+    private fun drawDeskWallsForRow(wallY: Float) {
+        when (wallY) {
+            125f -> {
+                drawDeskWall1(LEFT_COLUMN_X)
+                drawDeskWall1(RIGHT_COLUMN_X)
+            }
+            155f -> {
+                drawDeskWall2(LEFT_COLUMN_X)
+                drawDeskWall2(RIGHT_COLUMN_X)
+            }
+            185f -> {
+                drawDeskWall3(LEFT_COLUMN_X)
+                drawDeskWall3(RIGHT_COLUMN_X)
+            }
+            215f -> {
+                // Only left column has row 4
+                drawDeskWall4(LEFT_COLUMN_X)
+            }
+        }
+    }
+
+    /**
+     * Collect all entities from render data and sort by Y position.
+     * Returns a list of visible entities sorted by Y (lower Y = behind).
+     */
+    private fun collectAndSortEntities(renderData: Map<String, Any>): List<Map<String, Any>> {
+        val entities = mutableListOf<Map<String, Any>>()
+
+        @Suppress("UNCHECKED_CAST")
+        val developers = renderData["developers"] as? List<Map<String, Any>> ?: emptyList()
+        entities.addAll(developers)
+
+        @Suppress("UNCHECKED_CAST")
+        val pm = renderData["project_manager"] as? Map<String, Any>
+        if (pm != null) entities.add(pm)
+
+        // Filter to only visible entities and sort by Y position
+        return entities
+            .filter { it["visible"] as? Boolean ?: true }
+            .sortedBy { (it["y"] as? Number)?.toFloat() ?: 0f }
+    }
+
+    /**
      * Draw the complete scene from render data.
+     * Uses interleaved Y-zone rendering so characters appear behind desk walls
+     * but on top of other furniture.
      */
     fun drawScene(renderData: Map<String, Any>) {
         // Start batch for background and tiles
@@ -1223,7 +1308,7 @@ class Renderer(
         // Draw floor tiles
         drawFloor()
 
-        // Draw vending machine and water cooler
+        // Draw top area furniture (above all desk rows)
         drawVendingMachine(5f, 78f)
         drawWaterCooler(31f, 95f)
         drawSmallTable(41f, 95f)
@@ -1234,15 +1319,41 @@ class Renderer(
         drawTree(162f, 90f)
         drawWhiteboard(180f, 83f)
         drawWhiteboard(205f, 83f)
-        drawOrangeCouch(225f,95f)
+        drawOrangeCouch(225f, 95f)
         drawBlueTrashCan(260f, 95f)
         drawBookshelf(290f, 80f)
 
-        // Left desk column (X=45f)
-        drawDeskColumn(LEFT_COLUMN_X, isLeftColumn = true)
+        // Collect and sort all entities once
+        val entities = collectAndSortEntities(renderData)
+        val drawnEntities = mutableSetOf<String>()
 
-        // Right desk column (X=175f)
-        drawDeskColumn(RIGHT_COLUMN_X, isLeftColumn = false)
+        // Interleaved rendering: for each desk wall Y level, draw characters
+        // that should appear BEHIND that wall, then the wall, then furniture
+        for (wallY in DESK_ROW_Y_POSITIONS) {
+            // Draw characters with y <= wallY (these appear behind this wall)
+            for (entity in entities) {
+                val entityY = (entity["y"] as? Number)?.toFloat() ?: 0f
+                val entityId = entity["entity_id"] as? String ?: entity.hashCode().toString()
+                if (entityY <= wallY && entityId !in drawnEntities) {
+                    drawEntity(entity)
+                    drawnEntities.add(entityId)
+                }
+            }
+
+            // Draw desk walls at this Y level for both columns
+            drawDeskWallsForRow(wallY)
+
+            // Draw desk furniture for this row (desks, chairs, monitors)
+            drawDeskFurnitureForRow(wallY)
+        }
+
+        // Draw remaining characters (in front of all walls - Y > 215)
+        for (entity in entities) {
+            val entityId = entity["entity_id"] as? String ?: entity.hashCode().toString()
+            if (entityId !in drawnEntities) {
+                drawEntity(entity)
+            }
+        }
 
         // Additional decorations not part of desk columns
         drawSmallBlueArt(110f, 160f)
@@ -1258,32 +1369,6 @@ class Renderer(
         drawTree(305f, 123f)
         drawTree(305f, 153f)
         drawTree(305f, 188f)
-
-        // Collect and sort entities by y position for depth ordering
-        // In Y-up, higher Y = further back, so sort descending
-        val entities = mutableListOf<Map<String, Any>>()
-
-        @Suppress("UNCHECKED_CAST")
-        val developers = renderData["developers"] as? List<Map<String, Any>> ?: emptyList()
-        entities.addAll(developers)
-
-        @Suppress("UNCHECKED_CAST")
-        val pm = renderData["project_manager"] as? Map<String, Any>
-        if (pm != null) entities.add(pm)
-
-//        @Suppress("UNCHECKED_CAST")
-//        val po = renderData["project_owner"] as? Map<String, Any>
-//        if (po != null) entities.add(po)
-
-        // Sort by y position (lower Y in world = draw first = behind)
-        entities.sortBy { (it["y"] as? Number)?.toFloat() ?: 0f }
-
-        for (entity in entities) {
-            val visible = entity["visible"] as? Boolean ?: true
-            if (visible) {
-                drawEntity(entity)
-            }
-        }
 
         // Draw effects on top
         @Suppress("UNCHECKED_CAST")
