@@ -31,6 +31,9 @@ abstract class BaseEntity(
     protected var facingDirection = "down" // up, down, left, right
     protected var spriteVariant = 0 // Color variant index
 
+    // Sprite width for center-based positioning (characters are 16px wide)
+    protected open val spriteHalfWidth: Float = 8f
+
     var x: Float
         get() = position.x
         set(value) { position.x = value }
@@ -73,6 +76,7 @@ abstract class BaseEntity(
 
     /**
      * Move towards a target position.
+     * Uses the sprite's horizontal center for positioning calculations.
      *
      * @param targetX Target x position.
      * @param targetY Target y position.
@@ -81,19 +85,22 @@ abstract class BaseEntity(
      * @return True if reached the target, False otherwise.
      */
     fun moveTowards(targetX: Float, targetY: Float, speed: Float, dt: Float): Boolean {
-        val dx = targetX - x
+        // Calculate distance from sprite CENTER to target
+        val centerX = x + spriteHalfWidth
+        val dx = targetX - centerX
         val dy = targetY - y
         val distance = sqrt(dx * dx + dy * dy)
 
         if (distance < speed * dt) {
-            x = targetX
+            // Snap so sprite CENTER is at target
+            x = targetX - spriteHalfWidth
             y = targetY
             velocity.x = 0f
             velocity.y = 0f
             return true
         }
 
-        // Normalize and apply speed
+        // Movement uses center position for direction calculation
         if (distance > 0) {
             velocity.x = (dx / distance) * speed
             velocity.y = (dy / distance) * speed
@@ -122,10 +129,11 @@ abstract class BaseEntity(
     }
 
     /**
-     * Calculate distance to a point.
+     * Calculate distance to a point from the sprite's horizontal center.
      */
     fun distanceToPoint(px: Float, py: Float): Float {
-        val dx = px - x
+        val centerX = x + spriteHalfWidth
+        val dx = px - centerX
         val dy = py - y
         return sqrt(dx * dx + dy * dy)
     }
