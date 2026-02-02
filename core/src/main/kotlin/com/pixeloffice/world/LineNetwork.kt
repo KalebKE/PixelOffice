@@ -133,6 +133,17 @@ class LineNetwork(private val config: Config) {
                 addPoint(NavPoint(deskX, desk.y.toFloat(), desk.id))
             }
         }
+
+        // Bottom points for extended aisles
+        val bottomY = 240f  // Bottom of screen
+        addPoint(NavPoint(leftAisleX, bottomY, "left_aisle_bottom"))
+        addPoint(NavPoint(centerAisleX, bottomY, "center_aisle_bottom"))
+        addPoint(NavPoint(rightAisleX, bottomY, "right_aisle_bottom"))
+
+        // Bottom corridor intersection points (y=210, between green couch and large table)
+        val bottomCorridorY = 210f
+        addPoint(NavPoint(centerAisleX, bottomCorridorY, "bottom_corridor_center"))
+        addPoint(NavPoint(rightAisleX, bottomCorridorY, "bottom_corridor_right"))
     }
 
     /**
@@ -198,6 +209,31 @@ class LineNetwork(private val config: Config) {
                 }
             }
         }
+
+        // --- Extend aisles to bottom ---
+        val lastLeftRow = deskRowYs.maxOrNull()
+        val lastCenterRow = deskRowYs.maxOrNull()
+        val lastRightRow = deskRowYs.filter { it <= 166 }.maxOrNull()
+
+        // Left aisle: last desk row → bottom
+        if (lastLeftRow != null) {
+            addLine("left_aisle_y$lastLeftRow", "left_aisle_bottom")
+        }
+
+        // Center aisle: last desk row → bottom corridor → bottom
+        if (lastCenterRow != null) {
+            addLine("center_aisle_y$lastCenterRow", "bottom_corridor_center")
+            addLine("bottom_corridor_center", "center_aisle_bottom")
+        }
+
+        // Right aisle: last right row → bottom corridor → bottom
+        if (lastRightRow != null) {
+            addLine("right_aisle_y$lastRightRow", "bottom_corridor_right")
+            addLine("bottom_corridor_right", "right_aisle_bottom")
+        }
+
+        // Horizontal line at bottom corridor (y=210) connecting center and right aisles
+        addLine("bottom_corridor_center", "bottom_corridor_right")
     }
 
     /**
