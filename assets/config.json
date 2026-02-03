@@ -124,8 +124,8 @@
     "project_manager": "red_hair",
     "product_owner": "dark_hair",
     "animals": {
-      "cat": {"x": 65, "y": 129, "w": 16, "h": 13},
-      "dog": {"x": 59, "y": 146, "w": 24, "h": 11}
+      "cat": {"x": 65, "y": 129, "w": 16, "h": 13, "frames": 2, "frame_duration": 0.3},
+      "dog": {"x": 59, "y": 146, "w": 24, "h": 11, "frames": 5, "frame_duration": 0.15}
     },
     "furniture": {
       "couch_green": {"x": 120, "y": 102, "w": 33, "h": 15},

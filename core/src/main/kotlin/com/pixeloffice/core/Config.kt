@@ -122,6 +122,17 @@ data class SpriteRect(
 )
 
 @Serializable
+data class AnimatedSpriteRect(
+    val x: Int,
+    val y: Int,
+    val w: Int,
+    val h: Int,
+    val frames: Int = 1,
+    @SerialName("frame_duration")
+    val frameDuration: Float = 0.15f
+)
+
+@Serializable
 data class SpriteSheetConfig(
     @SerialName("transparent_color")
     val transparentColor: Int = 12,
@@ -133,7 +144,7 @@ data class SpriteSheetConfig(
     val projectManager: String = "blonde",
     @SerialName("product_owner")
     val productOwner: String = "dark_hair",
-    val animals: Map<String, SpriteRect> = emptyMap(),
+    val animals: Map<String, AnimatedSpriteRect> = emptyMap(),
     val furniture: Map<String, SpriteRect> = emptyMap(),
     val tiles: Map<String, SpriteRect> = emptyMap(),
     val clouds: List<SpriteRect> = emptyList()

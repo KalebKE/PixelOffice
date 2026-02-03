@@ -2,6 +2,7 @@ package com.pixeloffice.animation
 
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.TextureRegion
+import com.pixeloffice.core.AnimatedSpriteRect
 import com.pixeloffice.core.SpriteRect
 import com.pixeloffice.core.SpriteSheetConfig
 
@@ -238,14 +239,22 @@ class SpriteSheet(
         val cfg = config ?: return
 
         // Create sprites for all animal items in config
-        for ((name, rect) in cfg.animals) {
-            val sprite = SpriteDefinition(name = name, width = rect.w, height = rect.h)
-            val frame = SpriteFrame.fromRect(tex, rect)
+        for ((name, animRect) in cfg.animals) {
+            val sprite = SpriteDefinition(name = name, width = animRect.w, height = animRect.h)
+
+            // Extract multiple frames from horizontal strip
+            val frames = mutableListOf<SpriteFrame>()
+            for (frameIndex in 0 until animRect.frames) {
+                val frameX = animRect.x + (frameIndex * animRect.w)
+                val region = TextureRegion(tex, frameX, animRect.y, animRect.w, animRect.h)
+                frames.add(SpriteFrame(region, animRect.w, animRect.h))
+            }
+
             sprite.addAnimation(Animation(
                 name = "default",
-                frames = listOf(frame),
-                frameDuration = 1.0f,
-                loop = false
+                frames = frames,
+                frameDuration = animRect.frameDuration,
+                loop = true
             ))
             sprites["animal_$name"] = sprite
         }
@@ -313,6 +322,11 @@ class SpriteSheet(
     fun getAnimalFrame(name: String): SpriteFrame? {
         val sprite = sprites["animal_$name"] ?: return null
         return sprite.animations["default"]?.frames?.firstOrNull()
+    }
+
+    fun getAnimalAnimation(name: String): Animation? {
+        val sprite = sprites["animal_$name"] ?: return null
+        return sprite.animations["default"]
     }
 
     fun getTileFrame(name: String): SpriteFrame? = getFurnitureFrame(name)

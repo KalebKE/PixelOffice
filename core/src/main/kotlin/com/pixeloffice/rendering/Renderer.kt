@@ -601,13 +601,15 @@ class Renderer(
     }
 
     fun drawDog(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getAnimalFrame("dog") ?: return
+        val anim = spriteSheet.getAnimalAnimation("dog")
+        val frame = anim?.getFrameAtTime(time) ?: spriteSheet.getAnimalFrame("dog") ?: return
         val screenY = flipY(worldY, frame.height)
         batch.draw(frame.region, worldX, screenY)
     }
 
     fun drawCat(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getAnimalFrame("cat") ?: return
+        val anim = spriteSheet.getAnimalAnimation("cat")
+        val frame = anim?.getFrameAtTime(time) ?: spriteSheet.getAnimalFrame("cat") ?: return
         val screenY = flipY(worldY, frame.height)
         batch.draw(frame.region, worldX, screenY)
     }
