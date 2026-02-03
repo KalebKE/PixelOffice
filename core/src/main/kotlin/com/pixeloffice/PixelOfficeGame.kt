@@ -226,7 +226,7 @@ class PixelOfficeGame : ApplicationAdapter() {
             ActivityType.USER_QUESTION -> {
                 // Spawn PO for user question
                 office.getAllDevelopers().lastOrNull()?.let { dev ->
-                    office.spawnProjectOwner(dev.agentId)
+                    office.spawnProductOwner(dev.agentId)
                 }
             }
             else -> {
@@ -331,6 +331,16 @@ class PixelOfficeGame : ApplicationAdapter() {
                 office.getAllDevelopers().lastOrNull()?.handleEvent("tests_failed")
                 camera.shake(3f)
             }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_5)) {
+                // Spawn Product Owner to ask question to last developer
+                office.getAllDevelopers().lastOrNull()?.let { dev ->
+                    office.spawnProductOwner(dev.agentId)
+                }
+            }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_6)) {
+                // Dismiss Product Owner (simulate answer received)
+                office.dismissProductOwner()
+            }
         }
     }
 
@@ -344,8 +354,12 @@ class PixelOfficeGame : ApplicationAdapter() {
             office.spawnDeveloper("demo_agent_1", colorVariant = 0)
             // Spawn second developer (green/glasses variant at desk_2)
             office.spawnDeveloper("demo_agent_2", colorVariant = 1)
+            // Spawn third developer (red/cool_hair variant at desk_3)
+            office.spawnDeveloper("demo_agent_3", colorVariant = 2)
             // Spawn project manager
             office.spawnProjectManager()
+            // Spawn product owner for patrol
+            office.spawnProductOwnerPatrol()
         }
 
         // Cycle through states for all developers

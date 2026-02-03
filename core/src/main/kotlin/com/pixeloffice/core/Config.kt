@@ -110,7 +110,7 @@ data class SpriteConfig(
     @SerialName("tile_size")
     val tileSize: Int = 16,
     @SerialName("color_variants")
-    val colorVariants: List<String> = listOf("blue", "green", "red", "purple")
+    val colorVariants: List<String> = listOf("blue", "green", "red")
 )
 
 @Serializable
@@ -131,8 +131,8 @@ data class SpriteSheetConfig(
     val developerVariants: Map<String, String> = emptyMap(),
     @SerialName("project_manager")
     val projectManager: String = "blonde",
-    @SerialName("project_owner")
-    val projectOwner: String = "dark_hair",
+    @SerialName("product_owner")
+    val productOwner: String = "dark_hair",
     val animals: Map<String, SpriteRect> = emptyMap(),
     val furniture: Map<String, SpriteRect> = emptyMap(),
     val tiles: Map<String, SpriteRect> = emptyMap(),
@@ -197,8 +197,8 @@ data class Config(
     val developer: DeveloperConfig = DeveloperConfig(),
     @SerialName("project_manager")
     val projectManager: PMConfig = PMConfig(),
-    @SerialName("project_owner")
-    val projectOwner: POConfig = POConfig(),
+    @SerialName("product_owner")
+    val productOwner: POConfig = POConfig(),
     val demo: DemoConfig = DemoConfig()
 ) {
     companion object {
