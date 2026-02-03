@@ -1101,13 +1101,13 @@ class Renderer(
                     drawEntity(child)
                 }
             }
-            "project_owner" -> {
+            "product_owner" -> {
                 drawCharacter(
                     x, y,
-                    "project_owner",
+                    "product_owner",
                     renderInfo["animation"] as? String ?: "idle",
                     renderInfo["facing"] as? String ?: "down",
-                    "po"
+                    renderInfo["entity_id"] as? String ?: "po"
                 )
             }
             "thought_bubble" -> {
@@ -1286,6 +1286,10 @@ class Renderer(
         @Suppress("UNCHECKED_CAST")
         val pm = renderData["project_manager"] as? Map<String, Any>
         if (pm != null) entities.add(pm)
+
+        @Suppress("UNCHECKED_CAST")
+        val p0 = renderData["product_owner"] as? Map<String, Any>
+        if (p0 != null) entities.add(p0)
 
         // Filter to only visible entities and sort by Y position
         return entities

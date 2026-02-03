@@ -83,7 +83,7 @@ class SpriteSheet(
 
         createDeveloperSprites()
         createPMSprites()
-        createPOSprites()
+        createProductOwnerSprites()
         createThoughtBubbleSprites()
         createGhostSprites()
         createFurnitureSprites()
@@ -165,16 +165,16 @@ class SpriteSheet(
         sprites[sprite.name] = sprite
     }
 
-    private fun createPOSprites() {
+    private fun createProductOwnerSprites() {
         val tex = texture ?: return
         val sprite = SpriteDefinition(
-            name = "project_owner",
+            name = "product_owner",
             width = 16,
             height = 24
         )
 
         // Get PO character from config
-        val poChar = config?.projectOwner ?: "dark_hair"
+        val poChar = config?.productOwner ?: "dark_hair"
         val rect = config?.getCharacter(poChar)
         val baseFrame = if (rect != null) {
             SpriteFrame.fromRect(tex, rect)

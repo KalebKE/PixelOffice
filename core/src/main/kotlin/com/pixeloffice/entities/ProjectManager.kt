@@ -27,9 +27,14 @@ class ProjectManager(
     private var currentDeskId: String? = null
 
     // State
-    private var state = "idle" // idle, walking_to_desk, at_desk, waiting
+    private var state = "idle" // idle, walking_to_desk, at_desk, waiting, chatting
     private var waitTimer = 0f
     private var waitDuration = 0f
+
+    // Chatting (when colliding with PO)
+    private val chattingDuration = 3f
+    private var chatCooldown = 0f
+    private val chatCooldownDuration = 1f  // 1 second cooldown after chat
 
     // Bubble support
     private var thoughtBubble: ThoughtBubble? = null
@@ -65,6 +70,11 @@ class ProjectManager(
     override fun update(dt: Float) {
         if (!active) return
 
+        // Decrement chat cooldown
+        if (chatCooldown > 0f) {
+            chatCooldown -= dt
+        }
+
         when (state) {
             "idle" -> {
                 // Start patrolling if we have desks to visit
@@ -75,6 +85,7 @@ class ProjectManager(
             "walking_to_desk" -> updateWalkingToDesk(dt)
             "at_desk" -> updateAtDesk(dt)
             "waiting" -> updateWaiting(dt)
+            "chatting" -> updateChatting(dt)
         }
 
         // Update thought bubble position if visible
@@ -208,6 +219,28 @@ class ProjectManager(
     fun hideThoughtBubble() {
         showBubble = false
         thoughtBubble?.hide()
+    }
+
+    // Chatting methods (collision with PO)
+
+    fun startChatting() {
+        if (state == "walking_to_desk" && chatCooldown <= 0f) {
+            state = "chatting"
+            waitTimer = 0f
+            setAnimation("idle")
+            showThoughtBubble("blah")
+        }
+    }
+
+    fun isWalking(): Boolean = state == "walking_to_desk"
+
+    private fun updateChatting(dt: Float) {
+        waitTimer += dt
+        if (waitTimer >= chattingDuration) {
+            hideThoughtBubble()
+            chatCooldown = chatCooldownDuration  // Start cooldown
+            state = "walking_to_desk"  // Resume walking
+        }
     }
 
     override fun getRenderInfo(): Map<String, Any> {

@@ -40,7 +40,7 @@ class Office(private val config: Config) {
     // Entities
     private val developers = mutableMapOf<String, Developer>()
     private var projectManager: ProjectManager? = null
-    private var projectOwner: ProjectOwner? = null
+    private var productOwner: ProductOwner? = null
     private val effects = mutableListOf<BaseEntity>() // Ghosts, bubbles, etc.
 
     // Entity ID counter
@@ -252,32 +252,71 @@ class Office(private val config: Config) {
      * @param targetAgentId Agent ID of the developer to ask.
      * @return The PO, or null if target developer not found.
      */
-    fun spawnProjectOwner(targetAgentId: String): ProjectOwner? {
+    fun spawnProductOwner(targetAgentId: String): ProductOwner? {
         val developer = developers[targetAgentId] ?: return null
 
-        if (projectOwner == null) {
-            projectOwner = ProjectOwner(
+        if (productOwner == null) {
+            productOwner = ProductOwner(
                 entityId = "po",
-                walkSpeed = config.projectOwner.walkSpeed,
-                questionTimeout = config.projectOwner.questionTimeout
+                walkSpeed = config.productOwner.walkSpeed,
+                questionTimeout = config.productOwner.questionTimeout
             )
+
+            // Configure patrol (like ProjectManager)
+            productOwner?.setPathfinder(pathfinder)
+            val deskList = desks.values.map { desk -> Triple(desk.id, desk.x, desk.y) }
+            productOwner?.setDeskTargets(deskList)
+            productOwner?.setBubbleSpawner { po, bubbleType -> spawnPOThoughtBubble(po, bubbleType) }
         }
 
-        projectOwner?.spawnForQuestion(developer)
-        return projectOwner
+        productOwner?.spawnForQuestion(developer)
+        return productOwner
+    }
+
+    /**
+     * Spawn Product Owner for patrol only (no question).
+     */
+    fun spawnProductOwnerPatrol(): ProductOwner? {
+        if (productOwner == null) {
+            productOwner = ProductOwner(
+                x = 150f,
+                y = 110f,
+                entityId = "po",
+                walkSpeed = config.productOwner.walkSpeed,
+                questionTimeout = config.productOwner.questionTimeout
+            )
+            productOwner?.setPathfinder(pathfinder)
+            val deskList = desks.values.map { desk -> Triple(desk.id, desk.x, desk.y) }
+            productOwner?.setDeskTargets(deskList)
+            productOwner?.setBubbleSpawner { po, bubbleType -> spawnPOThoughtBubble(po, bubbleType) }
+        }
+        productOwner?.startPatrol()
+        return productOwner
+    }
+
+    private fun spawnPOThoughtBubble(po: ProductOwner, bubbleType: String): ThoughtBubble {
+        val bubble = ThoughtBubble(
+            x = po.x + 8,
+            y = po.y - 16,
+            entityId = generateEntityId("po_bubble"),
+            bubbleType = bubbleType
+        )
+        bubble.show()
+        effects.add(bubble)
+        return bubble
     }
 
     /**
      * Called when user answers the question.
      */
-    fun dismissProjectOwner() {
-        projectOwner?.answerReceived()
+    fun dismissProductOwner() {
+        productOwner?.answerReceived()
     }
 
     /**
-     * Get the Project Owner.
+     * Get the Product Owner.
      */
-    fun getProjectOwner(): ProjectOwner? = projectOwner
+    fun getProductOwner(): ProductOwner? = productOwner
 
     // Effect management
 
@@ -320,7 +359,13 @@ class Office(private val config: Config) {
         }
 
         // Update PO
-        projectOwner?.update(dt)
+        productOwner?.let { po ->
+            po.setDevelopers(developers.values.toList())
+            po.update(dt)
+        }
+
+        // Check PM/PO collision for chatting
+        checkManagerCollision()
 
         // Update effects and clean up finished ones
         val iterator = effects.iterator()
@@ -331,6 +376,28 @@ class Office(private val config: Config) {
             } else {
                 effect.update(dt)
             }
+        }
+    }
+
+    /**
+     * Check if PM and PO collide while walking, triggering a chat.
+     */
+    private fun checkManagerCollision() {
+        val pm = projectManager ?: return
+        val po = productOwner ?: return
+
+        // Only check if both are walking
+        if (!pm.isWalking() || !po.isWalking()) return
+
+        // Check distance
+        val dx = pm.x - po.x
+        val dy = pm.y - po.y
+        val distSq = dx * dx + dy * dy
+        val collisionDist = 15f
+
+        if (distSq < collisionDist * collisionDist) {
+            pm.startChatting()
+            po.startChatting()
         }
     }
 
@@ -368,9 +435,9 @@ class Office(private val config: Config) {
             data["project_manager"] = pm.getRenderInfo()
         }
 
-        projectOwner?.let { po ->
+        productOwner?.let { po ->
             if (po.isActive()) {
-                data["project_owner"] = po.getRenderInfo()
+                data["product_owner"] = po.getRenderInfo()
             }
         }
 
@@ -392,7 +459,7 @@ class Office(private val config: Config) {
         val characters = mutableListOf<BaseEntity>()
         characters.addAll(developers.values)
         projectManager?.let { characters.add(it) }
-        projectOwner?.let { po ->
+        productOwner?.let { po ->
             if (po.isActive()) {
                 characters.add(po)
             }
