@@ -27,6 +27,10 @@ import com.pixeloffice.world.Office
  */
 class PixelOfficeGame : ApplicationAdapter() {
 
+    companion object {
+        var forceSittingMode = false
+    }
+
     // Configuration
     private lateinit var config: Config
 
@@ -283,6 +287,12 @@ class PixelOfficeGame : ApplicationAdapter() {
         // Toggle debug
         if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) {
             renderer.toggleDebug()
+        }
+
+        // Toggle forced sitting mode (F2)
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F2)) {
+            forceSittingMode = !forceSittingMode
+            Gdx.app.log("Debug", "Force sitting mode: $forceSittingMode")
         }
 
         // Camera controls

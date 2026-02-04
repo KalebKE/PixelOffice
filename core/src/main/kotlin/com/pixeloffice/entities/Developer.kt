@@ -1,8 +1,12 @@
 package com.pixeloffice.entities
 
+import com.pixeloffice.PixelOfficeGame
 import com.pixeloffice.states.DeveloperStateMachine
+import com.pixeloffice.states.DeveloperStateNames
 import com.pixeloffice.world.Office
 import com.pixeloffice.world.Pathfinder
+import kotlin.math.pow
+import kotlin.math.sqrt
 
 /**
  * A developer sprite representing a Claude agent.
@@ -109,7 +113,27 @@ class Developer(
         }
     }
 
+    /**
+     * Check if the developer is at their desk (within 15 pixels).
+     */
+    fun isAtDesk(): Boolean {
+        val deskPos = getDeskPosition() ?: return false
+        val distance = sqrt((x - deskPos.first).pow(2) + (y - deskPos.second).pow(2))
+        return distance < 15f
+    }
+
     override fun getRenderInfo(): Map<String, Any> {
+        val shouldSit = if (PixelOfficeGame.forceSittingMode && spriteVariant == 1) {
+            // Force sitting for green variant when debug mode is on
+            true
+        } else {
+            // Normal logic: sit when at desk and in appropriate state
+            isAtDesk() &&
+            (stateMachine.currentStateName == DeveloperStateNames.IDLE ||
+             stateMachine.currentStateName == DeveloperStateNames.WRITING_CODE)
+        }
+        val posture = if (shouldSit) "sitting" else "standing"
+
         val info = mutableMapOf<String, Any>(
             "type" to "developer",
             "x" to x,
@@ -117,6 +141,7 @@ class Developer(
             "animation" to currentAnimation,
             "facing" to facingDirection,
             "variant" to spriteVariant,
+            "posture" to posture,
             "visible" to visible,
             "state" to (stateMachine.currentStateName ?: ""),
             "entity_id" to entityId
