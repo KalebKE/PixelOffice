@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
+import com.pixeloffice.PixelOfficeGame
 import com.pixeloffice.animation.SpriteFrame
 import com.pixeloffice.animation.SpriteSheet
 import com.pixeloffice.core.WalkableZone
@@ -70,6 +71,7 @@ class Renderer(
     private var fps = 0
     private var walkableZones: List<WalkableZone> = emptyList()
     private var lineNetwork: List<NavLine> = emptyList()
+    private var debugDevelopers: List<Map<String, Any>> = emptyList()
 
     // Animation constants
     companion object {
@@ -110,7 +112,7 @@ class Renderer(
         }
 
         // Load the sprite sheet texture
-        texture = Texture(Gdx.files.internal("sprites/PixelOfficeAssets.png")).apply {
+        texture = Texture(Gdx.files.internal("sprites/PixelOfficeAssets-Sheet.png")).apply {
             setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
         }
 
@@ -654,10 +656,20 @@ class Renderer(
         animation: String,
         facing: String,
         variant: Int,
-        entityId: String
+        entityId: String,
+        posture: String = "standing"
     ) {
-        val spriteName = spriteSheet.getDeveloperSpriteName(variant)
-        val sprite = spriteSheet.getSprite(spriteName) ?: return
+        val baseName = spriteSheet.getDeveloperSpriteName(variant)
+
+        // Try to get sitting sprite first if posture is sitting and variant is green (1)
+        val spriteName = if (posture == "sitting" && variant == 1) {
+            "${baseName}_sitting"
+        } else {
+            baseName
+        }
+
+        // Get sprite, fallback to standing if sitting not available
+        val sprite = spriteSheet.getSprite(spriteName) ?: spriteSheet.getSprite(baseName) ?: return
 
         val anim = sprite.animations[animation] ?: sprite.animations["idle"] ?: return
         val frame = anim.getFrameAtTime(time)
@@ -963,10 +975,51 @@ class Renderer(
             font.draw(batch, "FPS: $fps", 4f, height - 18f)
             font.draw(batch, "Time: ${String.format("%.1f", time)}s", 4f, height - 32f)
 
+            // Show forced sitting mode status
+            if (PixelOfficeGame.forceSittingMode) {
+                font.color = Colors.YELLOW
+                font.draw(batch, "[F2] FORCE SITTING: ON", 4f, height - 46f)
+            }
+
             // Cursor position (convert screen Y-down to world Y-up)
             val mouseX = Gdx.input.x
             val mouseY = height.toInt() - Gdx.input.y
-            font.draw(batch, "Cursor: $mouseX, $mouseY", 4f, height - 46f)
+            font.draw(batch, "Cursor: $mouseX, $mouseY", 4f, height - 60f)
+
+            // Developer state information
+            font.color = Colors.WHITE
+            var yOffset = height - 74f  // Start below cursor position
+
+            font.draw(batch, "=== DEVELOPERS ===", 4f, yOffset)
+            yOffset -= 14f
+
+            for (dev in debugDevelopers) {
+                val entityId = dev["entity_id"] as? String ?: "unknown"
+                val state = dev["state"] as? String ?: "none"
+                val posture = dev["posture"] as? String ?: "standing"
+                val x = (dev["x"] as? Number)?.toInt() ?: 0
+                val y = (dev["y"] as? Number)?.toInt() ?: 0
+                val variant = (dev["variant"] as? Number)?.toInt() ?: 0
+                val animation = dev["animation"] as? String ?: "idle"
+
+                // Color code by variant
+                font.color = when (variant) {
+                    0 -> Colors.SKY_BLUE   // Blue variant
+                    1 -> Colors.GREEN      // Green variant
+                    2 -> Colors.RED        // Red variant
+                    else -> Colors.WHITE
+                }
+
+                font.draw(batch, "$entityId:", 4f, yOffset)
+                yOffset -= 12f
+
+                font.color = Colors.WHITE
+                font.draw(batch, "  state=$state pos=($x,$y)", 4f, yOffset)
+                yOffset -= 12f
+
+                font.draw(batch, "  posture=$posture anim=$animation", 4f, yOffset)
+                yOffset -= 14f
+            }
         }
 
         batch.end()
@@ -1079,7 +1132,8 @@ class Renderer(
                     renderInfo["animation"] as? String ?: "idle",
                     renderInfo["facing"] as? String ?: "down",
                     (renderInfo["variant"] as? Number)?.toInt() ?: 0,
-                    renderInfo["entity_id"] as? String ?: ""
+                    renderInfo["entity_id"] as? String ?: "",
+                    renderInfo["posture"] as? String ?: "standing"
                 )
                 // Draw children (thought bubble, ghost)
                 @Suppress("UNCHECKED_CAST")
@@ -1305,6 +1359,10 @@ class Renderer(
      * but on top of other furniture.
      */
     fun drawScene(renderData: Map<String, Any>) {
+        // Store developer data for debug overlay
+        @Suppress("UNCHECKED_CAST")
+        debugDevelopers = renderData["developers"] as? List<Map<String, Any>> ?: emptyList()
+
         // Start batch for background and tiles
         beginBatch()
 

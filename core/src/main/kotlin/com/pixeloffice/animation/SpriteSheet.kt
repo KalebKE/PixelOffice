@@ -133,6 +133,29 @@ class SpriteSheet(
             }
 
             sprites[sprite.name] = sprite
+
+            // Create sitting variant if available in config
+            val sittingRect = config?.getDeveloperCharacterSitting(variant)
+            if (sittingRect != null) {
+                val sittingSprite = SpriteDefinition(
+                    name = "developer_${variant}_sitting",
+                    width = 16,
+                    height = 24
+                )
+
+                val sittingFrame = SpriteFrame.fromRect(tex, sittingRect)
+
+                // Sitting sprite uses the same animations as standing
+                for (animName in animNames) {
+                    sittingSprite.addAnimation(Animation(
+                        name = animName,
+                        frames = listOf(sittingFrame),
+                        frameDuration = if (animName == "idle") 0.5f else 0.15f
+                    ))
+                }
+
+                sprites[sittingSprite.name] = sittingSprite
+            }
         }
     }
 
@@ -243,9 +266,10 @@ class SpriteSheet(
             val sprite = SpriteDefinition(name = name, width = animRect.w, height = animRect.h)
 
             // Extract multiple frames from horizontal strip
+            // Frame offset is the full layer width (256px for Aseprite), not sprite width
             val frames = mutableListOf<SpriteFrame>()
             for (frameIndex in 0 until animRect.frames) {
-                val frameX = animRect.x + (frameIndex * animRect.w)
+                val frameX = animRect.x + (frameIndex * animRect.frameOffset)
                 val region = TextureRegion(tex, frameX, animRect.y, animRect.w, animRect.h)
                 frames.add(SpriteFrame(region, animRect.w, animRect.h))
             }

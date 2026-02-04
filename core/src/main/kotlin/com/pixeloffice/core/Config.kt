@@ -129,7 +129,9 @@ data class AnimatedSpriteRect(
     val h: Int,
     val frames: Int = 1,
     @SerialName("frame_duration")
-    val frameDuration: Float = 0.15f
+    val frameDuration: Float = 0.15f,
+    @SerialName("frame_offset")
+    val frameOffset: Int = 256  // Default to Aseprite layer width
 )
 
 @Serializable
@@ -154,6 +156,12 @@ data class SpriteSheetConfig(
     fun getDeveloperCharacter(variant: String): SpriteRect? {
         val charName = developerVariants[variant] ?: return null
         return characters[charName]
+    }
+
+    fun getDeveloperCharacterSitting(variant: String): SpriteRect? {
+        val charName = developerVariants[variant] ?: return null
+        val sittingName = "${charName}_sitting"
+        return characters[sittingName]
     }
 
     fun getFurniture(name: String): SpriteRect? = furniture[name]
