@@ -11,7 +11,7 @@ import com.pixeloffice.PixelOfficeGame
 import com.pixeloffice.animation.SpriteFrame
 import com.pixeloffice.animation.SpriteSheet
 import com.pixeloffice.core.WalkableZone
-import com.pixeloffice.world.NavLine
+import com.pixeloffice.world.*
 import kotlin.math.sin
 
 /**
@@ -75,6 +75,9 @@ class Renderer(
 
     // Desk occupancy tracking for dynamic chair positions
     private var occupiedDesks: Set<String> = emptySet()
+
+    // Data-driven desk columns
+    private var deskColumns: List<DeskColumn> = emptyList()
 
     // Animation constants
     companion object {
@@ -1010,6 +1013,10 @@ class Renderer(
         font.color = statusColor
         font.draw(batch, "Status: $connectionStatus", 4f, height - 4f)
 
+        // Settings button (top-right)
+        font.color = Colors.WHITE
+        font.draw(batch, "[Settings]", width - 75f, height - 4f)
+
         // FPS (if debug mode)
         if (showDebug) {
             font.color = Colors.WHITE
@@ -1234,6 +1241,134 @@ class Renderer(
         }
     }
 
+    // ==================== Data-Driven Desk Rendering ====================
+
+    /**
+     * Draw a chair by color enum at the given position.
+     * @param facingRight If true, draws chair facing right (east desk); otherwise facing left (west desk).
+     */
+    private fun drawChairByColor(color: ChairColor, x: Float, y: Float, facingRight: Boolean) {
+        when (color) {
+            ChairColor.BLACK -> if (facingRight) drawWhiteChairRight(x, y) else drawBlackChairLeft(x, y)
+            ChairColor.WHITE -> if (facingRight) drawWhiteChairRight(x, y) else drawBlackChairLeft(x, y)
+            ChairColor.BLUE -> if (facingRight) drawBlueChairRight(x, y) else drawBlackChairLeft(x, y)
+            ChairColor.GREEN -> if (facingRight) drawBlueChairRight(x, y) else drawGreenChairLeft(x, y)
+            ChairColor.ORANGE -> if (facingRight) drawWhiteChairRight(x, y) else drawOrangeChairLeft(x, y)
+        }
+    }
+
+    /**
+     * Draw equipment (computer/monitor) at the given position.
+     * @param facingRight If true, draws facing right (east desk).
+     */
+    private fun drawEquipment(equipment: Equipment, x: Float, y: Float, facingRight: Boolean) {
+        when (equipment) {
+            Equipment.COMPUTER -> if (facingRight) drawComputerRight(x, y) else drawComputerLeft(x, y)
+            Equipment.MONITOR -> if (facingRight) drawMonitorRight(x, y) else drawMonitorLeft(x, y)
+            Equipment.NONE -> { /* no equipment */ }
+        }
+    }
+
+    /**
+     * Draw a wall decoration item at the given position.
+     */
+    private fun drawWallDecorItem(decor: WallDecor, x: Float, y: Float) {
+        when (decor) {
+            WallDecor.ART -> drawArt(x, y)
+            WallDecor.SMALL_ART_ORANGE -> drawSmallOrangeArt(x, y)
+            WallDecor.SMALL_ART_BLUE -> drawSmallBlueArt(x, y)
+            WallDecor.SMALL_CALENDAR -> drawSmallCalendar(x, y)
+            WallDecor.NOTICE -> drawNotice(x, y)
+            WallDecor.POST_IT_NOTES -> drawPostItNotes(x, y)
+            WallDecor.NONE -> { /* no decor */ }
+        }
+    }
+
+    /**
+     * Draw a desk item at the given position.
+     */
+    private fun drawDeskItem(item: DeskItem, x: Float, y: Float) {
+        when (item) {
+            DeskItem.RED_BOOK -> drawRedBook(x, y)
+            DeskItem.BLUE_BOOK -> drawBlueBook(x, y)
+            DeskItem.GREEN_BOOK -> drawGreenBook(x, y)
+            DeskItem.NOTES -> drawNotes(x, y)
+            DeskItem.DOCUMENT -> drawDocument(x, y)
+            DeskItem.COFFEE_MUG -> drawCoffeeMug(x, y)
+            DeskItem.NONE -> { /* nothing */ }
+        }
+    }
+
+    /**
+     * Draw a single desk from its config.
+     * @param baseX Column base X position.
+     * @param wallY Wall Y position for this row.
+     * @param config The desk configuration.
+     * @param deskId The desk ID for occupancy checking.
+     */
+    private fun drawDeskFromConfig(baseX: Float, wallY: Float, config: DeskConfig, deskId: String) {
+        val isEast = config.side == DeskSide.EAST
+
+        if (isEast) {
+            // East desk: chair faces right (drawn before desk for layering)
+            val chairOffset = if (occupiedDesks.contains(deskId)) EAST_CHAIR_PUSHED_BACK else EAST_CHAIR_PUSHED_IN
+            drawChairByColor(config.chairColor, baseX + chairOffset, wallY + 7f, facingRight = true)
+
+            drawDeskRight(baseX + 40f, wallY + 11f)
+            drawEquipment(config.equipment, baseX + 41f, wallY + 7f, facingRight = true)
+
+            // Desk items on east desk
+            var itemOffsetY = 12f
+            for (item in config.deskItems) {
+                drawDeskItem(item, baseX + 42f, wallY + itemOffsetY)
+                itemOffsetY += 10f
+            }
+        } else {
+            // West desk: chair faces left (drawn before desk for layering)
+            val chairOffset = if (occupiedDesks.contains(deskId)) WEST_CHAIR_PUSHED_BACK else WEST_CHAIR_PUSHED_IN
+            drawChairByColor(config.chairColor, baseX + chairOffset, wallY + 7f, facingRight = false)
+
+            drawDeskLeft(baseX + 19f, wallY + 11f)
+            drawEquipment(config.equipment, baseX + 20f, wallY + 7f, facingRight = false)
+
+            // Desk items on west desk
+            var itemOffsetY = 12f
+            for (item in config.deskItems) {
+                drawDeskItem(item, baseX + 20f, wallY + itemOffsetY)
+                itemOffsetY += 10f
+            }
+        }
+    }
+
+    /**
+     * Draw a complete row from DeskColumn config.
+     * Draws partition, wall decor, and both desks.
+     */
+    private fun drawRowFromConfig(column: DeskColumn, row: DeskRow, rowIndex: Int) {
+        val baseX = column.baseX
+        val wallY = row.wallY
+
+        // Draw wall decor for west desk (positioned at standard offset)
+        row.westDesk?.let {
+            drawWallDecorItem(it.wallDecor, baseX + 9f, wallY + 5f)
+        }
+
+        // Draw partition between desks
+        drawDeskPartition(baseX + 36f, wallY + 3f)
+
+        // Draw west desk
+        row.westDesk?.let {
+            val deskId = column.getDeskId((rowIndex + 1) * 2)
+            drawDeskFromConfig(baseX, wallY, it, deskId)
+        }
+
+        // Draw east desk
+        row.eastDesk?.let {
+            val deskId = column.getDeskId((rowIndex + 1) * 2 - 1)
+            drawDeskFromConfig(baseX, wallY, it, deskId)
+        }
+    }
+
     // ==================== Desk Wall Methods ====================
     // These draw ONLY the desk wall at each Y position
 
@@ -1363,24 +1498,67 @@ class Renderer(
 
     /**
      * Draws desk furniture for a specific wall Y position.
-     * Called during interleaved rendering after the wall is drawn.
+     * Uses DeskColumn data if available, falls back to legacy hardcoded methods.
      */
     private fun drawDeskFurnitureForRow(wallY: Float) {
-        when (wallY) {
-            125f -> {
-                drawDeskFurniture1(LEFT_COLUMN_X)
-                drawDeskFurniture1(RIGHT_COLUMN_X)
+        if (deskColumns.isNotEmpty()) {
+            // Data-driven rendering from desk columns
+            for (column in deskColumns) {
+                for ((rowIndex, row) in column.rows.withIndex()) {
+                    if (row.wallY == wallY) {
+                        drawRowFromConfig(column, row, rowIndex)
+                    }
+                }
             }
-            155f -> {
-                drawDeskFurniture2(LEFT_COLUMN_X, isLeftColumn = true)
-                drawDeskFurniture2(RIGHT_COLUMN_X, isLeftColumn = false)
+
+            // Right column row 3 lounge area stays hardcoded (not a desk row)
+            if (wallY == 185f) {
+                val rightColumn = deskColumns.find { it.baseX == RIGHT_COLUMN_X }
+                val hasRow3 = rightColumn?.rows?.any { it.wallY == 185f } ?: false
+                if (!hasRow3) {
+                    drawDeskFurniture3Right(RIGHT_COLUMN_X)
+                }
+
+                // Left column row 3: standalone east desk surface + items (no chair)
+                val leftColumn = deskColumns.find { it.baseX == LEFT_COLUMN_X }
+                val leftRow3 = leftColumn?.rows?.find { it.wallY == 185f }
+                if (leftRow3 != null && leftRow3.eastDesk == null) {
+                    val baseX = LEFT_COLUMN_X
+                    drawDeskRight(baseX + 40f, 185f + 11f)
+                    drawRedBook(baseX + 42f, 185f + 12f)
+                    drawNotes(baseX + 42f, 185f + 22f)
+                }
             }
-            185f -> {
-                drawDeskFurniture3Left(LEFT_COLUMN_X)
-                drawDeskFurniture3Right(RIGHT_COLUMN_X)
+
+            // Extra decorations that were part of legacy rows
+            if (wallY == 125f) {
+                drawNotice(LEFT_COLUMN_X + 60f, 131f)
             }
-            215f -> {
-                // Row 4 has no furniture, just the wall (left column only)
+            if (wallY == 155f) {
+                val rightColumn = deskColumns.find { it.baseX == RIGHT_COLUMN_X }
+                val hasRow2 = rightColumn?.rows?.any { it.wallY == 155f } ?: false
+                if (hasRow2) {
+                    drawPostItNotes(RIGHT_COLUMN_X + 70f, 160f)
+                }
+            }
+        } else {
+            // Legacy fallback: hardcoded furniture rendering
+            when (wallY) {
+                125f -> {
+                    drawDeskFurniture1(LEFT_COLUMN_X)
+                    drawDeskFurniture1(RIGHT_COLUMN_X)
+                }
+                155f -> {
+                    drawDeskFurniture2(LEFT_COLUMN_X, isLeftColumn = true)
+                    drawDeskFurniture2(RIGHT_COLUMN_X, isLeftColumn = false)
+                }
+                185f -> {
+                    drawDeskFurniture3Left(LEFT_COLUMN_X)
+                    drawDeskFurniture3Right(RIGHT_COLUMN_X)
+                }
+                215f -> {
+                    // Row 4 has no furniture, just the wall (left column only)
+                }
             }
         }
     }
@@ -1449,6 +1627,10 @@ class Renderer(
         @Suppress("UNCHECKED_CAST")
         val desks = renderData["desks"] as? List<Map<String, Any>> ?: emptyList()
         occupiedDesks = desks.filter { it["occupied"] == true }.mapNotNull { it["id"] as? String }.toSet()
+
+        // Extract desk columns for data-driven rendering
+        @Suppress("UNCHECKED_CAST")
+        deskColumns = renderData["deskColumns"] as? List<DeskColumn> ?: emptyList()
 
         // Start batch for background and tiles
         beginBatch()
