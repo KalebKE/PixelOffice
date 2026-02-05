@@ -112,7 +112,7 @@ class Renderer(
         }
 
         // Load the sprite sheet texture
-        texture = Texture(Gdx.files.internal("sprites/PixelOfficeAssets-Sheet.png")).apply {
+        texture = Texture(Gdx.files.internal("sprites/PixelOfficeAssets.png")).apply {
             setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
         }
 
@@ -661,8 +661,8 @@ class Renderer(
     ) {
         val baseName = spriteSheet.getDeveloperSpriteName(variant)
 
-        // Try to get sitting sprite first if posture is sitting and variant is green (1)
-        val spriteName = if (posture == "sitting" && variant == 1) {
+        // Try to get sitting sprite first if posture is sitting
+        val spriteName = if (posture == "sitting") {
             "${baseName}_sitting"
         } else {
             baseName
@@ -1222,6 +1222,10 @@ class Renderer(
      */
     private fun drawDeskFurniture1(baseX: Float) {
         val wallY = 125f
+        // Draw notice for left column only (y=131 is between row 1 and row 2)
+        if (baseX == LEFT_COLUMN_X) {
+            drawNotice(LEFT_COLUMN_X + 60f, 131f)
+        }
         drawSmallOrangeArt(baseX + 9f, wallY + 5f)
         drawDeskPartition(baseX + 36f, wallY + 3f)
         drawDeskLeft(baseX + 19f, wallY + 11f)
@@ -1237,7 +1241,6 @@ class Renderer(
      */
     private fun drawDeskFurniture2(baseX: Float, isLeftColumn: Boolean = true) {
         val wallY = 155f
-        drawNotice(baseX + 60f, wallY - 24f)
         if (!isLeftColumn) {
             drawPostItNotes(baseX + 70f, wallY + 5f)
         }
