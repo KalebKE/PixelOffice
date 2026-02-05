@@ -122,16 +122,9 @@ class SpriteSheet(
             }
 
             // All animations use the same static frame
-            val animNames = listOf("idle", "walking_down", "walking_left", "walking_right",
+            val devAnimNames = listOf("idle", "walking_down", "walking_left", "walking_right",
                 "walking_up", "typing", "thinking", "despair")
-            for (animName in animNames) {
-                sprite.addAnimation(Animation(
-                    name = animName,
-                    frames = listOf(baseFrame),
-                    frameDuration = if (animName == "idle") 0.5f else 0.15f
-                ))
-            }
-
+            createStandardAnimations(sprite, baseFrame, devAnimNames)
             sprites[sprite.name] = sprite
 
             // Create sitting variant if available in config
@@ -142,18 +135,8 @@ class SpriteSheet(
                     width = 16,
                     height = 24
                 )
-
                 val sittingFrame = SpriteFrame.fromRect(tex, sittingRect)
-
-                // Sitting sprite uses the same animations as standing
-                for (animName in animNames) {
-                    sittingSprite.addAnimation(Animation(
-                        name = animName,
-                        frames = listOf(sittingFrame),
-                        frameDuration = if (animName == "idle") 0.5f else 0.15f
-                    ))
-                }
-
+                createStandardAnimations(sittingSprite, sittingFrame, devAnimNames)
                 sprites[sittingSprite.name] = sittingSprite
             }
         }
@@ -176,16 +159,9 @@ class SpriteSheet(
             SpriteFrame(TextureRegion(tex, 64, 104, 16, 24), 16, 24) // Default: blonde
         }
 
-        val animNames = listOf("idle", "walking_down", "walking_left", "walking_right",
+        val managerAnimNames = listOf("idle", "walking_down", "walking_left", "walking_right",
             "walking_up", "walking")
-        for (animName in animNames) {
-            sprite.addAnimation(Animation(
-                name = animName,
-                frames = listOf(baseFrame),
-                frameDuration = if (animName == "idle") 0.5f else 0.15f
-            ))
-        }
-
+        createStandardAnimations(sprite, baseFrame, managerAnimNames)
         sprites[sprite.name] = sprite
 
         // Create sitting variant if available in config
@@ -196,17 +172,8 @@ class SpriteSheet(
                 width = sittingRect.w,
                 height = sittingRect.h
             )
-
             val sittingFrame = SpriteFrame.fromRect(tex, sittingRect)
-
-            for (animName in animNames) {
-                sittingSprite.addAnimation(Animation(
-                    name = animName,
-                    frames = listOf(sittingFrame),
-                    frameDuration = if (animName == "idle") 0.5f else 0.15f
-                ))
-            }
-
+            createStandardAnimations(sittingSprite, sittingFrame, managerAnimNames)
             sprites[sittingSprite.name] = sittingSprite
         }
     }
@@ -228,16 +195,9 @@ class SpriteSheet(
             SpriteFrame(TextureRegion(tex, 48, 104, 16, 24), 16, 24) // Default: dark_hair
         }
 
-        val animNames = listOf("idle", "walking_down", "walking_left", "walking_right",
+        val managerAnimNames = listOf("idle", "walking_down", "walking_left", "walking_right",
             "walking_up", "walking")
-        for (animName in animNames) {
-            sprite.addAnimation(Animation(
-                name = animName,
-                frames = listOf(baseFrame),
-                frameDuration = if (animName == "idle") 0.5f else 0.15f
-            ))
-        }
-
+        createStandardAnimations(sprite, baseFrame, managerAnimNames)
         sprites[sprite.name] = sprite
 
         // Create sitting variant if available in config
@@ -248,17 +208,8 @@ class SpriteSheet(
                 width = sittingRect.w,
                 height = sittingRect.h
             )
-
             val sittingFrame = SpriteFrame.fromRect(tex, sittingRect)
-
-            for (animName in animNames) {
-                sittingSprite.addAnimation(Animation(
-                    name = animName,
-                    frames = listOf(sittingFrame),
-                    frameDuration = if (animName == "idle") 0.5f else 0.15f
-                ))
-            }
-
+            createStandardAnimations(sittingSprite, sittingFrame, managerAnimNames)
             sprites[sittingSprite.name] = sittingSprite
         }
     }
@@ -367,6 +318,23 @@ class SpriteSheet(
                 ))
                 sprites[name] = sprite
             }
+        }
+    }
+
+    /**
+     * Create a standard set of animations for a character sprite from a single base frame.
+     */
+    private fun createStandardAnimations(
+        sprite: SpriteDefinition,
+        baseFrame: SpriteFrame,
+        animNames: List<String>
+    ) {
+        for (animName in animNames) {
+            sprite.addAnimation(Animation(
+                name = animName,
+                frames = listOf(baseFrame),
+                frameDuration = if (animName == "idle") 0.5f else 0.15f
+            ))
         }
     }
 

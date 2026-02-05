@@ -1,5 +1,7 @@
 package com.pixeloffice.entities
 
+import com.pixeloffice.rendering.CharacterRenderInfo
+import com.pixeloffice.rendering.EffectRenderInfo
 import com.pixeloffice.world.Pathfinder
 
 /**
@@ -53,7 +55,7 @@ class ProductOwner(
     // Bubble support
     private var thoughtBubble: ThoughtBubble? = null
     private var showBubble = false
-    private var onSpawnBubble: ((ProductOwner, String) -> ThoughtBubble)? = null
+    private var onSpawnBubble: ((BaseEntity, String) -> ThoughtBubble)? = null
 
     // Callbacks for when PO arrives/leaves
     var onArrive: ((ProductOwner) -> Unit)? = null
@@ -69,7 +71,7 @@ class ProductOwner(
 
     fun setDevelopers(devs: List<BaseEntity>) { developers = devs }
 
-    fun setBubbleSpawner(spawner: (ProductOwner, String) -> ThoughtBubble) {
+    fun setBubbleSpawner(spawner: (BaseEntity, String) -> ThoughtBubble) {
         onSpawnBubble = spawner
     }
 
@@ -383,6 +385,29 @@ class ProductOwner(
         }
 
         return info
+    }
+
+    fun getTypedRenderInfo(): CharacterRenderInfo {
+        val posture = if (state == "sitting" && isAtAssignedDesk()) "sitting" else "standing"
+
+        val children = mutableListOf<EffectRenderInfo>()
+        if (thoughtBubble != null && showBubble) {
+            children.add(thoughtBubble!!.toEffectRenderInfo())
+        }
+
+        return CharacterRenderInfo(
+            type = "product_owner",
+            entityId = entityId,
+            x = x,
+            y = y,
+            animation = currentAnimation,
+            facing = facingDirection,
+            variant = spriteVariant,
+            posture = posture,
+            visible = visible,
+            state = state,
+            children = children
+        )
     }
 
     /**

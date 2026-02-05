@@ -1,5 +1,6 @@
 package com.pixeloffice.entities
 
+import com.pixeloffice.rendering.EffectRenderInfo
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -53,6 +54,14 @@ abstract class BaseEntity(
      * @return Map with rendering data (sprite, position, etc).
      */
     abstract fun getRenderInfo(): Map<String, Any>
+
+    /**
+     * Convert this entity to a typed EffectRenderInfo.
+     * Only valid for effect entities (ThoughtBubble, Ghost).
+     */
+    open fun toEffectRenderInfo(): EffectRenderInfo {
+        throw UnsupportedOperationException("${this::class.simpleName} is not an effect entity")
+    }
 
     fun setAnimation(animation: String) {
         currentAnimation = animation
