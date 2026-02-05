@@ -18,9 +18,13 @@ class ProductOwner(
 ) : BaseEntity(x, y, entityId) {
 
     // State: inactive, patrolling, walking_to_desk, at_desk, patrol_waiting,
-    //        question_entering, question_waiting, question_leaving, chatting
+    //        question_entering, question_waiting, question_leaving, chatting, sitting
     private var state = "inactive"
     private var waitTimer = 0f
+
+    // Assigned desk (for sitting at a specific desk)
+    private var assignedDeskId: String? = null
+    private var assignedDeskPosition: Pair<Float, Float>? = null
 
     // Chatting (when colliding with PM)
     private val chattingDuration = 3f
@@ -152,6 +156,10 @@ class ProductOwner(
             "question_waiting" -> updateQuestionWaiting(dt)
             "question_leaving" -> updateQuestionLeaving(dt)
             "chatting" -> updateChatting(dt)
+            "sitting" -> {
+                // Stay at assigned desk, do nothing
+                setAnimation("idle")
+            }
         }
 
         // Update thought bubble position
@@ -350,6 +358,9 @@ class ProductOwner(
     // Use the onArrive and onLeave properties directly
 
     override fun getRenderInfo(): Map<String, Any> {
+        // Determine posture based on state and desk assignment
+        val posture = if (state == "sitting" && isAtAssignedDesk()) "sitting" else "standing"
+
         val info = mutableMapOf<String, Any>(
             "type" to "product_owner",
             "x" to x,
@@ -359,6 +370,7 @@ class ProductOwner(
             "variant" to spriteVariant,
             "visible" to visible,
             "state" to state,
+            "posture" to posture,
             "entity_id" to entityId
         )
 
@@ -376,10 +388,55 @@ class ProductOwner(
     /**
      * Check if PO is currently active (not in inactive state).
      */
-    fun isActive(): Boolean = state != "inactive"
+    fun isActive(): Boolean = state != "inactive" || assignedDeskId != null
 
     /**
      * Check if PO is currently patrolling (for debug/status purposes).
      */
     fun isPatrolling(): Boolean = state in listOf("patrolling", "walking_to_desk", "at_desk", "patrol_waiting")
+
+    // Desk assignment methods
+
+    /**
+     * Assign the PO to a specific desk.
+     * When assigned, PO will sit at the desk instead of patrolling.
+     */
+    fun setAssignedDesk(deskId: String, deskX: Float, deskY: Float) {
+        assignedDeskId = deskId
+        assignedDeskPosition = Pair(deskX, deskY)
+        state = "sitting"
+        setAnimation("idle")
+    }
+
+    /**
+     * Clear the desk assignment and resume normal patrol.
+     */
+    fun clearAssignedDesk() {
+        assignedDeskId = null
+        assignedDeskPosition = null
+        if (state == "sitting") {
+            if (deskTargets.isNotEmpty()) {
+                startPatrol()
+            } else {
+                state = "inactive"
+                active = false
+                visible = false
+            }
+        }
+    }
+
+    /**
+     * Get the assigned desk ID.
+     */
+    fun getAssignedDeskId(): String? = assignedDeskId
+
+    /**
+     * Check if the PO is at their assigned desk.
+     */
+    fun isAtAssignedDesk(): Boolean {
+        val deskPos = assignedDeskPosition ?: return false
+        val dx = kotlin.math.abs(x - deskPos.first)
+        val dy = kotlin.math.abs(y - deskPos.second)
+        return dx < 15f && dy < 15f
+    }
 }

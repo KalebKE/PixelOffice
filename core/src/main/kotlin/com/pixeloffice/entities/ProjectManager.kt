@@ -27,9 +27,13 @@ class ProjectManager(
     private var currentDeskId: String? = null
 
     // State
-    private var state = "idle" // idle, walking_to_desk, at_desk, waiting, chatting
+    private var state = "idle" // idle, walking_to_desk, at_desk, waiting, chatting, sitting
     private var waitTimer = 0f
     private var waitDuration = 0f
+
+    // Assigned desk (for sitting at a specific desk)
+    private var assignedDeskId: String? = null
+    private var assignedDeskPosition: Pair<Float, Float>? = null
 
     // Chatting (when colliding with PO)
     private val chattingDuration = 3f
@@ -86,6 +90,10 @@ class ProjectManager(
             "at_desk" -> updateAtDesk(dt)
             "waiting" -> updateWaiting(dt)
             "chatting" -> updateChatting(dt)
+            "sitting" -> {
+                // Stay at assigned desk, do nothing
+                setAnimation("idle")
+            }
         }
 
         // Update thought bubble position if visible
@@ -244,6 +252,9 @@ class ProjectManager(
     }
 
     override fun getRenderInfo(): Map<String, Any> {
+        // Determine posture based on state and desk assignment
+        val posture = if (state == "sitting" && isAtAssignedDesk()) "sitting" else "standing"
+
         val info = mutableMapOf<String, Any>(
             "type" to "project_manager",
             "x" to x,
@@ -252,7 +263,9 @@ class ProjectManager(
             "facing" to facingDirection,
             "variant" to spriteVariant,
             "visible" to visible,
-            "state" to state
+            "state" to state,
+            "posture" to posture,
+            "entity_id" to entityId
         )
 
         // Include child entities (thought bubble)
@@ -275,5 +288,47 @@ class ProjectManager(
             x = points[0].first
             y = points[0].second
         }
+    }
+
+    // Desk assignment methods
+
+    /**
+     * Assign the PM to a specific desk.
+     * When assigned, PM will sit at the desk instead of patrolling.
+     */
+    fun setAssignedDesk(deskId: String, deskX: Float, deskY: Float) {
+        assignedDeskId = deskId
+        assignedDeskPosition = Pair(deskX, deskY)
+        state = "sitting"
+        setAnimation("idle")
+    }
+
+    /**
+     * Clear the desk assignment and resume normal patrol.
+     */
+    fun clearAssignedDesk() {
+        assignedDeskId = null
+        assignedDeskPosition = null
+        if (state == "sitting") {
+            state = "idle"
+            if (deskTargets.isNotEmpty()) {
+                pickNextDesk()
+            }
+        }
+    }
+
+    /**
+     * Get the assigned desk ID.
+     */
+    fun getAssignedDeskId(): String? = assignedDeskId
+
+    /**
+     * Check if the PM is at their assigned desk.
+     */
+    fun isAtAssignedDesk(): Boolean {
+        val deskPos = assignedDeskPosition ?: return false
+        val dx = kotlin.math.abs(x - deskPos.first)
+        val dy = kotlin.math.abs(y - deskPos.second)
+        return dx < 15f && dy < 15f
     }
 }

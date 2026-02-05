@@ -187,6 +187,28 @@ class SpriteSheet(
         }
 
         sprites[sprite.name] = sprite
+
+        // Create sitting variant if available in config
+        val sittingRect = config?.getPMCharacterSitting()
+        if (sittingRect != null) {
+            val sittingSprite = SpriteDefinition(
+                name = "project_manager_sitting",
+                width = sittingRect.w,
+                height = sittingRect.h
+            )
+
+            val sittingFrame = SpriteFrame.fromRect(tex, sittingRect)
+
+            for (animName in animNames) {
+                sittingSprite.addAnimation(Animation(
+                    name = animName,
+                    frames = listOf(sittingFrame),
+                    frameDuration = if (animName == "idle") 0.5f else 0.15f
+                ))
+            }
+
+            sprites[sittingSprite.name] = sittingSprite
+        }
     }
 
     private fun createProductOwnerSprites() {
@@ -217,6 +239,28 @@ class SpriteSheet(
         }
 
         sprites[sprite.name] = sprite
+
+        // Create sitting variant if available in config
+        val sittingRect = config?.getPOCharacterSitting()
+        if (sittingRect != null) {
+            val sittingSprite = SpriteDefinition(
+                name = "product_owner_sitting",
+                width = sittingRect.w,
+                height = sittingRect.h
+            )
+
+            val sittingFrame = SpriteFrame.fromRect(tex, sittingRect)
+
+            for (animName in animNames) {
+                sittingSprite.addAnimation(Animation(
+                    name = animName,
+                    frames = listOf(sittingFrame),
+                    frameDuration = if (animName == "idle") 0.5f else 0.15f
+                ))
+            }
+
+            sprites[sittingSprite.name] = sittingSprite
+        }
     }
 
     private fun createThoughtBubbleSprites() {
