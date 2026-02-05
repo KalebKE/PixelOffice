@@ -1,6 +1,8 @@
 package com.pixeloffice.entities
 
 import com.pixeloffice.PixelOfficeGame
+import com.pixeloffice.rendering.CharacterRenderInfo
+import com.pixeloffice.rendering.EffectRenderInfo
 import com.pixeloffice.states.DeveloperStateMachine
 import com.pixeloffice.states.DeveloperStateNames
 import com.pixeloffice.world.Office
@@ -59,7 +61,7 @@ class Developer(
 
     // Callbacks for creating child entities
     var onSpawnGhost: ((Developer) -> Ghost)? = null
-    var onSpawnBubble: ((Developer) -> ThoughtBubble)? = null
+    var onSpawnBubble: ((BaseEntity, String) -> ThoughtBubble)? = null
 
     /**
      * Initialize the state machine.
@@ -165,6 +167,41 @@ class Developer(
         return info
     }
 
+    fun getTypedRenderInfo(): CharacterRenderInfo {
+        val shouldSit = if (PixelOfficeGame.forceSittingMode && spriteVariant == 1) {
+            true
+        } else {
+            isAtDesk() &&
+            (stateMachine.currentStateName == DeveloperStateNames.IDLE ||
+             stateMachine.currentStateName == DeveloperStateNames.WRITING_CODE)
+        }
+        val posture = if (shouldSit) "sitting" else "standing"
+
+        val children = mutableListOf<EffectRenderInfo>()
+        if (thoughtBubble != null && showBubble) {
+            children.add(thoughtBubble!!.toEffectRenderInfo())
+        }
+        ghost?.let { g ->
+            if (g.active) {
+                children.add(g.toEffectRenderInfo())
+            }
+        }
+
+        return CharacterRenderInfo(
+            type = "developer",
+            entityId = entityId,
+            x = x,
+            y = y,
+            animation = currentAnimation,
+            facing = facingDirection,
+            variant = spriteVariant,
+            posture = posture,
+            visible = visible,
+            state = stateMachine.currentStateName ?: "",
+            children = children
+        )
+    }
+
     // Position management
 
     fun setDeskPosition(x: Float, y: Float) {
@@ -261,7 +298,7 @@ class Developer(
         showBubble = show
         if (show && thoughtBubble == null) {
             onSpawnBubble?.let { spawner ->
-                thoughtBubble = spawner(this)
+                thoughtBubble = spawner(this, "thinking")
             }
         } else if (!show && thoughtBubble != null) {
             thoughtBubble?.hide()
@@ -272,14 +309,7 @@ class Developer(
      * Show annoyed bubble when PM interrupts.
      */
     fun showAnnoyedBubble() {
-        if (thoughtBubble == null) {
-            onSpawnBubble?.let { spawner ->
-                thoughtBubble = spawner(this)
-            }
-        }
-        thoughtBubble?.bubbleType = "annoyed"
-        showBubble = true
-        thoughtBubble?.show()
+        showBubbleOfType("annoyed")
     }
 
     /**
@@ -288,12 +318,13 @@ class Developer(
     fun showBubbleOfType(bubbleType: String) {
         if (thoughtBubble == null) {
             onSpawnBubble?.let { spawner ->
-                thoughtBubble = spawner(this)
+                thoughtBubble = spawner(this, bubbleType)
             }
+        } else {
+            thoughtBubble?.bubbleType = bubbleType
+            thoughtBubble?.show()
         }
-        thoughtBubble?.bubbleType = bubbleType
         showBubble = true
-        thoughtBubble?.show()
     }
 
     fun spawnGhost() {
@@ -306,7 +337,7 @@ class Developer(
         onSpawnGhost = spawner
     }
 
-    fun setBubbleSpawner(spawner: (Developer) -> ThoughtBubble) {
+    fun setBubbleSpawner(spawner: (BaseEntity, String) -> ThoughtBubble) {
         onSpawnBubble = spawner
     }
 

@@ -71,7 +71,7 @@ class Renderer(
     private var fps = 0
     private var walkableZones: List<WalkableZone> = emptyList()
     private var lineNetwork: List<NavLine> = emptyList()
-    private var debugDevelopers: List<Map<String, Any>> = emptyList()
+    private var debugDevelopers: List<CharacterRenderInfo> = emptyList()
 
     // Desk occupancy tracking for dynamic chair positions
     private var occupiedDesks: Set<String> = emptySet()
@@ -84,12 +84,10 @@ class Renderer(
         const val BOB_SPEED = 8.0f
         const val BOB_AMPLITUDE = 1.0f
 
-        // Desk column base X positions
-        const val LEFT_COLUMN_X = 45f
-        const val RIGHT_COLUMN_X = 175f
-
-        // Desk row Y positions (wall positions)
-        val DESK_ROW_Y_POSITIONS = listOf(125f, 155f, 185f, 215f)
+        // Delegate layout constants to DeskColumn (single source of truth)
+        val LEFT_COLUMN_X get() = DeskColumn.LEFT_COLUMN_X
+        val RIGHT_COLUMN_X get() = DeskColumn.RIGHT_COLUMN_X
+        val DESK_ROW_Y_POSITIONS get() = DeskColumn.DESK_ROW_Y_POSITIONS
 
         // Chair X offsets relative to baseX
         private const val WEST_CHAIR_PUSHED_BACK = 5f   // Pulled away (occupied)
@@ -97,19 +95,9 @@ class Renderer(
         private const val EAST_CHAIR_PUSHED_BACK = 60f  // Pulled away (occupied)
         private const val EAST_CHAIR_PUSHED_IN = 52f    // ~5px under right desk edge (unoccupied)
 
-        /**
-         * Calculate actual desk positions for character assignment.
-         * @param columnX Base X position of the column (LEFT_COLUMN_X or RIGHT_COLUMN_X)
-         * @param rowIndex Row index (0-3)
-         * @param isLeftDesk true for left desk, false for right desk
-         * @return Pair of (x, y) coordinates for the desk
-         */
-        fun getDeskPosition(columnX: Float, rowIndex: Int, isLeftDesk: Boolean): Pair<Float, Float> {
-            val wallY = DESK_ROW_Y_POSITIONS[rowIndex]
-            val deskX = if (isLeftDesk) columnX + 19f else columnX + 40f
-            val deskY = wallY + 11f
-            return Pair(deskX, deskY)
-        }
+        @Deprecated("Use DeskColumn.getDeskPosition instead", ReplaceWith("DeskColumn.getDeskPosition(columnX, rowIndex, isLeftDesk)"))
+        fun getDeskPosition(columnX: Float, rowIndex: Int, isLeftDesk: Boolean): Pair<Float, Float> =
+            DeskColumn.getDeskPosition(columnX, rowIndex, isLeftDesk)
     }
 
     /**
@@ -247,13 +235,13 @@ class Renderer(
         // In Y-down: wall starts at y=44. In Y-up we need to convert each row
         drawWall(44)
 
-        drawWindowWithNote(40f, 70f)
-        drawLeftDoor(120f, 75f)
-        drawRightDoor(136f, 75f)
+        drawFurniture("window_with_note", 40f, 70f)
+        drawFurniture("door", 120f, 75f, flipX = true)
+        drawFurniture("door", 136f, 75f)
 
-        drawClock(126f, 65f)
+        drawFurniture("clock", 126f, 65f)
 
-        drawWindow(250f, 70f)
+        drawFurniture("window", 250f, 70f)
     }
 
     /**
@@ -301,317 +289,24 @@ class Renderer(
     }
 
     /**
-     * Draw a desk using sprite from PNG.
+     * Draw any furniture/decoration sprite at world coordinates.
+     * @param name Sprite name in the sprite sheet (e.g., "desk_left", "tree", "whiteboard").
+     * @param worldX X position in world coordinates.
+     * @param worldY Y position in world coordinates (Y-down).
+     * @param flipX If true, draws the sprite mirrored horizontally.
      */
-    fun drawDeskLeft(worldX: Float, worldY: Float, occupied: Boolean = false) {
-        val deskFrame = spriteSheet.getFurnitureFrame("desk") ?: return
-        val screenY = flipY(worldY, deskFrame.height)
-        batch.draw(deskFrame.region, worldX, screenY)
-    }
-
-    /**
-     * Draw a whiteboard/vending machine.
-     */
-    fun drawWhiteboard(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("whiteboard") ?: return
-        val screenY = flipY(worldY, wbFrame.height)
-        batch.draw(wbFrame.region, worldX, screenY)
-    }
-
-    fun drawOrangeCouch(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("couch_orange") ?: return
-        val screenY = flipY(worldY, wbFrame.height)
-        batch.draw(wbFrame.region, worldX, screenY)
-    }
-
-    fun drawGreenCouch(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("couch_green") ?: return
+    fun drawFurniture(name: String, worldX: Float, worldY: Float, flipX: Boolean = false) {
+        val frame = spriteSheet.getFurnitureFrame(name) ?: return
         val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawGrayCouch(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("couch_gray") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawPrinter(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("printer") ?: return
-        val screenY = flipY(worldY, wbFrame.height)
-        batch.draw(wbFrame.region, worldX, screenY)
-    }
-
-    /**
-     * Draw a whiteboard/vending machine.
-     */
-    fun drawTree(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("tree") ?: return
-        val screenY = flipY(worldY, wbFrame.height)
-        batch.draw(wbFrame.region, worldX, screenY)
-    }
-
-    fun drawRedBook(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("red_book") ?: return
-        val screenY = flipY(worldY, wbFrame.height)
-        batch.draw(wbFrame.region, worldX, screenY)
-    }
-
-    fun drawBlueBook(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("blue_book") ?: return
-        val screenY = flipY(worldY, wbFrame.height)
-        batch.draw(wbFrame.region, worldX, screenY)
-    }
-
-    fun drawGreenBook(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("green_book") ?: return
-        val screenY = flipY(worldY, wbFrame.height)
-        batch.draw(wbFrame.region, worldX, screenY)
-    }
-
-    fun drawNotes(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("notes") ?: return
-        val screenY = flipY(worldY, wbFrame.height)
-        batch.draw(wbFrame.region, worldX, screenY)
-    }
-
-    fun drawPostItNotes(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("post_it_notes") ?: return
-        val screenY = flipY(worldY, wbFrame.height)
-        batch.draw(wbFrame.region, worldX, screenY)
-    }
-
-    fun drawNotice(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("notice") ?: return
-        val screenY = flipY(worldY, wbFrame.height)
-        batch.draw(wbFrame.region, worldX, screenY)
-    }
-
-    fun drawDocument(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("document") ?: return
-        val screenY = flipY(worldY, wbFrame.height)
-        batch.draw(wbFrame.region, worldX, screenY)
-    }
-
-    fun drawArt(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("art") ?: return
-        val screenY = flipY(worldY, wbFrame.height)
-        batch.draw(wbFrame.region, worldX, screenY)
-    }
-
-    fun drawSmallOrangeArt(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("small_art_orange") ?: return
-        val screenY = flipY(worldY, wbFrame.height)
-        batch.draw(wbFrame.region, worldX, screenY)
-    }
-
-    fun drawSmallBlueArt(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("small_art_blue") ?: return
-        val screenY = flipY(worldY, wbFrame.height)
-        batch.draw(wbFrame.region, worldX, screenY)
-    }
-
-    fun drawSmallCalendar(worldX: Float, worldY: Float) {
-        val wbFrame = spriteSheet.getFurnitureFrame("small_calendar") ?: return
-        val screenY = flipY(worldY, wbFrame.height)
-        batch.draw(wbFrame.region, worldX, screenY)
-    }
-
-    fun drawComputerLeft(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("computer") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawComputerRight(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("computer") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(
-            frame.region,
-            worldX + frame.width, screenY,
-            -frame.width.toFloat(), frame.height.toFloat()
-        )
-    }
-
-    fun drawMonitorLeft(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("monitor") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawMonitorRight(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("monitor") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(
-            frame.region,
-            worldX + frame.width, screenY,
-            -frame.width.toFloat(), frame.height.toFloat()
-        )
-    }
-
-    /**
-     * Draw blue vending machine.
-     */
-    fun drawVendingMachine(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("vending_blue") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawBookshelf(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("bookshelf") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawDeskWall(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("desk_wall") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawDeskLeft(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("desk_left") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawDeskRight(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("desk_right") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawDeskPartition(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("desk_partition") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawClock(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("clock") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawWhiteChairRight(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("chair_white") ?: return
-        val screenY = flipY(worldY, frame.height)
-        // Draw flipped on X axis
-        batch.draw(
-            frame.region,
-            worldX + frame.width, screenY,
-            -frame.width.toFloat(), frame.height.toFloat()
-        )
-    }
-
-    fun drawBlueChairRight(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("chair_blue") ?: return
-        val screenY = flipY(worldY, frame.height)
-        // Draw flipped on X axis
-        batch.draw(
-            frame.region,
-            worldX + frame.width, screenY,
-            -frame.width.toFloat(), frame.height.toFloat()
-        )
-    }
-
-    fun drawBlackChairLeft(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("chair_black") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawGreenChairLeft(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("chair_green") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawOrangeChairLeft(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("chair_orange") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    /**
-     * Draw water cooler.
-     */
-    fun drawWaterCooler(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("water_cooler") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawSmallTable(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("small_table") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawLargeTable(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("large_table") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawCoffeeMug(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("coffee_mug") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawCoffeeMachine(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("coffee_machine") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawBlueTrashCan(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("blue_trash_can") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawRedTrashCan(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("red_trash_can") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawGreenTrashCan(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("green_trash_can") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawLeftDoor(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("door") ?: return
-        val screenY = flipY(worldY, frame.height)
-        // Draw flipped on X axis
-        batch.draw(
-            frame.region,
-            worldX + frame.width, screenY,
-            -frame.width.toFloat(), frame.height.toFloat()
-        )
-    }
-
-    fun drawRightDoor(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("door") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawWindowWithNote(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("window_with_note") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-    }
-
-    fun drawWindow(worldX: Float, worldY: Float) {
-        val frame = spriteSheet.getFurnitureFrame("window") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
+        if (flipX) {
+            batch.draw(
+                frame.region,
+                worldX + frame.width, screenY,
+                -frame.width.toFloat(), frame.height.toFloat()
+            )
+        } else {
+            batch.draw(frame.region, worldX, screenY)
+        }
     }
 
     fun drawDog(worldX: Float, worldY: Float) {
@@ -1042,30 +737,22 @@ class Renderer(
             yOffset -= 14f
 
             for (dev in debugDevelopers) {
-                val entityId = dev["entity_id"] as? String ?: "unknown"
-                val state = dev["state"] as? String ?: "none"
-                val posture = dev["posture"] as? String ?: "standing"
-                val x = (dev["x"] as? Number)?.toInt() ?: 0
-                val y = (dev["y"] as? Number)?.toInt() ?: 0
-                val variant = (dev["variant"] as? Number)?.toInt() ?: 0
-                val animation = dev["animation"] as? String ?: "idle"
-
                 // Color code by variant
-                font.color = when (variant) {
+                font.color = when (dev.variant) {
                     0 -> Colors.SKY_BLUE   // Blue variant
                     1 -> Colors.GREEN      // Green variant
                     2 -> Colors.RED        // Red variant
                     else -> Colors.WHITE
                 }
 
-                font.draw(batch, "$entityId:", 4f, yOffset)
+                font.draw(batch, "${dev.entityId}:", 4f, yOffset)
                 yOffset -= 12f
 
                 font.color = Colors.WHITE
-                font.draw(batch, "  state=$state pos=($x,$y)", 4f, yOffset)
+                font.draw(batch, "  state=${dev.state} pos=(${dev.x.toInt()},${dev.y.toInt()})", 4f, yOffset)
                 yOffset -= 12f
 
-                font.draw(batch, "  posture=$posture anim=$animation", 4f, yOffset)
+                font.draw(batch, "  posture=${dev.posture} anim=${dev.animation}", 4f, yOffset)
                 yOffset -= 14f
             }
         }
@@ -1165,78 +852,51 @@ class Renderer(
     }
 
     /**
-     * Draw an entity based on its render info.
-     * Coordinates in renderInfo are Y-down world coordinates.
+     * Draw a character (developer, PM, or PO) from typed render info.
      */
-    fun drawEntity(renderInfo: Map<String, Any>) {
-        val entityType = renderInfo["type"] as? String ?: ""
-        val x = (renderInfo["x"] as? Number)?.toFloat() ?: 0f
-        val y = (renderInfo["y"] as? Number)?.toFloat() ?: 0f
-
-        when (entityType) {
+    fun drawCharacterInfo(info: CharacterRenderInfo) {
+        when (info.type) {
             "developer" -> {
                 drawDeveloper(
-                    x, y,
-                    renderInfo["animation"] as? String ?: "idle",
-                    renderInfo["facing"] as? String ?: "down",
-                    (renderInfo["variant"] as? Number)?.toInt() ?: 0,
-                    renderInfo["entity_id"] as? String ?: "",
-                    renderInfo["posture"] as? String ?: "standing"
+                    info.x, info.y,
+                    info.animation, info.facing, info.variant,
+                    info.entityId, info.posture
                 )
-                // Draw children (thought bubble, ghost)
-                @Suppress("UNCHECKED_CAST")
-                val children = renderInfo["children"] as? List<Map<String, Any>> ?: emptyList()
-                for (child in children) {
-                    drawEntity(child)
-                }
             }
             "project_manager" -> {
-                val pmPosture = renderInfo["posture"] as? String ?: "standing"
                 drawPMOrPO(
-                    x, y,
+                    info.x, info.y,
                     "project_manager",
-                    renderInfo["animation"] as? String ?: "idle",
-                    renderInfo["facing"] as? String ?: "down",
-                    renderInfo["entity_id"] as? String ?: "pm",
-                    pmPosture
+                    info.animation, info.facing,
+                    info.entityId, info.posture
                 )
-                // Draw children (thought bubble)
-                @Suppress("UNCHECKED_CAST")
-                val pmChildren = renderInfo["children"] as? List<Map<String, Any>> ?: emptyList()
-                for (child in pmChildren) {
-                    drawEntity(child)
-                }
             }
             "product_owner" -> {
-                val poPosture = renderInfo["posture"] as? String ?: "standing"
                 drawPMOrPO(
-                    x, y,
+                    info.x, info.y,
                     "product_owner",
-                    renderInfo["animation"] as? String ?: "idle",
-                    renderInfo["facing"] as? String ?: "down",
-                    renderInfo["entity_id"] as? String ?: "po",
-                    poPosture
-                )
-                // Draw children (thought bubble)
-                @Suppress("UNCHECKED_CAST")
-                val poChildren = renderInfo["children"] as? List<Map<String, Any>> ?: emptyList()
-                for (child in poChildren) {
-                    drawEntity(child)
-                }
-            }
-            "thought_bubble" -> {
-                drawThoughtBubble(
-                    x, y,
-                    (renderInfo["frame"] as? Number)?.toInt() ?: 0,
-                    renderInfo["bubble_type"] as? String ?: "thinking"
+                    info.animation, info.facing,
+                    info.entityId, info.posture
                 )
             }
-            "ghost" -> {
-                drawGhost(
-                    x, y,
-                    (renderInfo["frame"] as? Number)?.toInt() ?: 0,
-                    (renderInfo["alpha"] as? Number)?.toFloat() ?: 1f
-                )
+        }
+        for (child in info.children) {
+            drawEffectInfo(child)
+        }
+    }
+
+    /**
+     * Draw an effect (thought bubble or ghost) from typed render info.
+     */
+    fun drawEffectInfo(effect: EffectRenderInfo) {
+        when (effect) {
+            is EffectRenderInfo.Bubble -> {
+                val b = effect.info
+                drawThoughtBubble(b.x, b.y, b.frame, b.bubbleType)
+            }
+            is EffectRenderInfo.Ghost -> {
+                val g = effect.info
+                drawGhost(g.x, g.y, g.frame, g.alpha)
             }
         }
     }
@@ -1248,13 +908,14 @@ class Renderer(
      * @param facingRight If true, draws chair facing right (east desk); otherwise facing left (west desk).
      */
     private fun drawChairByColor(color: ChairColor, x: Float, y: Float, facingRight: Boolean) {
-        when (color) {
-            ChairColor.BLACK -> if (facingRight) drawWhiteChairRight(x, y) else drawBlackChairLeft(x, y)
-            ChairColor.WHITE -> if (facingRight) drawWhiteChairRight(x, y) else drawBlackChairLeft(x, y)
-            ChairColor.BLUE -> if (facingRight) drawBlueChairRight(x, y) else drawBlackChairLeft(x, y)
-            ChairColor.GREEN -> if (facingRight) drawBlueChairRight(x, y) else drawGreenChairLeft(x, y)
-            ChairColor.ORANGE -> if (facingRight) drawWhiteChairRight(x, y) else drawOrangeChairLeft(x, y)
+        val spriteName = when (color) {
+            ChairColor.BLACK -> if (facingRight) "chair_white" else "chair_black"
+            ChairColor.WHITE -> if (facingRight) "chair_white" else "chair_black"
+            ChairColor.BLUE -> if (facingRight) "chair_blue" else "chair_black"
+            ChairColor.GREEN -> if (facingRight) "chair_blue" else "chair_green"
+            ChairColor.ORANGE -> if (facingRight) "chair_white" else "chair_orange"
         }
+        drawFurniture(spriteName, x, y, flipX = facingRight)
     }
 
     /**
@@ -1263,8 +924,8 @@ class Renderer(
      */
     private fun drawEquipment(equipment: Equipment, x: Float, y: Float, facingRight: Boolean) {
         when (equipment) {
-            Equipment.COMPUTER -> if (facingRight) drawComputerRight(x, y) else drawComputerLeft(x, y)
-            Equipment.MONITOR -> if (facingRight) drawMonitorRight(x, y) else drawMonitorLeft(x, y)
+            Equipment.COMPUTER -> drawFurniture("computer", x, y, flipX = facingRight)
+            Equipment.MONITOR -> drawFurniture("monitor", x, y, flipX = facingRight)
             Equipment.NONE -> { /* no equipment */ }
         }
     }
@@ -1273,30 +934,32 @@ class Renderer(
      * Draw a wall decoration item at the given position.
      */
     private fun drawWallDecorItem(decor: WallDecor, x: Float, y: Float) {
-        when (decor) {
-            WallDecor.ART -> drawArt(x, y)
-            WallDecor.SMALL_ART_ORANGE -> drawSmallOrangeArt(x, y)
-            WallDecor.SMALL_ART_BLUE -> drawSmallBlueArt(x, y)
-            WallDecor.SMALL_CALENDAR -> drawSmallCalendar(x, y)
-            WallDecor.NOTICE -> drawNotice(x, y)
-            WallDecor.POST_IT_NOTES -> drawPostItNotes(x, y)
-            WallDecor.NONE -> { /* no decor */ }
+        val name = when (decor) {
+            WallDecor.ART -> "art"
+            WallDecor.SMALL_ART_ORANGE -> "small_art_orange"
+            WallDecor.SMALL_ART_BLUE -> "small_art_blue"
+            WallDecor.SMALL_CALENDAR -> "small_calendar"
+            WallDecor.NOTICE -> "notice"
+            WallDecor.POST_IT_NOTES -> "post_it_notes"
+            WallDecor.NONE -> return
         }
+        drawFurniture(name, x, y)
     }
 
     /**
      * Draw a desk item at the given position.
      */
     private fun drawDeskItem(item: DeskItem, x: Float, y: Float) {
-        when (item) {
-            DeskItem.RED_BOOK -> drawRedBook(x, y)
-            DeskItem.BLUE_BOOK -> drawBlueBook(x, y)
-            DeskItem.GREEN_BOOK -> drawGreenBook(x, y)
-            DeskItem.NOTES -> drawNotes(x, y)
-            DeskItem.DOCUMENT -> drawDocument(x, y)
-            DeskItem.COFFEE_MUG -> drawCoffeeMug(x, y)
-            DeskItem.NONE -> { /* nothing */ }
+        val name = when (item) {
+            DeskItem.RED_BOOK -> "red_book"
+            DeskItem.BLUE_BOOK -> "blue_book"
+            DeskItem.GREEN_BOOK -> "green_book"
+            DeskItem.NOTES -> "notes"
+            DeskItem.DOCUMENT -> "document"
+            DeskItem.COFFEE_MUG -> "coffee_mug"
+            DeskItem.NONE -> return
         }
+        drawFurniture(name, x, y)
     }
 
     /**
@@ -1314,10 +977,9 @@ class Renderer(
             val chairOffset = if (occupiedDesks.contains(deskId)) EAST_CHAIR_PUSHED_BACK else EAST_CHAIR_PUSHED_IN
             drawChairByColor(config.chairColor, baseX + chairOffset, wallY + 7f, facingRight = true)
 
-            drawDeskRight(baseX + 40f, wallY + 11f)
+            drawFurniture("desk_right", baseX + 40f, wallY + 11f)
             drawEquipment(config.equipment, baseX + 41f, wallY + 7f, facingRight = true)
 
-            // Desk items on east desk
             var itemOffsetY = 12f
             for (item in config.deskItems) {
                 drawDeskItem(item, baseX + 42f, wallY + itemOffsetY)
@@ -1328,10 +990,9 @@ class Renderer(
             val chairOffset = if (occupiedDesks.contains(deskId)) WEST_CHAIR_PUSHED_BACK else WEST_CHAIR_PUSHED_IN
             drawChairByColor(config.chairColor, baseX + chairOffset, wallY + 7f, facingRight = false)
 
-            drawDeskLeft(baseX + 19f, wallY + 11f)
+            drawFurniture("desk_left", baseX + 19f, wallY + 11f)
             drawEquipment(config.equipment, baseX + 20f, wallY + 7f, facingRight = false)
 
-            // Desk items on west desk
             var itemOffsetY = 12f
             for (item in config.deskItems) {
                 drawDeskItem(item, baseX + 20f, wallY + itemOffsetY)
@@ -1354,7 +1015,7 @@ class Renderer(
         }
 
         // Draw partition between desks
-        drawDeskPartition(baseX + 36f, wallY + 3f)
+        drawFurniture("desk_partition", baseX + 36f, wallY + 3f)
 
         // Draw west desk
         row.westDesk?.let {
@@ -1372,33 +1033,10 @@ class Renderer(
     // ==================== Desk Wall Methods ====================
     // These draw ONLY the desk wall at each Y position
 
-    /**
-     * Draws the desk wall for row 1 (Y=125).
-     */
-    private fun drawDeskWall1(baseX: Float) {
-        drawDeskWall(baseX, 125f)
-    }
-
-    /**
-     * Draws the desk wall for row 2 (Y=155).
-     */
-    private fun drawDeskWall2(baseX: Float) {
-        drawDeskWall(baseX, 155f)
-    }
-
-    /**
-     * Draws the desk wall for row 3 (Y=185).
-     */
-    private fun drawDeskWall3(baseX: Float) {
-        drawDeskWall(baseX, 185f)
-    }
-
-    /**
-     * Draws the desk wall for row 4 (Y=215).
-     */
-    private fun drawDeskWall4(baseX: Float) {
-        drawDeskWall(baseX, 215f)
-    }
+    private fun drawDeskWall1(baseX: Float) { drawFurniture("desk_wall", baseX, 125f) }
+    private fun drawDeskWall2(baseX: Float) { drawFurniture("desk_wall", baseX, 155f) }
+    private fun drawDeskWall3(baseX: Float) { drawFurniture("desk_wall", baseX, 185f) }
+    private fun drawDeskWall4(baseX: Float) { drawFurniture("desk_wall", baseX, 215f) }
 
     // ==================== Desk Furniture Methods ====================
     // These draw all furniture for each row EXCEPT the wall
@@ -1414,24 +1052,24 @@ class Renderer(
 
         // Draw notice for left column only (y=131 is between row 1 and row 2)
         if (isLeftColumn) {
-            drawNotice(LEFT_COLUMN_X + 60f, 131f)
+            drawFurniture("notice", LEFT_COLUMN_X + 60f, 131f)
         }
-        drawSmallOrangeArt(baseX + 9f, wallY + 5f)
-        drawDeskPartition(baseX + 36f, wallY + 3f)
+        drawFurniture("small_art_orange", baseX + 9f, wallY + 5f)
+        drawFurniture("desk_partition", baseX + 36f, wallY + 3f)
 
         // West chair BEFORE left desk (so desk covers chair)
         val westOffset = if (occupiedDesks.contains(westDesk)) WEST_CHAIR_PUSHED_BACK else WEST_CHAIR_PUSHED_IN
-        drawBlackChairLeft(baseX + westOffset, wallY + 7f)
+        drawFurniture("chair_black", baseX + westOffset, wallY + 7f)
 
-        drawDeskLeft(baseX + 19f, wallY + 11f)
-        drawMonitorLeft(baseX + 20f, wallY + 7f)
+        drawFurniture("desk_left", baseX + 19f, wallY + 11f)
+        drawFurniture("monitor", baseX + 20f, wallY + 7f)
 
         // East chair BEFORE right desk (so desk covers chair)
         val eastOffset = if (occupiedDesks.contains(eastDesk)) EAST_CHAIR_PUSHED_BACK else EAST_CHAIR_PUSHED_IN
-        drawWhiteChairRight(baseX + eastOffset, wallY + 7f)
+        drawFurniture("chair_white", baseX + eastOffset, wallY + 7f, flipX = true)
 
-        drawDeskRight(baseX + 40f, wallY + 11f)
-        drawComputerRight(baseX + 41f, wallY + 7f)
+        drawFurniture("desk_right", baseX + 40f, wallY + 11f)
+        drawFurniture("computer", baseX + 41f, wallY + 7f, flipX = true)
     }
 
     /**
@@ -1443,24 +1081,22 @@ class Renderer(
         val eastDesk = if (isLeftColumn) "desk_6" else "desk_8"
 
         if (!isLeftColumn) {
-            drawPostItNotes(baseX + 70f, wallY + 5f)
+            drawFurniture("post_it_notes", baseX + 70f, wallY + 5f)
         }
-        drawArt(baseX + 7f, wallY + 5f)
-        drawDeskPartition(baseX + 36f, wallY + 3f)
+        drawFurniture("art", baseX + 7f, wallY + 5f)
+        drawFurniture("desk_partition", baseX + 36f, wallY + 3f)
 
-        // West chair BEFORE left desk (so desk covers chair)
         val westOffset = if (occupiedDesks.contains(westDesk)) WEST_CHAIR_PUSHED_BACK else WEST_CHAIR_PUSHED_IN
-        drawGreenChairLeft(baseX + westOffset, wallY + 7f)
+        drawFurniture("chair_green", baseX + westOffset, wallY + 7f)
 
-        drawDeskLeft(baseX + 19f, wallY + 11f)
-        drawComputerLeft(baseX + 20f, wallY + 7f)
+        drawFurniture("desk_left", baseX + 19f, wallY + 11f)
+        drawFurniture("computer", baseX + 20f, wallY + 7f)
 
-        // East chair BEFORE right desk (already correct, keep as-is)
         val eastOffset = if (occupiedDesks.contains(eastDesk)) EAST_CHAIR_PUSHED_BACK else EAST_CHAIR_PUSHED_IN
-        drawBlueChairRight(baseX + eastOffset, wallY + 7f)
+        drawFurniture("chair_blue", baseX + eastOffset, wallY + 7f, flipX = true)
 
-        drawDeskRight(baseX + 40f, wallY + 11f)
-        drawMonitorRight(baseX + 41f, wallY + 7f)
+        drawFurniture("desk_right", baseX + 40f, wallY + 11f)
+        drawFurniture("monitor", baseX + 41f, wallY + 7f, flipX = true)
     }
 
     /**
@@ -1468,19 +1104,18 @@ class Renderer(
      */
     private fun drawDeskFurniture3Left(baseX: Float) {
         val wallY = 185f
-        drawSmallBlueArt(baseX + 9f, wallY + 5f)
-        drawDeskPartition(baseX + 36f, wallY + 3f)
+        drawFurniture("small_art_blue", baseX + 9f, wallY + 5f)
+        drawFurniture("desk_partition", baseX + 36f, wallY + 3f)
 
-        // West chair BEFORE left desk (so desk covers chair)
         val westOffset = if (occupiedDesks.contains("desk_9")) WEST_CHAIR_PUSHED_BACK else WEST_CHAIR_PUSHED_IN
-        drawOrangeChairLeft(baseX + westOffset, wallY + 7f)
+        drawFurniture("chair_orange", baseX + westOffset, wallY + 7f)
 
-        drawDeskLeft(baseX + 19f, wallY + 11f)
-        drawMonitorLeft(baseX + 20f, wallY + 7f)
+        drawFurniture("desk_left", baseX + 19f, wallY + 11f)
+        drawFurniture("monitor", baseX + 20f, wallY + 7f)
 
-        drawDeskRight(baseX + 40f, wallY + 11f)
-        drawRedBook(baseX + 42f, wallY + 12f)
-        drawNotes(baseX + 42f, wallY + 22f)
+        drawFurniture("desk_right", baseX + 40f, wallY + 11f)
+        drawFurniture("red_book", baseX + 42f, wallY + 12f)
+        drawFurniture("notes", baseX + 42f, wallY + 22f)
     }
 
     /**
@@ -1488,10 +1123,10 @@ class Renderer(
      */
     private fun drawDeskFurniture3Right(baseX: Float) {
         val wallY = 185f
-        drawSmallBlueArt(baseX + 9f, wallY + 5f)
-        drawGreenCouch(baseX + 22f, wallY + 10f)
-        drawRedTrashCan(baseX + 56f, wallY + 10f)
-        drawTree(baseX + 66f, wallY + 5f)
+        drawFurniture("small_art_blue", baseX + 9f, wallY + 5f)
+        drawFurniture("couch_green", baseX + 22f, wallY + 10f)
+        drawFurniture("red_trash_can", baseX + 56f, wallY + 10f)
+        drawFurniture("tree", baseX + 66f, wallY + 5f)
     }
 
     // Row 4 has no furniture, only the wall
@@ -1524,21 +1159,21 @@ class Renderer(
                 val leftRow3 = leftColumn?.rows?.find { it.wallY == 185f }
                 if (leftRow3 != null && leftRow3.eastDesk == null) {
                     val baseX = LEFT_COLUMN_X
-                    drawDeskRight(baseX + 40f, 185f + 11f)
-                    drawRedBook(baseX + 42f, 185f + 12f)
-                    drawNotes(baseX + 42f, 185f + 22f)
+                    drawFurniture("desk_right", baseX + 40f, 185f + 11f)
+                    drawFurniture("red_book", baseX + 42f, 185f + 12f)
+                    drawFurniture("notes", baseX + 42f, 185f + 22f)
                 }
             }
 
             // Extra decorations that were part of legacy rows
             if (wallY == 125f) {
-                drawNotice(LEFT_COLUMN_X + 60f, 131f)
+                drawFurniture("notice", LEFT_COLUMN_X + 60f, 131f)
             }
             if (wallY == 155f) {
                 val rightColumn = deskColumns.find { it.baseX == RIGHT_COLUMN_X }
                 val hasRow2 = rightColumn?.rows?.any { it.wallY == 155f } ?: false
                 if (hasRow2) {
-                    drawPostItNotes(RIGHT_COLUMN_X + 70f, 160f)
+                    drawFurniture("post_it_notes", RIGHT_COLUMN_X + 70f, 160f)
                 }
             }
         } else {
@@ -1589,28 +1224,17 @@ class Renderer(
     }
 
     /**
-     * Collect all entities from render data and sort by Y position.
-     * Returns a list of visible entities sorted by Y (lower Y = behind).
+     * Collect all characters from render data and sort by Y position.
+     * Returns a list of visible characters sorted by Y (lower Y = behind).
      */
-    private fun collectAndSortEntities(renderData: Map<String, Any>): List<Map<String, Any>> {
-        val entities = mutableListOf<Map<String, Any>>()
-
-        @Suppress("UNCHECKED_CAST")
-        val developers = renderData["developers"] as? List<Map<String, Any>> ?: emptyList()
-        entities.addAll(developers)
-
-        @Suppress("UNCHECKED_CAST")
-        val pm = renderData["project_manager"] as? Map<String, Any>
-        if (pm != null) entities.add(pm)
-
-        @Suppress("UNCHECKED_CAST")
-        val p0 = renderData["product_owner"] as? Map<String, Any>
-        if (p0 != null) entities.add(p0)
-
-        // Filter to only visible entities and sort by Y position
+    private fun collectAndSortEntities(renderData: RenderData): List<CharacterRenderInfo> {
+        val entities = mutableListOf<CharacterRenderInfo>()
+        entities.addAll(renderData.developers)
+        renderData.projectManager?.let { entities.add(it) }
+        renderData.productOwner?.let { entities.add(it) }
         return entities
-            .filter { it["visible"] as? Boolean ?: true }
-            .sortedBy { (it["y"] as? Number)?.toFloat() ?: 0f }
+            .filter { it.visible }
+            .sortedBy { it.y }
     }
 
     /**
@@ -1618,19 +1242,15 @@ class Renderer(
      * Uses interleaved Y-zone rendering so characters appear behind desk walls
      * but on top of other furniture.
      */
-    fun drawScene(renderData: Map<String, Any>) {
+    fun drawScene(renderData: RenderData) {
         // Store developer data for debug overlay
-        @Suppress("UNCHECKED_CAST")
-        debugDevelopers = renderData["developers"] as? List<Map<String, Any>> ?: emptyList()
+        debugDevelopers = renderData.developers
 
         // Extract occupied desks from render data
-        @Suppress("UNCHECKED_CAST")
-        val desks = renderData["desks"] as? List<Map<String, Any>> ?: emptyList()
-        occupiedDesks = desks.filter { it["occupied"] == true }.mapNotNull { it["id"] as? String }.toSet()
+        occupiedDesks = renderData.desks.filter { it.occupied }.map { it.id }.toSet()
 
         // Extract desk columns for data-driven rendering
-        @Suppress("UNCHECKED_CAST")
-        deskColumns = renderData["deskColumns"] as? List<DeskColumn> ?: emptyList()
+        deskColumns = renderData.deskColumns
 
         // Start batch for background and tiles
         beginBatch()
@@ -1642,19 +1262,19 @@ class Renderer(
         drawFloor()
 
         // Draw top area furniture (above all desk rows)
-        drawVendingMachine(5f, 78f)
-        drawWaterCooler(31f, 95f)
-        drawSmallTable(41f, 95f)
-        drawCoffeeMug(43f, 98f)
-        drawCoffeeMachine(53f, 93f)
-        drawWhiteboard(73f, 83f)
-        drawTree(95f, 90f)
-        drawTree(162f, 90f)
-        drawWhiteboard(180f, 83f)
-        drawWhiteboard(205f, 83f)
-        drawOrangeCouch(225f, 95f)
-        drawBlueTrashCan(260f, 95f)
-        drawBookshelf(290f, 80f)
+        drawFurniture("vending_blue", 5f, 78f)
+        drawFurniture("water_cooler", 31f, 95f)
+        drawFurniture("small_table", 41f, 95f)
+        drawFurniture("coffee_mug", 43f, 98f)
+        drawFurniture("coffee_machine", 53f, 93f)
+        drawFurniture("whiteboard", 73f, 83f)
+        drawFurniture("tree", 95f, 90f)
+        drawFurniture("tree", 162f, 90f)
+        drawFurniture("whiteboard", 180f, 83f)
+        drawFurniture("whiteboard", 205f, 83f)
+        drawFurniture("couch_orange", 225f, 95f)
+        drawFurniture("blue_trash_can", 260f, 95f)
+        drawFurniture("bookshelf", 290f, 80f)
 
         // Collect and sort all entities once
         val entities = collectAndSortEntities(renderData)
@@ -1665,11 +1285,9 @@ class Renderer(
         for (wallY in DESK_ROW_Y_POSITIONS) {
             // Draw characters with y <= wallY (these appear behind this wall)
             for (entity in entities) {
-                val entityY = (entity["y"] as? Number)?.toFloat() ?: 0f
-                val entityId = entity["entity_id"] as? String ?: entity.hashCode().toString()
-                if (entityY <= wallY && entityId !in drawnEntities) {
-                    drawEntity(entity)
-                    drawnEntities.add(entityId)
+                if (entity.y <= wallY && entity.entityId !in drawnEntities) {
+                    drawCharacterInfo(entity)
+                    drawnEntities.add(entity.entityId)
                 }
             }
 
@@ -1682,32 +1300,29 @@ class Renderer(
 
         // Draw remaining characters (in front of all walls - Y > 215)
         for (entity in entities) {
-            val entityId = entity["entity_id"] as? String ?: entity.hashCode().toString()
-            if (entityId !in drawnEntities) {
-                drawEntity(entity)
+            if (entity.entityId !in drawnEntities) {
+                drawCharacterInfo(entity)
             }
         }
 
         // Additional decorations not part of desk columns
-        drawSmallBlueArt(110f, 160f)
-        drawSmallCalendar(110f, 190f)
+        drawFurniture("small_art_blue", 110f, 160f)
+        drawFurniture("small_calendar", 110f, 190f)
         drawDog(105f, 200f)
         drawCat(165f, 190f)
-        drawTree(76f, 218f)
+        drawFurniture("tree", 76f, 218f)
 
-        drawLargeTable(193f, 220f)
-        drawPrinter(215f, 221f)
-        drawDocument(205f, 222f)
+        drawFurniture("large_table", 193f, 220f)
+        drawFurniture("printer", 215f, 221f)
+        drawFurniture("document", 205f, 222f)
 
-        drawTree(305f, 123f)
-        drawTree(305f, 153f)
-        drawTree(305f, 188f)
+        drawFurniture("tree", 305f, 123f)
+        drawFurniture("tree", 305f, 153f)
+        drawFurniture("tree", 305f, 188f)
 
         // Draw effects on top
-        @Suppress("UNCHECKED_CAST")
-        val effects = renderData["effects"] as? List<Map<String, Any>> ?: emptyList()
-        for (effect in effects) {
-            drawEntity(effect)
+        for (effect in renderData.effects) {
+            drawEffectInfo(effect)
         }
 
         endBatch()

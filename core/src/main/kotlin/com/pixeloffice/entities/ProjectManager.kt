@@ -1,5 +1,7 @@
 package com.pixeloffice.entities
 
+import com.pixeloffice.rendering.CharacterRenderInfo
+import com.pixeloffice.rendering.EffectRenderInfo
 import com.pixeloffice.world.Pathfinder
 import kotlin.random.Random
 
@@ -43,7 +45,7 @@ class ProjectManager(
     // Bubble support
     private var thoughtBubble: ThoughtBubble? = null
     private var showBubble = false
-    private var onSpawnBubble: ((ProjectManager, String) -> ThoughtBubble)? = null
+    private var onSpawnBubble: ((BaseEntity, String) -> ThoughtBubble)? = null
 
     // Reference to developers for interruption
     private var developers = listOf<BaseEntity>()
@@ -67,7 +69,7 @@ class ProjectManager(
         developers = devs
     }
 
-    fun setBubbleSpawner(spawner: (ProjectManager, String) -> ThoughtBubble) {
+    fun setBubbleSpawner(spawner: (BaseEntity, String) -> ThoughtBubble) {
         onSpawnBubble = spawner
     }
 
@@ -279,6 +281,29 @@ class ProjectManager(
         }
 
         return info
+    }
+
+    fun getTypedRenderInfo(): CharacterRenderInfo {
+        val posture = if (state == "sitting" && isAtAssignedDesk()) "sitting" else "standing"
+
+        val children = mutableListOf<EffectRenderInfo>()
+        if (thoughtBubble != null && showBubble) {
+            children.add(thoughtBubble!!.toEffectRenderInfo())
+        }
+
+        return CharacterRenderInfo(
+            type = "project_manager",
+            entityId = entityId,
+            x = x,
+            y = y,
+            animation = currentAnimation,
+            facing = facingDirection,
+            variant = spriteVariant,
+            posture = posture,
+            visible = visible,
+            state = state,
+            children = children
+        )
     }
 
     // Legacy methods for backward compatibility (no longer used)

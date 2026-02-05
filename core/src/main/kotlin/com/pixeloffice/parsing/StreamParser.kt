@@ -29,7 +29,6 @@ class StreamParser {
     private var buffer = ""
     private var currentAgentId: String? = null
     private val activeAgents = mutableMapOf<String, Map<String, Any>>()
-    private val pendingToolUse = mutableMapOf<String, String>() // tool_use_id -> tool_name
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -234,7 +233,6 @@ class StreamParser {
         buffer = ""
         currentAgentId = null
         activeAgents.clear()
-        pendingToolUse.clear()
     }
 
     /**

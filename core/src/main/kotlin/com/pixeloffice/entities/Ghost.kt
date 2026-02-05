@@ -1,5 +1,7 @@
 package com.pixeloffice.entities
 
+import com.pixeloffice.rendering.EffectRenderInfo
+import com.pixeloffice.rendering.GhostRenderInfo
 import kotlin.math.max
 
 /**
@@ -76,6 +78,9 @@ class Ghost(
             "visible" to visible
         )
     }
+
+    override fun toEffectRenderInfo(): EffectRenderInfo =
+        EffectRenderInfo.Ghost(GhostRenderInfo(x, y, currentFrame, alpha))
 
     /**
      * Check if ghost animation is complete.

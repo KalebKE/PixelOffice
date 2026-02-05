@@ -31,6 +31,8 @@ class PixelOfficeGame : ApplicationAdapter() {
 
     companion object {
         var forceSittingMode = false
+        private const val DEMO_CYCLE_DURATION = 20f
+        private const val PM_PO_CYCLE_DURATION = 40f
     }
 
     // Configuration
@@ -432,7 +434,7 @@ class PixelOfficeGame : ApplicationAdapter() {
         // Cycle through states for all developers
         val developers = office.getAllDevelopers()
         if (developers.isNotEmpty()) {
-            val cycleTime = demoTimer % 20f
+            val cycleTime = demoTimer % DEMO_CYCLE_DURATION
 
             val newState = when {
                 cycleTime < 3f -> "thinking_started"
@@ -448,7 +450,7 @@ class PixelOfficeGame : ApplicationAdapter() {
                 // Send event to developers with staggered timing
                 developers.forEachIndexed { index, dev ->
                     // Stagger by 1 second per developer
-                    val staggeredCycleTime = (demoTimer - index * 1f) % 20f
+                    val staggeredCycleTime = (demoTimer - index * 1f) % DEMO_CYCLE_DURATION
                     val staggeredState = when {
                         staggeredCycleTime < 0f -> "" // Not started yet
                         staggeredCycleTime < 3f -> "thinking_started"
@@ -473,11 +475,11 @@ class PixelOfficeGame : ApplicationAdapter() {
         }
 
         // PM/PO sitting cycle (40 second cycle)
-        val pmPoCycleTime = demoTimer % 40f
-        if (pmPoCycleTime >= 20f && !pmSitting) {
+        val pmPoCycleTime = demoTimer % PM_PO_CYCLE_DURATION
+        if (pmPoCycleTime >= DEMO_CYCLE_DURATION && !pmSitting) {
             office.assignPMToDesk("desk_5")
             pmSitting = true
-        } else if (pmPoCycleTime < 20f && pmSitting) {
+        } else if (pmPoCycleTime < DEMO_CYCLE_DURATION && pmSitting) {
             office.getProjectManager()?.clearAssignedDesk()
             pmSitting = false
         }
@@ -485,7 +487,7 @@ class PixelOfficeGame : ApplicationAdapter() {
         if (pmPoCycleTime >= 25f && !poSitting) {
             office.assignPOToDesk("desk_6")
             poSitting = true
-        } else if (pmPoCycleTime < 20f && poSitting) {
+        } else if (pmPoCycleTime < DEMO_CYCLE_DURATION && poSitting) {
             office.getProductOwner()?.clearAssignedDesk()
             poSitting = false
         }
@@ -503,7 +505,7 @@ class PixelOfficeGame : ApplicationAdapter() {
     }
 
     private fun applySettings(cfg: SettingsConfig) {
-        settingsConfig = cfg.copy()
+        settingsConfig = cfg.deepCopy()
         office.resetAndApply(cfg)
         demoInitialized = true
         renderer.setLineNetwork(office.getLineNetwork().getAllLines())

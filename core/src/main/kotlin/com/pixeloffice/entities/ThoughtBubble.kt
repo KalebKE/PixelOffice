@@ -1,5 +1,7 @@
 package com.pixeloffice.entities
 
+import com.pixeloffice.rendering.BubbleRenderInfo
+import com.pixeloffice.rendering.EffectRenderInfo
 import kotlin.math.sin
 
 /**
@@ -62,6 +64,9 @@ class ThoughtBubble(
             "bubble_type" to bubbleType
         )
     }
+
+    override fun toEffectRenderInfo(): EffectRenderInfo =
+        EffectRenderInfo.Bubble(BubbleRenderInfo(x, y, currentFrame, bubbleType))
 
     /**
      * Show the thought bubble.

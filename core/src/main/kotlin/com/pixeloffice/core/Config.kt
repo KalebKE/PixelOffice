@@ -213,9 +213,7 @@ data class POConfig(
 
 @Serializable
 data class DemoConfig(
-    val enabled: Boolean = false,
-    @SerialName("sample_events_file")
-    val sampleEventsFile: String = "tests/fixtures/sample_events.json"
+    val enabled: Boolean = false
 )
 
 @Serializable

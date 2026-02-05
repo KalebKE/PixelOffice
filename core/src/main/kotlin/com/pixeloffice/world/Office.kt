@@ -2,7 +2,8 @@ package com.pixeloffice.world
 
 import com.pixeloffice.core.Config
 import com.pixeloffice.entities.*
-import com.pixeloffice.rendering.Renderer
+import com.pixeloffice.rendering.*
+import com.pixeloffice.ui.ColumnSettings
 import com.pixeloffice.ui.SettingsConfig
 import kotlin.math.sqrt
 
@@ -33,6 +34,20 @@ data class Whiteboard(
  * the world state for rendering.
  */
 class Office(private val config: Config) {
+
+    companion object {
+        // PM/PO default spawn positions (upper corridor)
+        const val PM_START_X = 64f
+        const val PM_START_Y = 110f
+        const val PO_PATROL_START_X = 150f
+        const val PO_PATROL_START_Y = 110f
+
+        // Collision detection
+        const val MANAGER_COLLISION_DIST = 15f
+
+        // Bubble Y offset above entity
+        const val BUBBLE_Y_OFFSET = -21f
+    }
 
     // Layout
     private val desks = mutableMapOf<String, Desk>()
@@ -101,50 +116,9 @@ class Office(private val config: Config) {
      * @return The spawned developer, or null if no desk available.
      */
     fun spawnDeveloper(agentId: String, colorVariant: Int? = null): Developer? {
-        // Find available desk
         val desk = getAvailableDesk() ?: return null
-
-        // Assign color variant
         val variant = colorVariant ?: (developers.size % 4)
-
-        // Find nearest whiteboard
-        val whiteboard = getNearestWhiteboard(desk.x, desk.y)
-
-        // Create developer
-        val entityId = generateEntityId("dev")
-        val developer = Developer(
-            x = desk.x,
-            y = desk.y,
-            entityId = entityId,
-            agentId = agentId,
-            colorVariant = variant,
-            walkSpeed = config.developer.walkSpeed,
-            thinkingDuration = config.developer.thinkingDuration,
-            despairDuration = config.developer.despairDuration
-        )
-
-        // Set up positions
-        developer.setDeskPosition(desk.x, desk.y)
-        whiteboard?.let {
-            developer.setWhiteboardPosition(it.x, it.y, it.id)
-            claimWhiteboard(it.id)
-        }
-        developer.setOffice(this)
-
-        // Set up pathfinder for navigation
-        developer.setPathfinder(pathfinder)
-
-        // Set up effect spawners
-        developer.setGhostSpawner { dev -> spawnGhost(dev) }
-        developer.setBubbleSpawner { dev -> spawnThoughtBubble(dev) }
-
-        // Register
-        desk.occupiedBy = entityId
-        desk.occupantType = "developer"
-        developers[agentId] = developer
-        developer.start()
-
-        return developer
+        return setupDeveloperAtDesk(agentId, desk, variant)
     }
 
     /**
@@ -156,47 +130,36 @@ class Office(private val config: Config) {
      * @return The spawned developer, or null if desk not available.
      */
     fun assignDeveloperToDesk(agentId: String, deskId: String, colorVariant: Int? = null): Developer? {
-        // Find the specific desk
         val desk = getDeskById(deskId) ?: return null
-
-        // Check if desk is available
         if (!isDeskAvailable(deskId)) return null
-
-        // Assign color variant
         val variant = colorVariant ?: (developers.size % 4)
+        return setupDeveloperAtDesk(agentId, desk, variant)
+    }
 
-        // Find nearest whiteboard
+    private fun setupDeveloperAtDesk(agentId: String, desk: Desk, colorVariant: Int): Developer {
         val whiteboard = getNearestWhiteboard(desk.x, desk.y)
-
-        // Create developer
         val entityId = generateEntityId("dev")
         val developer = Developer(
             x = desk.x,
             y = desk.y,
             entityId = entityId,
             agentId = agentId,
-            colorVariant = variant,
+            colorVariant = colorVariant,
             walkSpeed = config.developer.walkSpeed,
             thinkingDuration = config.developer.thinkingDuration,
             despairDuration = config.developer.despairDuration
         )
 
-        // Set up positions
         developer.setDeskPosition(desk.x, desk.y)
         whiteboard?.let {
             developer.setWhiteboardPosition(it.x, it.y, it.id)
             claimWhiteboard(it.id)
         }
         developer.setOffice(this)
-
-        // Set up pathfinder for navigation
         developer.setPathfinder(pathfinder)
-
-        // Set up effect spawners
         developer.setGhostSpawner { dev -> spawnGhost(dev) }
-        developer.setBubbleSpawner { dev -> spawnThoughtBubble(dev) }
+        developer.setBubbleSpawner { entity, bubbleType -> spawnThoughtBubble(entity, bubbleType) }
 
-        // Register
         desk.occupiedBy = entityId
         desk.occupantType = "developer"
         developers[agentId] = developer
@@ -279,8 +242,8 @@ class Office(private val config: Config) {
         if (projectManager == null) {
             projectManager = pm
             pm.setPathfinder(pathfinder)
-            pm.setBubbleSpawner { manager, bubbleType ->
-                spawnPMThoughtBubble(manager, bubbleType)
+            pm.setBubbleSpawner { entity, bubbleType ->
+                spawnThoughtBubble(entity, bubbleType)
             }
         }
 
@@ -316,8 +279,8 @@ class Office(private val config: Config) {
         if (productOwner == null) {
             productOwner = po
             po.setPathfinder(pathfinder)
-            po.setBubbleSpawner { owner, bubbleType ->
-                spawnPOThoughtBubble(owner, bubbleType)
+            po.setBubbleSpawner { entity, bubbleType ->
+                spawnThoughtBubble(entity, bubbleType)
             }
         }
 
@@ -370,7 +333,7 @@ class Office(private val config: Config) {
      * Set up desk column 1 (west/left side, baseX = 45f) using the DSL.
      */
     fun setupDeskColumn1(init: DeskColumnBuilder.() -> Unit) {
-        deskColumn1 = DeskColumnBuilder("deskColumn1", Renderer.LEFT_COLUMN_X).apply(init).build()
+        deskColumn1 = DeskColumnBuilder("deskColumn1", DeskColumn.LEFT_COLUMN_X).apply(init).build()
         registerColumnDesks(deskColumn1!!)
     }
 
@@ -378,25 +341,24 @@ class Office(private val config: Config) {
      * Set up desk column 2 (east/right side, baseX = 175f) using the DSL.
      */
     fun setupDeskColumn2(init: DeskColumnBuilder.() -> Unit) {
-        deskColumn2 = DeskColumnBuilder("deskColumn2", Renderer.RIGHT_COLUMN_X).apply(init).build()
+        deskColumn2 = DeskColumnBuilder("deskColumn2", DeskColumn.RIGHT_COLUMN_X).apply(init).build()
         registerColumnDesks(deskColumn2!!)
     }
 
     /**
      * Register desks from a DeskColumn into the desks map for occupancy tracking.
-     * Uses Renderer.getDeskPosition() for accurate coordinates.
      */
     private fun registerColumnDesks(column: DeskColumn) {
         for ((rowIndex, row) in column.rows.withIndex()) {
             row.westDesk?.let {
                 val deskId = column.getDeskId((rowIndex + 1) * 2) // even = west
-                val (x, y) = Renderer.getDeskPosition(column.baseX, rowIndex, isLeftDesk = true)
+                val (x, y) = DeskColumn.getDeskPosition(column.baseX, rowIndex, isLeftDesk = true)
                 desks[deskId] = Desk(id = deskId, x = x, y = y)
                 registerNamedLocation(deskId, x, y)
             }
             row.eastDesk?.let {
                 val deskId = column.getDeskId((rowIndex + 1) * 2 - 1) // odd = east
-                val (x, y) = Renderer.getDeskPosition(column.baseX, rowIndex, isLeftDesk = false)
+                val (x, y) = DeskColumn.getDeskPosition(column.baseX, rowIndex, isLeftDesk = false)
                 desks[deskId] = Desk(id = deskId, x = x, y = y)
                 registerNamedLocation(deskId, x, y)
             }
@@ -405,67 +367,67 @@ class Office(private val config: Config) {
 
     /**
      * Set up default desk columns that reproduce the current hardcoded furniture layout.
+     * Delegates to SettingsConfig.fromDefaults() as the single source of truth.
      */
     fun setupDefaultDeskColumns() {
-        setupDeskColumn1 {
-            row(wallY = 125f) {
-                westDesk {
-                    equipment = Equipment.MONITOR
-                    chairColor = ChairColor.BLACK
-                    wallDecor = WallDecor.SMALL_ART_ORANGE
+        // Clear config.json desks so only column-registered desks are used
+        desks.clear()
+
+        val defaults = SettingsConfig.fromDefaults()
+        applyDeskColumns(defaults)
+    }
+
+    /**
+     * Build desk columns from a SettingsConfig.
+     * Shared between setupDefaultDeskColumns() and resetAndApply().
+     */
+    private fun applyDeskColumns(settingsConfig: SettingsConfig) {
+        fun applyColumn(
+            columnSettings: ColumnSettings,
+            setup: (DeskColumnBuilder.() -> Unit) -> Unit
+        ) {
+            setup {
+                for (rowSetting in columnSettings.rows) {
+                    row(wallY = rowSetting.wallY) {
+                        rowSetting.westDesk?.let { ds ->
+                            if (ds.enabled) {
+                                westDesk {
+                                    equipment = ds.equipment
+                                    chairColor = ds.chairColor
+                                    wallDecor = ds.wallDecor
+                                    deskItems = ds.deskItems
+                                }
+                            }
+                        }
+                        rowSetting.eastDesk?.let { ds ->
+                            if (ds.enabled) {
+                                eastDesk {
+                                    equipment = ds.equipment
+                                    chairColor = ds.chairColor
+                                    wallDecor = ds.wallDecor
+                                    deskItems = ds.deskItems
+                                }
+                            }
+                        }
+                    }
                 }
-                eastDesk {
-                    equipment = Equipment.COMPUTER
-                    chairColor = ChairColor.WHITE
-                }
-            }
-            row(wallY = 155f) {
-                westDesk {
-                    equipment = Equipment.COMPUTER
-                    chairColor = ChairColor.GREEN
-                    wallDecor = WallDecor.ART
-                }
-                eastDesk {
-                    equipment = Equipment.MONITOR
-                    chairColor = ChairColor.BLUE
-                }
-            }
-            row(wallY = 185f) {
-                westDesk {
-                    equipment = Equipment.MONITOR
-                    chairColor = ChairColor.ORANGE
-                    wallDecor = WallDecor.SMALL_ART_BLUE
-                }
-                // East desk has no chair in original layout — desk surface + items
-                // are rendered as standalone decorations by the Renderer
             }
         }
 
-        setupDeskColumn2 {
-            row(wallY = 125f) {
-                westDesk {
-                    equipment = Equipment.MONITOR
-                    chairColor = ChairColor.BLACK
-                    wallDecor = WallDecor.SMALL_ART_ORANGE
-                }
-                eastDesk {
-                    equipment = Equipment.COMPUTER
-                    chairColor = ChairColor.WHITE
-                }
-            }
-            row(wallY = 155f) {
-                westDesk {
-                    equipment = Equipment.COMPUTER
-                    chairColor = ChairColor.GREEN
-                    wallDecor = WallDecor.ART
-                }
-                eastDesk {
-                    equipment = Equipment.MONITOR
-                    chairColor = ChairColor.BLUE
-                }
-            }
-            // Row 3 for right column is the lounge area (not a desk row)
-        }
+        applyColumn(settingsConfig.column1, ::setupDeskColumn1)
+        applyColumn(settingsConfig.column2, ::setupDeskColumn2)
+
+        // Feed registered desk positions into the line network for pathfinding
+        syncDeskPositionsToLineNetwork()
+    }
+
+    /**
+     * Push current desk positions into the LineNetwork so pathfinding
+     * uses the DeskColumn-registered positions instead of config.json.
+     */
+    private fun syncDeskPositionsToLineNetwork() {
+        val navPositions = desks.values.map { DeskNavPosition(it.id, it.x, it.y) }
+        lineNetwork.setDeskPositions(navPositions)
     }
 
     /**
@@ -493,64 +455,11 @@ class Office(private val config: Config) {
         effects.clear()
         occupiedWhiteboards.clear()
 
-        // Clear column-registered desks (keep config-based desks)
-        val configDeskIds = config.office.deskPositions.map { it.id }.toSet()
-        desks.keys.retainAll(configDeskIds)
+        // Clear all desks — column desks will be re-registered below
+        desks.clear()
 
         // Rebuild desk columns from settings
-        setupDeskColumn1 {
-            for (rowSetting in settingsConfig.column1.rows) {
-                row(wallY = rowSetting.wallY) {
-                    rowSetting.westDesk?.let { ds ->
-                        if (ds.enabled) {
-                            westDesk {
-                                equipment = ds.equipment
-                                chairColor = ds.chairColor
-                                wallDecor = ds.wallDecor
-                                deskItems = ds.deskItems
-                            }
-                        }
-                    }
-                    rowSetting.eastDesk?.let { ds ->
-                        if (ds.enabled) {
-                            eastDesk {
-                                equipment = ds.equipment
-                                chairColor = ds.chairColor
-                                wallDecor = ds.wallDecor
-                                deskItems = ds.deskItems
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        setupDeskColumn2 {
-            for (rowSetting in settingsConfig.column2.rows) {
-                row(wallY = rowSetting.wallY) {
-                    rowSetting.westDesk?.let { ds ->
-                        if (ds.enabled) {
-                            westDesk {
-                                equipment = ds.equipment
-                                chairColor = ds.chairColor
-                                wallDecor = ds.wallDecor
-                                deskItems = ds.deskItems
-                            }
-                        }
-                    }
-                    rowSetting.eastDesk?.let { ds ->
-                        if (ds.enabled) {
-                            eastDesk {
-                                equipment = ds.equipment
-                                chairColor = ds.chairColor
-                                wallDecor = ds.wallDecor
-                                deskItems = ds.deskItems
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        applyDeskColumns(settingsConfig)
 
         // Spawn developers
         for (devSetting in settingsConfig.developers) {
@@ -653,28 +562,16 @@ class Office(private val config: Config) {
             projectManager?.setDeskTargets(deskList)
 
             // Set up bubble spawner for PM
-            projectManager?.setBubbleSpawner { pm, bubbleType ->
-                spawnPMThoughtBubble(pm, bubbleType)
+            projectManager?.setBubbleSpawner { entity, bubbleType ->
+                spawnThoughtBubble(entity, bubbleType)
             }
 
             // Set initial position to upper corridor
-            projectManager?.x = 64f
-            projectManager?.y = 110f
+            projectManager?.x = PM_START_X
+            projectManager?.y = PM_START_Y
         }
 
         return projectManager!!
-    }
-
-    private fun spawnPMThoughtBubble(pm: ProjectManager, bubbleType: String): ThoughtBubble {
-        val bubble = ThoughtBubble(
-            x = pm.x + 8,
-            y = pm.y - 26,
-            entityId = generateEntityId("pm_bubble"),
-            bubbleType = bubbleType
-        )
-        bubble.show()
-        effects.add(bubble)
-        return bubble
     }
 
     /**
@@ -704,7 +601,7 @@ class Office(private val config: Config) {
             productOwner?.setPathfinder(pathfinder)
             val deskList = desks.values.map { desk -> Triple(desk.id, desk.x, desk.y) }
             productOwner?.setDeskTargets(deskList)
-            productOwner?.setBubbleSpawner { po, bubbleType -> spawnPOThoughtBubble(po, bubbleType) }
+            productOwner?.setBubbleSpawner { entity, bubbleType -> spawnThoughtBubble(entity, bubbleType) }
         }
 
         productOwner?.spawnForQuestion(developer)
@@ -717,8 +614,8 @@ class Office(private val config: Config) {
     fun spawnProductOwnerPatrol(): ProductOwner? {
         if (productOwner == null) {
             productOwner = ProductOwner(
-                x = 150f,
-                y = 110f,
+                x = PO_PATROL_START_X,
+                y = PO_PATROL_START_Y,
                 entityId = "po",
                 walkSpeed = config.productOwner.walkSpeed,
                 questionTimeout = config.productOwner.questionTimeout
@@ -726,22 +623,10 @@ class Office(private val config: Config) {
             productOwner?.setPathfinder(pathfinder)
             val deskList = desks.values.map { desk -> Triple(desk.id, desk.x, desk.y) }
             productOwner?.setDeskTargets(deskList)
-            productOwner?.setBubbleSpawner { po, bubbleType -> spawnPOThoughtBubble(po, bubbleType) }
+            productOwner?.setBubbleSpawner { entity, bubbleType -> spawnThoughtBubble(entity, bubbleType) }
         }
         productOwner?.startPatrol()
         return productOwner
-    }
-
-    private fun spawnPOThoughtBubble(po: ProductOwner, bubbleType: String): ThoughtBubble {
-        val bubble = ThoughtBubble(
-            x = po.x + 8,
-            y = po.y - 26,
-            entityId = generateEntityId("po_bubble"),
-            bubbleType = bubbleType
-        )
-        bubble.show()
-        effects.add(bubble)
-        return bubble
     }
 
     /**
@@ -768,11 +653,12 @@ class Office(private val config: Config) {
         return ghost
     }
 
-    private fun spawnThoughtBubble(developer: Developer): ThoughtBubble {
+    private fun spawnThoughtBubble(entity: BaseEntity, bubbleType: String): ThoughtBubble {
         val bubble = ThoughtBubble(
-            x = developer.x + 8,
-            y = developer.y - 21,
-            entityId = generateEntityId("bubble")
+            x = entity.x + 8,
+            y = entity.y + BUBBLE_Y_OFFSET,
+            entityId = generateEntityId("bubble"),
+            bubbleType = bubbleType
         )
         bubble.show()
         effects.add(bubble)
@@ -831,9 +717,7 @@ class Office(private val config: Config) {
         val dx = pm.x - po.x
         val dy = pm.y - po.y
         val distSq = dx * dx + dy * dy
-        val collisionDist = 15f
-
-        if (distSq < collisionDist * collisionDist) {
+        if (distSq < MANAGER_COLLISION_DIST * MANAGER_COLLISION_DIST) {
             pm.startChatting()
             po.startChatting()
         }
@@ -844,50 +728,24 @@ class Office(private val config: Config) {
     /**
      * Get all data needed for rendering.
      */
-    fun getRenderData(): Map<String, Any> {
-        val data = mutableMapOf<String, Any>(
-            "desks" to desks.values.map { d ->
-                mapOf(
-                    "id" to d.id,
-                    "x" to d.x,
-                    "y" to d.y,
-                    "occupied" to (d.occupiedBy != null)
-                )
-            },
-            "whiteboards" to whiteboards.values.map { w ->
-                mapOf(
-                    "id" to w.id,
-                    "x" to w.x,
-                    "y" to w.y
-                )
-            },
-            "developers" to developers.values.map { dev ->
-                dev.getRenderInfo()
-            },
-            "effects" to effects.filter { it.visible }.map { effect ->
-                effect.getRenderInfo()
-            }
-        )
-
-        // Include desk columns for data-driven rendering
+    fun getRenderData(): RenderData {
         val columns = mutableListOf<DeskColumn>()
         deskColumn1?.let { columns.add(it) }
         deskColumn2?.let { columns.add(it) }
-        if (columns.isNotEmpty()) {
-            data["deskColumns"] = columns
-        }
 
-        projectManager?.let { pm ->
-            data["project_manager"] = pm.getRenderInfo()
-        }
-
-        productOwner?.let { po ->
-            if (po.isActive()) {
-                data["product_owner"] = po.getRenderInfo()
-            }
-        }
-
-        return data
+        return RenderData(
+            desks = desks.values.map { d ->
+                DeskRenderInfo(d.id, d.x, d.y, d.occupiedBy != null)
+            },
+            whiteboards = whiteboards.values.map { w ->
+                WhiteboardRenderInfo(w.id, w.x, w.y)
+            },
+            developers = developers.values.map { it.getTypedRenderInfo() },
+            effects = effects.filter { it.visible }.map { it.toEffectRenderInfo() },
+            deskColumns = columns,
+            projectManager = projectManager?.getTypedRenderInfo(),
+            productOwner = productOwner?.takeIf { it.isActive() }?.getTypedRenderInfo()
+        )
     }
 
     /**

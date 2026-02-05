@@ -14,21 +14,30 @@ data class NavPoint(val x: Float, val y: Float, val id: String)
 data class NavLine(val from: NavPoint, val to: NavPoint)
 
 /**
+ * A desk position for navigation graph construction.
+ */
+data class DeskNavPosition(val id: String, val x: Float, val y: Float)
+
+/**
  * Line-based navigation network for character pathfinding.
  *
  * Characters can only travel along predefined orthogonal lines and
  * transfer between lines at intersection points.
  *
- * The network is built from config data:
- * - Aisle centers calculated from walkable_zones
- * - Desk connection points from desk_positions
- * - Whiteboard connection points from whiteboard_positions
+ * The network is built from:
+ * - Aisle centers calculated from walkable_zones (config)
+ * - Desk connection points (set programmatically or from config)
+ * - Whiteboard connection points from whiteboard_positions (config)
  */
 class LineNetwork(private val config: Config) {
 
     private val points = mutableMapOf<String, NavPoint>()
     private val lines = mutableListOf<NavLine>()
     private val adjacency = mutableMapOf<String, MutableList<String>>()
+
+    // Desk positions for navigation (can be overridden programmatically)
+    private var deskPositions: List<DeskNavPosition> =
+        config.office.deskPositions.map { DeskNavPosition(it.id, it.x.toFloat(), it.y.toFloat()) }
 
     // Calculated aisle centers
     private var leftAisleX = 22f
@@ -41,7 +50,27 @@ class LineNetwork(private val config: Config) {
     }
 
     /**
-     * Build the navigation network from config.
+     * Set desk positions programmatically and rebuild the network.
+     * Call this after desk columns are set up to use DeskColumn positions
+     * instead of config.json desk_positions.
+     */
+    fun setDeskPositions(positions: List<DeskNavPosition>) {
+        deskPositions = positions
+        rebuild()
+    }
+
+    /**
+     * Rebuild the navigation network (e.g., after desk positions change).
+     */
+    fun rebuild() {
+        points.clear()
+        lines.clear()
+        adjacency.clear()
+        buildNetwork()
+    }
+
+    /**
+     * Build the navigation network.
      */
     private fun buildNetwork() {
         // 1. Calculate aisle centers from walkable_zones
@@ -84,7 +113,7 @@ class LineNetwork(private val config: Config) {
      */
     private fun createAllPoints() {
         // Get unique desk row Y values
-        val deskRowYs = config.office.deskPositions.map { it.y }.distinct().sorted()
+        val deskRowYs = deskPositions.map { it.y.toInt() }.distinct().sorted()
 
         // Corridor intersection points (where aisles meet corridor)
         addPoint(NavPoint(leftAisleX, corridorY, "corridor_left"))
@@ -116,21 +145,21 @@ class LineNetwork(private val config: Config) {
         // Desk points - position based on which aisle they connect to
         val deskWidth = 17  // Actual desk sprite width (desk_left/desk_right are 17px)
         for (rowY in deskRowYs) {
-            val rowDesks = config.office.deskPositions.filter { it.y == rowY }
+            val rowDesks = deskPositions.filter { it.y.toInt() == rowY }
             val leftDesks = rowDesks.filter { it.x < centerAisleX }.sortedBy { it.x }
             val rightDesks = rowDesks.filter { it.x >= centerAisleX }.sortedByDescending { it.x }
 
             // Left column: all desks offset by deskWidth to reach chair position
             for (desk in leftDesks) {
-                val deskX = desk.x.toFloat() + deskWidth
-                addPoint(NavPoint(deskX, desk.y.toFloat(), desk.id))
+                val deskX = desk.x + deskWidth
+                addPoint(NavPoint(deskX, desk.y, desk.id))
             }
 
             // Right column: rightmost connects right (top-right), others connect left (top-left)
             for ((index, desk) in rightDesks.withIndex()) {
                 val connectsRight = index == 0 && rowY <= 166  // right aisle only exists for y <= 166
-                val deskX = if (connectsRight) desk.x.toFloat() + deskWidth else desk.x.toFloat()
-                addPoint(NavPoint(deskX, desk.y.toFloat(), desk.id))
+                val deskX = if (connectsRight) desk.x + deskWidth else desk.x
+                addPoint(NavPoint(deskX, desk.y, desk.id))
             }
         }
 
@@ -151,7 +180,7 @@ class LineNetwork(private val config: Config) {
      */
     private fun createAllLines() {
         // Get unique desk row Y values
-        val deskRowYs = config.office.deskPositions.map { it.y }.distinct().sorted()
+        val deskRowYs = deskPositions.map { it.y.toInt() }.distinct().sorted()
 
         // --- Horizontal corridor line ---
         // First, collect all points on the corridor (y = corridorY) sorted by X
@@ -183,17 +212,15 @@ class LineNetwork(private val config: Config) {
         // --- Horizontal desk row lines ---
         for (rowY in deskRowYs) {
             // Get desks in this row
-            val rowDesks = config.office.deskPositions.filter { it.y == rowY }
+            val rowDesks = deskPositions.filter { it.y.toInt() == rowY }
             val leftDesks = rowDesks.filter { it.x < centerAisleX }.sortedBy { it.x }
             val rightDesks = rowDesks.filter { it.x >= centerAisleX }.sortedBy { it.x }
 
             // Left side: leftmost desk → left aisle, others → center aisle
             for ((index, desk) in leftDesks.withIndex()) {
                 if (index == 0) {
-                    // Leftmost desk connects to left aisle
                     addLine("left_aisle_y$rowY", desk.id)
                 } else {
-                    // Other left desks connect to center aisle
                     addLine("center_aisle_y$rowY", desk.id)
                 }
             }
@@ -201,10 +228,8 @@ class LineNetwork(private val config: Config) {
             // Right side: rightmost desk → right aisle (if exists), others → center aisle
             for ((index, desk) in rightDesks.sortedByDescending { it.x }.withIndex()) {
                 if (index == 0 && points.containsKey("right_aisle_y$rowY")) {
-                    // Rightmost desk connects to right aisle
                     addLine("right_aisle_y$rowY", desk.id)
                 } else {
-                    // Other right desks connect to center aisle
                     addLine("center_aisle_y$rowY", desk.id)
                 }
             }
