@@ -27,6 +27,7 @@ class ProductOwner(
     // Assigned desk (for sitting at a specific desk)
     private var assignedDeskId: String? = null
     private var assignedDeskPosition: Pair<Float, Float>? = null
+    private var chairPosition: Pair<Float, Float>? = null
 
     // Chatting (when colliding with PM)
     private val chattingDuration = 3f
@@ -362,11 +363,13 @@ class ProductOwner(
     override fun getRenderInfo(): Map<String, Any> {
         // Determine posture based on state and desk assignment
         val posture = if (state == "sitting" && isAtAssignedDesk()) "sitting" else "standing"
+        val renderX = if (posture == "sitting") chairPosition?.first ?: x else x
+        val renderY = if (posture == "sitting") chairPosition?.second ?: y else y
 
         val info = mutableMapOf<String, Any>(
             "type" to "product_owner",
-            "x" to x,
-            "y" to y,
+            "x" to renderX,
+            "y" to renderY,
             "animation" to currentAnimation,
             "facing" to facingDirection,
             "variant" to spriteVariant,
@@ -389,6 +392,8 @@ class ProductOwner(
 
     fun getTypedRenderInfo(): CharacterRenderInfo {
         val posture = if (state == "sitting" && isAtAssignedDesk()) "sitting" else "standing"
+        val renderX = if (posture == "sitting") chairPosition?.first ?: x else x
+        val renderY = if (posture == "sitting") chairPosition?.second ?: y else y
 
         val children = mutableListOf<EffectRenderInfo>()
         if (thoughtBubble != null && showBubble) {
@@ -398,8 +403,8 @@ class ProductOwner(
         return CharacterRenderInfo(
             type = "product_owner",
             entityId = entityId,
-            x = x,
-            y = y,
+            x = renderX,
+            y = renderY,
             animation = currentAnimation,
             facing = facingDirection,
             variant = spriteVariant,
@@ -426,9 +431,10 @@ class ProductOwner(
      * Assign the PO to a specific desk.
      * When assigned, PO will sit at the desk instead of patrolling.
      */
-    fun setAssignedDesk(deskId: String, deskX: Float, deskY: Float) {
+    fun setAssignedDesk(deskId: String, deskX: Float, deskY: Float, chairX: Float = deskX, chairY: Float = deskY) {
         assignedDeskId = deskId
         assignedDeskPosition = Pair(deskX, deskY)
+        chairPosition = Pair(chairX, chairY)
         state = "sitting"
         setAnimation("idle")
     }
