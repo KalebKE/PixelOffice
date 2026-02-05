@@ -111,11 +111,13 @@
     ],
     "characters": {
       "blue_shirt": {"x": 2, "y": 105, "w": 15, "h": 23},
+      "blue_shirt_sitting": {"x": 258, "y": 105, "w": 15, "h": 23},
       "glasses": {"x": 40, "y": 107, "w": 13, "h": 21},
       "glasses_sitting": {"x": 296, "y": 107, "w": 13, "h": 21},
       "red_hair": {"x": 3, "y": 132, "w": 17, "h": 23},
       "dark_hair": {"x": 23, "y": 132, "w": 17, "h": 23},
-      "cool_hair": {"x": 19, "y": 104, "w": 19, "h": 24}
+      "cool_hair": {"x": 19, "y": 104, "w": 19, "h": 24},
+      "cool_hair_sitting": {"x": 275, "y": 104, "w": 19, "h": 24}
     },
     "developer_variants": {
       "blue": "blue_shirt",
