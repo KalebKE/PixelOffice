@@ -167,6 +167,20 @@ data class SpriteSheetConfig(
     fun getFurniture(name: String): SpriteRect? = furniture[name]
 
     fun getTile(name: String): SpriteRect? = tiles[name]
+
+    fun getPMCharacter(): SpriteRect? = characters[projectManager]
+
+    fun getPMCharacterSitting(): SpriteRect? {
+        val sittingName = "${projectManager}_sitting"
+        return characters[sittingName]
+    }
+
+    fun getPOCharacter(): SpriteRect? = characters[productOwner]
+
+    fun getPOCharacterSitting(): SpriteRect? {
+        val sittingName = "${productOwner}_sitting"
+        return characters[sittingName]
+    }
 }
 
 @Serializable

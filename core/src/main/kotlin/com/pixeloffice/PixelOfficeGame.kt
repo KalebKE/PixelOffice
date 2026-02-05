@@ -60,6 +60,8 @@ class PixelOfficeGame : ApplicationAdapter() {
     private var demoTimer = 0f
     private var demoInitialized = false
     private var demoPrevState = ""
+    private var pmSitting = false
+    private var poSitting = false
 
     // Touch input
     private var lastTouchX = 0f
@@ -351,6 +353,24 @@ class PixelOfficeGame : ApplicationAdapter() {
                 // Dismiss Product Owner (simulate answer received)
                 office.dismissProductOwner()
             }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_7)) {
+                // Toggle PM sitting
+                val pm = office.getProjectManager()
+                if (pm?.getAssignedDeskId() != null) {
+                    pm.clearAssignedDesk()
+                } else {
+                    office.assignPMToDesk("desk_5")
+                }
+            }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_8)) {
+                // Toggle PO sitting
+                val po = office.getProductOwner()
+                if (po?.getAssignedDeskId() != null) {
+                    po.clearAssignedDesk()
+                } else {
+                    office.assignPOToDesk("desk_6")
+                }
+            }
         }
     }
 
@@ -413,6 +433,24 @@ class PixelOfficeGame : ApplicationAdapter() {
                 }
                 demoPrevState = newState
             }
+        }
+
+        // PM/PO sitting cycle (40 second cycle)
+        val pmPoCycleTime = demoTimer % 40f
+        if (pmPoCycleTime >= 20f && !pmSitting) {
+            office.assignPMToDesk("desk_5")
+            pmSitting = true
+        } else if (pmPoCycleTime < 20f && pmSitting) {
+            office.getProjectManager()?.clearAssignedDesk()
+            pmSitting = false
+        }
+
+        if (pmPoCycleTime >= 25f && !poSitting) {
+            office.assignPOToDesk("desk_6")
+            poSitting = true
+        } else if (pmPoCycleTime < 20f && poSitting) {
+            office.getProductOwner()?.clearAssignedDesk()
+            poSitting = false
         }
     }
 

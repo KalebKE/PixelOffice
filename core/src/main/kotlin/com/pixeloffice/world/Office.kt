@@ -11,7 +11,8 @@ data class Desk(
     val id: String,
     val x: Float,
     val y: Float,
-    var occupiedBy: String? = null // Developer entity ID
+    var occupiedBy: String? = null,      // Entity ID (any character type)
+    var occupantType: String? = null     // "developer", "project_manager", "product_owner"
 )
 
 /**
@@ -128,6 +129,65 @@ class Office(private val config: Config) {
 
         // Register
         desk.occupiedBy = entityId
+        desk.occupantType = "developer"
+        developers[agentId] = developer
+        developer.start()
+
+        return developer
+    }
+
+    /**
+     * Spawn a new developer for an agent at a specific desk.
+     *
+     * @param agentId The Claude agent ID.
+     * @param deskId The desk ID to assign the developer to.
+     * @param colorVariant Optional color variant (auto-assigned if null).
+     * @return The spawned developer, or null if desk not available.
+     */
+    fun assignDeveloperToDesk(agentId: String, deskId: String, colorVariant: Int? = null): Developer? {
+        // Find the specific desk
+        val desk = getDeskById(deskId) ?: return null
+
+        // Check if desk is available
+        if (!isDeskAvailable(deskId)) return null
+
+        // Assign color variant
+        val variant = colorVariant ?: (developers.size % 4)
+
+        // Find nearest whiteboard
+        val whiteboard = getNearestWhiteboard(desk.x, desk.y)
+
+        // Create developer
+        val entityId = generateEntityId("dev")
+        val developer = Developer(
+            x = desk.x,
+            y = desk.y,
+            entityId = entityId,
+            agentId = agentId,
+            colorVariant = variant,
+            walkSpeed = config.developer.walkSpeed,
+            thinkingDuration = config.developer.thinkingDuration,
+            despairDuration = config.developer.despairDuration
+        )
+
+        // Set up positions
+        developer.setDeskPosition(desk.x, desk.y)
+        whiteboard?.let {
+            developer.setWhiteboardPosition(it.x, it.y, it.id)
+            claimWhiteboard(it.id)
+        }
+        developer.setOffice(this)
+
+        // Set up pathfinder for navigation
+        developer.setPathfinder(pathfinder)
+
+        // Set up effect spawners
+        developer.setGhostSpawner { dev -> spawnGhost(dev) }
+        developer.setBubbleSpawner { dev -> spawnThoughtBubble(dev) }
+
+        // Register
+        desk.occupiedBy = entityId
+        desk.occupantType = "developer"
         developers[agentId] = developer
         developer.start()
 
@@ -143,6 +203,7 @@ class Office(private val config: Config) {
         for (desk in desks.values) {
             if (desk.occupiedBy == developer.entityId) {
                 desk.occupiedBy = null
+                desk.occupantType = null
                 break
             }
         }
@@ -160,6 +221,107 @@ class Office(private val config: Config) {
 
     private fun getAvailableDesk(): Desk? {
         return desks.values.firstOrNull { it.occupiedBy == null }
+    }
+
+    // Desk assignment API
+
+    /**
+     * Get a desk by its ID.
+     */
+    fun getDeskById(deskId: String): Desk? = desks[deskId]
+
+    /**
+     * Check if a desk is available for assignment.
+     */
+    fun isDeskAvailable(deskId: String): Boolean {
+        val desk = desks[deskId] ?: return false
+        return desk.occupiedBy == null
+    }
+
+    /**
+     * Unassign a desk, freeing it for other entities.
+     */
+    fun unassignDesk(deskId: String) {
+        val desk = desks[deskId] ?: return
+        desk.occupiedBy = null
+        desk.occupantType = null
+    }
+
+    /**
+     * Assign the Project Manager to a specific desk.
+     *
+     * @param deskId The desk ID to assign the PM to.
+     * @return The PM, or null if desk not available.
+     */
+    fun assignPMToDesk(deskId: String): ProjectManager? {
+        val desk = getDeskById(deskId) ?: return null
+        if (!isDeskAvailable(deskId)) return null
+
+        // Create or get PM
+        val pm = projectManager ?: ProjectManager(
+            entityId = "pm",
+            patrolSpeed = config.projectManager.patrolSpeed,
+            interruptChance = config.projectManager.interruptChance,
+            interruptDuration = config.projectManager.interruptDuration
+        )
+
+        if (projectManager == null) {
+            projectManager = pm
+            pm.setPathfinder(pathfinder)
+            pm.setBubbleSpawner { manager, bubbleType ->
+                spawnPMThoughtBubble(manager, bubbleType)
+            }
+        }
+
+        // Assign to desk
+        pm.setAssignedDesk(deskId, desk.x, desk.y)
+        pm.x = desk.x
+        pm.y = desk.y
+
+        // Mark desk as occupied
+        desk.occupiedBy = pm.entityId
+        desk.occupantType = "project_manager"
+
+        return pm
+    }
+
+    /**
+     * Assign the Product Owner to a specific desk.
+     *
+     * @param deskId The desk ID to assign the PO to.
+     * @return The PO, or null if desk not available.
+     */
+    fun assignPOToDesk(deskId: String): ProductOwner? {
+        val desk = getDeskById(deskId) ?: return null
+        if (!isDeskAvailable(deskId)) return null
+
+        // Create or get PO
+        val po = productOwner ?: ProductOwner(
+            entityId = "po",
+            walkSpeed = config.productOwner.walkSpeed,
+            questionTimeout = config.productOwner.questionTimeout
+        )
+
+        if (productOwner == null) {
+            productOwner = po
+            po.setPathfinder(pathfinder)
+            po.setBubbleSpawner { owner, bubbleType ->
+                spawnPOThoughtBubble(owner, bubbleType)
+            }
+        }
+
+        // Assign to desk
+        po.setAssignedDesk(deskId, desk.x, desk.y)
+        po.x = desk.x
+        po.y = desk.y
+        po.active = true
+        po.visible = true
+
+        // Mark desk as occupied
+        desk.occupiedBy = po.entityId
+        desk.occupantType = "product_owner"
+
+        return po
     }
 
     private fun getNearestWhiteboard(x: Float, y: Float): Whiteboard? {
@@ -230,7 +392,7 @@ class Office(private val config: Config) {
     private fun spawnPMThoughtBubble(pm: ProjectManager, bubbleType: String): ThoughtBubble {
         val bubble = ThoughtBubble(
             x = pm.x + 8,
-            y = pm.y - 16,
+            y = pm.y - 26,
             entityId = generateEntityId("pm_bubble"),
             bubbleType = bubbleType
         )
@@ -297,7 +459,7 @@ class Office(private val config: Config) {
     private fun spawnPOThoughtBubble(po: ProductOwner, bubbleType: String): ThoughtBubble {
         val bubble = ThoughtBubble(
             x = po.x + 8,
-            y = po.y - 16,
+            y = po.y - 26,
             entityId = generateEntityId("po_bubble"),
             bubbleType = bubbleType
         )
@@ -333,7 +495,7 @@ class Office(private val config: Config) {
     private fun spawnThoughtBubble(developer: Developer): ThoughtBubble {
         val bubble = ThoughtBubble(
             x = developer.x + 8,
-            y = developer.y - 11,
+            y = developer.y - 21,
             entityId = generateEntityId("bubble")
         )
         bubble.show()

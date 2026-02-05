@@ -73,6 +73,9 @@ class Renderer(
     private var lineNetwork: List<NavLine> = emptyList()
     private var debugDevelopers: List<Map<String, Any>> = emptyList()
 
+    // Desk occupancy tracking for dynamic chair positions
+    private var occupiedDesks: Set<String> = emptySet()
+
     // Animation constants
     companion object {
         const val BOB_SPEED = 8.0f
@@ -84,6 +87,12 @@ class Renderer(
 
         // Desk row Y positions (wall positions)
         val DESK_ROW_Y_POSITIONS = listOf(125f, 155f, 185f, 215f)
+
+        // Chair X offsets relative to baseX
+        private const val WEST_CHAIR_PUSHED_BACK = 5f   // Pulled away (occupied)
+        private const val WEST_CHAIR_PUSHED_IN = 14f    // ~6px under left desk edge (unoccupied)
+        private const val EAST_CHAIR_PUSHED_BACK = 60f  // Pulled away (occupied)
+        private const val EAST_CHAIR_PUSHED_IN = 52f    // ~5px under right desk edge (unoccupied)
 
         /**
          * Calculate actual desk positions for character assignment.
@@ -705,6 +714,38 @@ class Renderer(
     }
 
     /**
+     * Draw PM or PO with sitting/standing posture support.
+     */
+    fun drawPMOrPO(
+        worldX: Float,
+        worldY: Float,
+        baseName: String,
+        animation: String,
+        facing: String,
+        entityId: String,
+        posture: String = "standing"
+    ) {
+        // Try to get sitting sprite first if posture is sitting
+        val spriteName = if (posture == "sitting") {
+            "${baseName}_sitting"
+        } else {
+            baseName
+        }
+
+        // Get sprite, fallback to standing if sitting not available
+        val sprite = spriteSheet.getSprite(spriteName) ?: spriteSheet.getSprite(baseName) ?: return
+
+        val anim = sprite.animations[animation] ?: sprite.animations["idle"] ?: return
+        val frame = anim.getFrameAtTime(time)
+
+        val flipX = facing == "left"
+        val isWalking = animation.startsWith("walking")
+        val bobOffset = getBobOffset(entityId, isWalking)
+
+        drawSprite(worldX, worldY, frame, flipX, bobOffset)
+    }
+
+    /**
      * Draw a thought bubble effect (procedural).
      * @param bubbleType Type of bubble: "thinking", "blah", "question", "annoyed"
      */
@@ -1143,12 +1184,14 @@ class Renderer(
                 }
             }
             "project_manager" -> {
-                drawCharacter(
+                val pmPosture = renderInfo["posture"] as? String ?: "standing"
+                drawPMOrPO(
                     x, y,
                     "project_manager",
                     renderInfo["animation"] as? String ?: "idle",
                     renderInfo["facing"] as? String ?: "down",
-                    "pm"
+                    renderInfo["entity_id"] as? String ?: "pm",
+                    pmPosture
                 )
                 // Draw children (thought bubble)
                 @Suppress("UNCHECKED_CAST")
@@ -1158,13 +1201,21 @@ class Renderer(
                 }
             }
             "product_owner" -> {
-                drawCharacter(
+                val poPosture = renderInfo["posture"] as? String ?: "standing"
+                drawPMOrPO(
                     x, y,
                     "product_owner",
                     renderInfo["animation"] as? String ?: "idle",
                     renderInfo["facing"] as? String ?: "down",
-                    renderInfo["entity_id"] as? String ?: "po"
+                    renderInfo["entity_id"] as? String ?: "po",
+                    poPosture
                 )
+                // Draw children (thought bubble)
+                @Suppress("UNCHECKED_CAST")
+                val poChildren = renderInfo["children"] as? List<Map<String, Any>> ?: emptyList()
+                for (child in poChildren) {
+                    drawEntity(child)
+                }
             }
             "thought_bubble" -> {
                 drawThoughtBubble(
@@ -1222,18 +1273,30 @@ class Renderer(
      */
     private fun drawDeskFurniture1(baseX: Float) {
         val wallY = 125f
+        val isLeftColumn = baseX == LEFT_COLUMN_X
+        val westDesk = if (isLeftColumn) "desk_1" else "desk_3"
+        val eastDesk = if (isLeftColumn) "desk_2" else "desk_4"
+
         // Draw notice for left column only (y=131 is between row 1 and row 2)
-        if (baseX == LEFT_COLUMN_X) {
+        if (isLeftColumn) {
             drawNotice(LEFT_COLUMN_X + 60f, 131f)
         }
         drawSmallOrangeArt(baseX + 9f, wallY + 5f)
         drawDeskPartition(baseX + 36f, wallY + 3f)
+
+        // West chair BEFORE left desk (so desk covers chair)
+        val westOffset = if (occupiedDesks.contains(westDesk)) WEST_CHAIR_PUSHED_BACK else WEST_CHAIR_PUSHED_IN
+        drawBlackChairLeft(baseX + westOffset, wallY + 7f)
+
         drawDeskLeft(baseX + 19f, wallY + 11f)
         drawMonitorLeft(baseX + 20f, wallY + 7f)
-        drawBlackChairLeft(baseX + 5f, wallY + 7f)
+
+        // East chair BEFORE right desk (so desk covers chair)
+        val eastOffset = if (occupiedDesks.contains(eastDesk)) EAST_CHAIR_PUSHED_BACK else EAST_CHAIR_PUSHED_IN
+        drawWhiteChairRight(baseX + eastOffset, wallY + 7f)
+
         drawDeskRight(baseX + 40f, wallY + 11f)
         drawComputerRight(baseX + 41f, wallY + 7f)
-        drawWhiteChairRight(baseX + 60f, wallY + 7f)
     }
 
     /**
@@ -1241,17 +1304,28 @@ class Renderer(
      */
     private fun drawDeskFurniture2(baseX: Float, isLeftColumn: Boolean = true) {
         val wallY = 155f
+        val westDesk = if (isLeftColumn) "desk_5" else "desk_7"
+        val eastDesk = if (isLeftColumn) "desk_6" else "desk_8"
+
         if (!isLeftColumn) {
             drawPostItNotes(baseX + 70f, wallY + 5f)
         }
         drawArt(baseX + 7f, wallY + 5f)
         drawDeskPartition(baseX + 36f, wallY + 3f)
+
+        // West chair BEFORE left desk (so desk covers chair)
+        val westOffset = if (occupiedDesks.contains(westDesk)) WEST_CHAIR_PUSHED_BACK else WEST_CHAIR_PUSHED_IN
+        drawGreenChairLeft(baseX + westOffset, wallY + 7f)
+
         drawDeskLeft(baseX + 19f, wallY + 11f)
         drawComputerLeft(baseX + 20f, wallY + 7f)
-        drawGreenChairLeft(baseX + 5f, wallY + 7f)
+
+        // East chair BEFORE right desk (already correct, keep as-is)
+        val eastOffset = if (occupiedDesks.contains(eastDesk)) EAST_CHAIR_PUSHED_BACK else EAST_CHAIR_PUSHED_IN
+        drawBlueChairRight(baseX + eastOffset, wallY + 7f)
+
         drawDeskRight(baseX + 40f, wallY + 11f)
         drawMonitorRight(baseX + 41f, wallY + 7f)
-        drawBlueChairRight(baseX + 52f, wallY + 7f)
     }
 
     /**
@@ -1261,9 +1335,14 @@ class Renderer(
         val wallY = 185f
         drawSmallBlueArt(baseX + 9f, wallY + 5f)
         drawDeskPartition(baseX + 36f, wallY + 3f)
+
+        // West chair BEFORE left desk (so desk covers chair)
+        val westOffset = if (occupiedDesks.contains("desk_9")) WEST_CHAIR_PUSHED_BACK else WEST_CHAIR_PUSHED_IN
+        drawOrangeChairLeft(baseX + westOffset, wallY + 7f)
+
         drawDeskLeft(baseX + 19f, wallY + 11f)
         drawMonitorLeft(baseX + 20f, wallY + 7f)
-        drawOrangeChairLeft(baseX + 5f, wallY + 7f)
+
         drawDeskRight(baseX + 40f, wallY + 11f)
         drawRedBook(baseX + 42f, wallY + 12f)
         drawNotes(baseX + 42f, wallY + 22f)
@@ -1365,6 +1444,11 @@ class Renderer(
         // Store developer data for debug overlay
         @Suppress("UNCHECKED_CAST")
         debugDevelopers = renderData["developers"] as? List<Map<String, Any>> ?: emptyList()
+
+        // Extract occupied desks from render data
+        @Suppress("UNCHECKED_CAST")
+        val desks = renderData["desks"] as? List<Map<String, Any>> ?: emptyList()
+        occupiedDesks = desks.filter { it["occupied"] == true }.mapNotNull { it["id"] as? String }.toSet()
 
         // Start batch for background and tiles
         beginBatch()
