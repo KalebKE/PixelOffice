@@ -34,6 +34,7 @@ class Developer(
 
     // Position references
     private var deskPosition: Pair<Float, Float>? = null
+    private var chairPosition: Pair<Float, Float>? = null
     private var whiteboardPosition: Pair<Float, Float>? = null
     private var assignedWhiteboardId: String? = null
     private var office: Office? = null
@@ -136,10 +137,13 @@ class Developer(
         }
         val posture = if (shouldSit) "sitting" else "standing"
 
+        val renderX = if (posture == "sitting") chairPosition?.first ?: x else x
+        val renderY = if (posture == "sitting") chairPosition?.second ?: y else y
+
         val info = mutableMapOf<String, Any>(
             "type" to "developer",
-            "x" to x,
-            "y" to y,
+            "x" to renderX,
+            "y" to renderY,
             "animation" to currentAnimation,
             "facing" to facingDirection,
             "variant" to spriteVariant,
@@ -187,11 +191,14 @@ class Developer(
             }
         }
 
+        val renderX = if (posture == "sitting") chairPosition?.first ?: x else x
+        val renderY = if (posture == "sitting") chairPosition?.second ?: y else y
+
         return CharacterRenderInfo(
             type = "developer",
             entityId = entityId,
-            x = x,
-            y = y,
+            x = renderX,
+            y = renderY,
             animation = currentAnimation,
             facing = facingDirection,
             variant = spriteVariant,
@@ -209,6 +216,10 @@ class Developer(
     }
 
     fun getDeskPosition(): Pair<Float, Float>? = deskPosition
+
+    fun setChairPosition(x: Float, y: Float) {
+        chairPosition = Pair(x, y)
+    }
 
     fun setWhiteboardPosition(x: Float, y: Float, whiteboardId: String? = null) {
         whiteboardPosition = Pair(x, y)

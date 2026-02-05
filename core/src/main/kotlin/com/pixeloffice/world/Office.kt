@@ -14,6 +14,8 @@ data class Desk(
     val id: String,
     val x: Float,
     val y: Float,
+    val chairX: Float = x,
+    val chairY: Float = y,
     var occupiedBy: String? = null,      // Entity ID (any character type)
     var occupantType: String? = null     // "developer", "project_manager", "product_owner"
 )
@@ -151,6 +153,7 @@ class Office(private val config: Config) {
         )
 
         developer.setDeskPosition(desk.x, desk.y)
+        developer.setChairPosition(desk.chairX, desk.chairY)
         whiteboard?.let {
             developer.setWhiteboardPosition(it.x, it.y, it.id)
             claimWhiteboard(it.id)
@@ -248,7 +251,7 @@ class Office(private val config: Config) {
         }
 
         // Assign to desk
-        pm.setAssignedDesk(deskId, desk.x, desk.y)
+        pm.setAssignedDesk(deskId, desk.x, desk.y, desk.chairX, desk.chairY)
         pm.x = desk.x
         pm.y = desk.y
 
@@ -285,7 +288,7 @@ class Office(private val config: Config) {
         }
 
         // Assign to desk
-        po.setAssignedDesk(deskId, desk.x, desk.y)
+        po.setAssignedDesk(deskId, desk.x, desk.y, desk.chairX, desk.chairY)
         po.x = desk.x
         po.y = desk.y
         po.active = true
@@ -353,13 +356,15 @@ class Office(private val config: Config) {
             row.westDesk?.let {
                 val deskId = column.getDeskId((rowIndex + 1) * 2) // even = west
                 val (x, y) = DeskColumn.getDeskPosition(column.baseX, rowIndex, isLeftDesk = true)
-                desks[deskId] = Desk(id = deskId, x = x, y = y)
+                val (cx, cy) = DeskColumn.getChairPosition(column.baseX, rowIndex, isLeftDesk = true)
+                desks[deskId] = Desk(id = deskId, x = x, y = y, chairX = cx, chairY = cy)
                 registerNamedLocation(deskId, x, y)
             }
             row.eastDesk?.let {
                 val deskId = column.getDeskId((rowIndex + 1) * 2 - 1) // odd = east
                 val (x, y) = DeskColumn.getDeskPosition(column.baseX, rowIndex, isLeftDesk = false)
-                desks[deskId] = Desk(id = deskId, x = x, y = y)
+                val (cx, cy) = DeskColumn.getChairPosition(column.baseX, rowIndex, isLeftDesk = false)
+                desks[deskId] = Desk(id = deskId, x = x, y = y, chairX = cx, chairY = cy)
                 registerNamedLocation(deskId, x, y)
             }
         }
