@@ -2,6 +2,8 @@ package com.pixeloffice.world
 
 import com.pixeloffice.core.Config
 import com.pixeloffice.entities.*
+import com.pixeloffice.rendering.Renderer
+import com.pixeloffice.ui.SettingsConfig
 import kotlin.math.sqrt
 
 /**
@@ -37,6 +39,15 @@ class Office(private val config: Config) {
     private val whiteboards = mutableMapOf<String, Whiteboard>()
     private val occupiedWhiteboards = mutableSetOf<String>()
     private val tileSize = config.office.tileSize
+
+    // Desk columns (data-driven desk configuration)
+    var deskColumn1: DeskColumn? = null
+        private set
+    var deskColumn2: DeskColumn? = null
+        private set
+
+    // Named location registry (maps string names to NavPoints for routing)
+    private val namedLocations = mutableMapOf<String, NavPoint>()
 
     // Entities
     private val developers = mutableMapOf<String, Developer>()
@@ -353,6 +364,271 @@ class Office(private val config: Config) {
         occupiedWhiteboards.remove(whiteboardId)
     }
 
+    // Desk Column management
+
+    /**
+     * Set up desk column 1 (west/left side, baseX = 45f) using the DSL.
+     */
+    fun setupDeskColumn1(init: DeskColumnBuilder.() -> Unit) {
+        deskColumn1 = DeskColumnBuilder("deskColumn1", Renderer.LEFT_COLUMN_X).apply(init).build()
+        registerColumnDesks(deskColumn1!!)
+    }
+
+    /**
+     * Set up desk column 2 (east/right side, baseX = 175f) using the DSL.
+     */
+    fun setupDeskColumn2(init: DeskColumnBuilder.() -> Unit) {
+        deskColumn2 = DeskColumnBuilder("deskColumn2", Renderer.RIGHT_COLUMN_X).apply(init).build()
+        registerColumnDesks(deskColumn2!!)
+    }
+
+    /**
+     * Register desks from a DeskColumn into the desks map for occupancy tracking.
+     * Uses Renderer.getDeskPosition() for accurate coordinates.
+     */
+    private fun registerColumnDesks(column: DeskColumn) {
+        for ((rowIndex, row) in column.rows.withIndex()) {
+            row.westDesk?.let {
+                val deskId = column.getDeskId((rowIndex + 1) * 2) // even = west
+                val (x, y) = Renderer.getDeskPosition(column.baseX, rowIndex, isLeftDesk = true)
+                desks[deskId] = Desk(id = deskId, x = x, y = y)
+                registerNamedLocation(deskId, x, y)
+            }
+            row.eastDesk?.let {
+                val deskId = column.getDeskId((rowIndex + 1) * 2 - 1) // odd = east
+                val (x, y) = Renderer.getDeskPosition(column.baseX, rowIndex, isLeftDesk = false)
+                desks[deskId] = Desk(id = deskId, x = x, y = y)
+                registerNamedLocation(deskId, x, y)
+            }
+        }
+    }
+
+    /**
+     * Set up default desk columns that reproduce the current hardcoded furniture layout.
+     */
+    fun setupDefaultDeskColumns() {
+        setupDeskColumn1 {
+            row(wallY = 125f) {
+                westDesk {
+                    equipment = Equipment.MONITOR
+                    chairColor = ChairColor.BLACK
+                    wallDecor = WallDecor.SMALL_ART_ORANGE
+                }
+                eastDesk {
+                    equipment = Equipment.COMPUTER
+                    chairColor = ChairColor.WHITE
+                }
+            }
+            row(wallY = 155f) {
+                westDesk {
+                    equipment = Equipment.COMPUTER
+                    chairColor = ChairColor.GREEN
+                    wallDecor = WallDecor.ART
+                }
+                eastDesk {
+                    equipment = Equipment.MONITOR
+                    chairColor = ChairColor.BLUE
+                }
+            }
+            row(wallY = 185f) {
+                westDesk {
+                    equipment = Equipment.MONITOR
+                    chairColor = ChairColor.ORANGE
+                    wallDecor = WallDecor.SMALL_ART_BLUE
+                }
+                // East desk has no chair in original layout — desk surface + items
+                // are rendered as standalone decorations by the Renderer
+            }
+        }
+
+        setupDeskColumn2 {
+            row(wallY = 125f) {
+                westDesk {
+                    equipment = Equipment.MONITOR
+                    chairColor = ChairColor.BLACK
+                    wallDecor = WallDecor.SMALL_ART_ORANGE
+                }
+                eastDesk {
+                    equipment = Equipment.COMPUTER
+                    chairColor = ChairColor.WHITE
+                }
+            }
+            row(wallY = 155f) {
+                westDesk {
+                    equipment = Equipment.COMPUTER
+                    chairColor = ChairColor.GREEN
+                    wallDecor = WallDecor.ART
+                }
+                eastDesk {
+                    equipment = Equipment.MONITOR
+                    chairColor = ChairColor.BLUE
+                }
+            }
+            // Row 3 for right column is the lounge area (not a desk row)
+        }
+    }
+
+    /**
+     * Clear all entities and rebuild the office from a SettingsConfig.
+     */
+    fun resetAndApply(settingsConfig: SettingsConfig) {
+        // Clear all developers
+        for (agentId in developers.keys.toList()) {
+            removeDeveloper(agentId)
+        }
+        developers.clear()
+
+        // Clear PM/PO
+        projectManager?.let { pm ->
+            pm.getAssignedDeskId()?.let { unassignDesk(it) }
+        }
+        projectManager = null
+
+        productOwner?.let { po ->
+            po.getAssignedDeskId()?.let { unassignDesk(it) }
+        }
+        productOwner = null
+
+        // Clear effects and occupied whiteboards
+        effects.clear()
+        occupiedWhiteboards.clear()
+
+        // Clear column-registered desks (keep config-based desks)
+        val configDeskIds = config.office.deskPositions.map { it.id }.toSet()
+        desks.keys.retainAll(configDeskIds)
+
+        // Rebuild desk columns from settings
+        setupDeskColumn1 {
+            for (rowSetting in settingsConfig.column1.rows) {
+                row(wallY = rowSetting.wallY) {
+                    rowSetting.westDesk?.let { ds ->
+                        if (ds.enabled) {
+                            westDesk {
+                                equipment = ds.equipment
+                                chairColor = ds.chairColor
+                                wallDecor = ds.wallDecor
+                                deskItems = ds.deskItems
+                            }
+                        }
+                    }
+                    rowSetting.eastDesk?.let { ds ->
+                        if (ds.enabled) {
+                            eastDesk {
+                                equipment = ds.equipment
+                                chairColor = ds.chairColor
+                                wallDecor = ds.wallDecor
+                                deskItems = ds.deskItems
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        setupDeskColumn2 {
+            for (rowSetting in settingsConfig.column2.rows) {
+                row(wallY = rowSetting.wallY) {
+                    rowSetting.westDesk?.let { ds ->
+                        if (ds.enabled) {
+                            westDesk {
+                                equipment = ds.equipment
+                                chairColor = ds.chairColor
+                                wallDecor = ds.wallDecor
+                                deskItems = ds.deskItems
+                            }
+                        }
+                    }
+                    rowSetting.eastDesk?.let { ds ->
+                        if (ds.enabled) {
+                            eastDesk {
+                                equipment = ds.equipment
+                                chairColor = ds.chairColor
+                                wallDecor = ds.wallDecor
+                                deskItems = ds.deskItems
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Spawn developers
+        for (devSetting in settingsConfig.developers) {
+            if (devSetting.agentId.isBlank()) continue
+            if (devSetting.assignedColumnId != null && devSetting.assignedDeskNumber != null) {
+                assignDeveloperToColumnDesk(
+                    devSetting.agentId,
+                    devSetting.assignedColumnId!!,
+                    devSetting.assignedDeskNumber!!,
+                    devSetting.colorVariant
+                )
+            } else {
+                spawnDeveloper(devSetting.agentId, devSetting.colorVariant)
+            }
+        }
+
+        // Spawn PM
+        if (settingsConfig.spawnPM) {
+            if (settingsConfig.pmDeskId != null) {
+                assignPMToDesk(settingsConfig.pmDeskId!!)
+            } else {
+                spawnProjectManager()
+            }
+        }
+
+        // Spawn PO
+        if (settingsConfig.spawnPO) {
+            if (settingsConfig.poDeskId != null) {
+                assignPOToDesk(settingsConfig.poDeskId!!)
+            } else {
+                spawnProductOwnerPatrol()
+            }
+        }
+    }
+
+    // Named location registry
+
+    /**
+     * Register a named location for routing.
+     * Snaps the location to the nearest NavPoint in the line network.
+     */
+    fun registerNamedLocation(name: String, x: Float, y: Float) {
+        val navPoint = lineNetwork.getOrCreateNamedPoint(name, x, y)
+        if (navPoint != null) {
+            namedLocations[name] = navPoint
+        }
+    }
+
+    /**
+     * Get a named location NavPoint for routing.
+     */
+    fun getNamedLocation(name: String): NavPoint? = namedLocations[name]
+
+    /**
+     * Assign a developer to a desk using the column API.
+     *
+     * @param agentId The Claude agent ID.
+     * @param columnId "deskColumn1" or "deskColumn2"
+     * @param deskNumber Desk number within the column (1-6).
+     * @param colorVariant Optional color variant.
+     * @return The spawned developer, or null if desk not available.
+     */
+    fun assignDeveloperToColumnDesk(
+        agentId: String,
+        columnId: String,
+        deskNumber: Int,
+        colorVariant: Int? = null
+    ): Developer? {
+        val column = when (columnId) {
+            "deskColumn1" -> deskColumn1
+            "deskColumn2" -> deskColumn2
+            else -> null
+        } ?: return null
+
+        val deskId = column.getDeskId(deskNumber)
+        return assignDeveloperToDesk(agentId, deskId, colorVariant)
+    }
+
     // PM management
 
     /**
@@ -592,6 +868,14 @@ class Office(private val config: Config) {
                 effect.getRenderInfo()
             }
         )
+
+        // Include desk columns for data-driven rendering
+        val columns = mutableListOf<DeskColumn>()
+        deskColumn1?.let { columns.add(it) }
+        deskColumn2?.let { columns.add(it) }
+        if (columns.isNotEmpty()) {
+            data["deskColumns"] = columns
+        }
 
         projectManager?.let { pm ->
             data["project_manager"] = pm.getRenderInfo()

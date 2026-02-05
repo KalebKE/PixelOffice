@@ -17,6 +17,8 @@ import com.pixeloffice.parsing.DetectedActivity
 import com.pixeloffice.parsing.StreamParser
 import com.pixeloffice.rendering.GameCamera
 import com.pixeloffice.rendering.Renderer
+import com.pixeloffice.ui.SettingsConfig
+import com.pixeloffice.ui.SettingsOverlay
 import com.pixeloffice.world.Office
 
 /**
@@ -63,6 +65,11 @@ class PixelOfficeGame : ApplicationAdapter() {
     private var pmSitting = false
     private var poSitting = false
 
+    // Settings overlay
+    private lateinit var settingsOverlay: SettingsOverlay
+    private var settingsOpen = false
+    private var settingsConfig = SettingsConfig.fromDefaults()
+
     // Touch input
     private var lastTouchX = 0f
     private var lastTouchY = 0f
@@ -90,6 +97,7 @@ class PixelOfficeGame : ApplicationAdapter() {
 
         // Initialize world
         office = Office(config)
+        office.setupDefaultDeskColumns()
 
         // Initialize rendering
         renderer = Renderer(
@@ -109,6 +117,12 @@ class PixelOfficeGame : ApplicationAdapter() {
             config.display.height
         )
         renderer.setCamera(camera)
+
+        // Settings overlay
+        settingsOverlay = SettingsOverlay(
+            onApply = { cfg -> applySettings(cfg) },
+            onClose = { toggleSettings() }
+        )
 
         // Demo mode
         demoMode = config.demo.enabled
@@ -144,6 +158,15 @@ class PixelOfficeGame : ApplicationAdapter() {
             }
 
             override fun tap(x: Float, y: Float, count: Int, button: Int): Boolean {
+                // Check for settings button click (top-right area)
+                // The button is drawn at (width-75, height-4) in screen coords
+                // Tap coords: x is from left, y is from top (Gdx.input style)
+                val screenWidth = config.display.width
+                if (x >= screenWidth - 80f && y <= 20f && !settingsOpen) {
+                    toggleSettings()
+                    return true
+                }
+
                 // Double-tap to toggle debug
                 if (count == 2) {
                     renderer.toggleDebug()
@@ -277,9 +300,23 @@ class PixelOfficeGame : ApplicationAdapter() {
         // Get render data from office
         val renderData = office.getRenderData()
         renderer.drawScene(renderData)
+
+        // Draw settings overlay on top
+        if (settingsOpen) {
+            settingsOverlay.render()
+        }
     }
 
     private fun handleInput() {
+        // Settings overlay intercepts ESC
+        if (settingsOpen) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+                settingsOverlay.close()
+                toggleSettings()
+            }
+            return
+        }
+
         // Quit
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) ||
             Gdx.input.isKeyJustPressed(Input.Keys.Q)) {
@@ -454,10 +491,29 @@ class PixelOfficeGame : ApplicationAdapter() {
         }
     }
 
+    private fun toggleSettings() {
+        settingsOpen = !settingsOpen
+        if (settingsOpen) {
+            settingsOverlay.open(settingsConfig)
+            Gdx.input.inputProcessor = settingsOverlay.getInputProcessor()
+        } else {
+            // Restore game input
+            setupTouchInput()
+        }
+    }
+
+    private fun applySettings(cfg: SettingsConfig) {
+        settingsConfig = cfg.copy()
+        office.resetAndApply(cfg)
+        demoInitialized = true
+        renderer.setLineNetwork(office.getLineNetwork().getAllLines())
+    }
+
     override fun dispose() {
         // Stop network receiver
         receiver.stop()
 
+        settingsOverlay.dispose()
         renderer.dispose()
         eventBus.clear()
         Gdx.app.log("PixelOffice", "Game disposed")

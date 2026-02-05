@@ -120,9 +120,9 @@ class LineNetwork(private val config: Config) {
             val leftDesks = rowDesks.filter { it.x < centerAisleX }.sortedBy { it.x }
             val rightDesks = rowDesks.filter { it.x >= centerAisleX }.sortedByDescending { it.x }
 
-            // Left column: leftmost connects left (top-left), others connect right (top-right)
-            for ((index, desk) in leftDesks.withIndex()) {
-                val deskX = if (index == 0) desk.x.toFloat() else desk.x.toFloat() + deskWidth
+            // Left column: all desks offset by deskWidth to reach chair position
+            for (desk in leftDesks) {
+                val deskX = desk.x.toFloat() + deskWidth
                 addPoint(NavPoint(deskX, desk.y.toFloat(), desk.id))
             }
 
@@ -377,4 +377,18 @@ class LineNetwork(private val config: Config) {
      * Get a point by ID.
      */
     fun getPoint(id: String): NavPoint? = points[id]
+
+    /**
+     * Get or create a named navigation point.
+     * If a point with the given name already exists, returns it.
+     * Otherwise, finds the nearest existing point and returns it
+     * (the name is used as a logical alias, the physical point is the nearest one).
+     */
+    fun getOrCreateNamedPoint(name: String, x: Float, y: Float): NavPoint? {
+        // Check if point already exists by name
+        points[name]?.let { return it }
+
+        // Find nearest existing point to snap to
+        return findNearestPoint(x, y)
+    }
 }
