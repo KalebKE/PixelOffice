@@ -149,9 +149,9 @@ class LineNetwork(private val config: Config) {
             val leftDesks = rowDesks.filter { it.x < centerAisleX }.sortedBy { it.x }
             val rightDesks = rowDesks.filter { it.x >= centerAisleX }.sortedByDescending { it.x }
 
-            // Left column: all desks offset by deskWidth to reach chair position
-            for (desk in leftDesks) {
-                val deskX = desk.x + deskWidth
+            // Left column: leftmost connects to left aisle (west edge), others to center aisle (east edge)
+            for ((index, desk) in leftDesks.withIndex()) {
+                val deskX = if (index == 0) desk.x else desk.x + deskWidth
                 addPoint(NavPoint(deskX, desk.y, desk.id))
             }
 

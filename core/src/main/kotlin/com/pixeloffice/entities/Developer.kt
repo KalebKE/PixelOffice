@@ -133,7 +133,9 @@ class Developer(
             // Normal logic: sit when at desk and in appropriate state
             isAtDesk() &&
             (stateMachine.currentStateName == DeveloperStateNames.IDLE ||
-             stateMachine.currentStateName == DeveloperStateNames.WRITING_CODE)
+             stateMachine.currentStateName == DeveloperStateNames.WRITING_CODE ||
+             stateMachine.currentStateName == DeveloperStateNames.BEING_INTERRUPTED ||
+             stateMachine.currentStateName == DeveloperStateNames.TESTS_FAILING)
         }
         val posture = if (shouldSit) "sitting" else "standing"
 
@@ -177,7 +179,9 @@ class Developer(
         } else {
             isAtDesk() &&
             (stateMachine.currentStateName == DeveloperStateNames.IDLE ||
-             stateMachine.currentStateName == DeveloperStateNames.WRITING_CODE)
+             stateMachine.currentStateName == DeveloperStateNames.WRITING_CODE ||
+             stateMachine.currentStateName == DeveloperStateNames.BEING_INTERRUPTED ||
+             stateMachine.currentStateName == DeveloperStateNames.TESTS_FAILING)
         }
         val posture = if (shouldSit) "sitting" else "standing"
 
