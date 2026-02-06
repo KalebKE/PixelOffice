@@ -67,11 +67,19 @@ class Renderer(
 
     // UI state
     private var showDebug = false
+
+    private enum class LabelMode { OFF, CHARACTERS, DESKS, ROUTES, FURNITURE }
+    private var labelMode = LabelMode.OFF
     private var connectionStatus = "Disconnected"
     private var fps = 0
     private var walkableZones: List<WalkableZone> = emptyList()
     private var lineNetwork: List<NavLine> = emptyList()
     private var debugDevelopers: List<CharacterRenderInfo> = emptyList()
+    private var debugPM: CharacterRenderInfo? = null
+    private var debugPO: CharacterRenderInfo? = null
+
+    // Furniture label recording for debug overlay
+    private val furnitureLabels = mutableListOf<Triple<String, Float, Float>>()
 
     // Desk occupancy tracking for dynamic chair positions
     private var occupiedDesks: Set<String> = emptySet()
@@ -296,6 +304,9 @@ class Renderer(
      * @param flipX If true, draws the sprite mirrored horizontally.
      */
     fun drawFurniture(name: String, worldX: Float, worldY: Float, flipX: Boolean = false) {
+        if (labelMode == LabelMode.FURNITURE) {
+            furnitureLabels.add(Triple(name, worldX, worldY))
+        }
         val frame = spriteSheet.getFurnitureFrame(name) ?: return
         val screenY = flipY(worldY, frame.height)
         if (flipX) {
@@ -757,6 +768,12 @@ class Renderer(
             }
         }
 
+        // Show labels status independently of debug HUD
+        if (labelMode != LabelMode.OFF) {
+            font.color = Colors.ORANGE
+            font.draw(batch, "[F4] ${labelMode.name}", width - 120f, height - 18f)
+        }
+
         batch.end()
     }
 
@@ -803,6 +820,11 @@ class Renderer(
         showDebug = !showDebug
     }
 
+    fun cycleLabels() {
+        val modes = LabelMode.entries
+        labelMode = modes[(labelMode.ordinal + 1) % modes.size]
+    }
+
     fun setWalkableZones(zones: List<WalkableZone>) {
         walkableZones = zones
     }
@@ -816,7 +838,8 @@ class Renderer(
      * Shows navigation lines in red with small circles at intersection points.
      */
     private fun drawLineNetwork() {
-        if (!showDebug || lineNetwork.isEmpty()) return
+        if (lineNetwork.isEmpty()) return
+        if (!showDebug && labelMode != LabelMode.ROUTES) return
 
         beginShapes(ShapeRenderer.ShapeType.Line)
         shapeRenderer.color = Colors.RED
@@ -1243,8 +1266,12 @@ class Renderer(
      * but on top of other furniture.
      */
     fun drawScene(renderData: RenderData) {
-        // Store developer data for debug overlay
+        furnitureLabels.clear()
+
+        // Store character data for debug overlay / labels
         debugDevelopers = renderData.developers
+        debugPM = renderData.projectManager
+        debugPO = renderData.productOwner
 
         // Extract occupied desks from render data
         occupiedDesks = renderData.desks.filter { it.occupied }.map { it.id }.toSet()
@@ -1330,9 +1357,139 @@ class Renderer(
         // Draw debug overlays
         drawWalkableZones()
         drawLineNetwork()
+        drawDebugLabels()
 
         // Draw UI overlay
         drawUIOverlay()
+    }
+
+    // ==================== Debug Labels ====================
+
+    /**
+     * Draw a single label at a world position with a semi-transparent background.
+     * @param text The label text.
+     * @param worldX X position in world coordinates.
+     * @param worldY Y position in world coordinates (Y-down).
+     * @param color Text color.
+     */
+    private fun drawLabel(text: String, worldX: Float, worldY: Float, color: Color) {
+        val screenY = flipY(worldY, 0)
+
+        // Measure text width at current scale
+        val glyphLayout = com.badlogic.gdx.graphics.g2d.GlyphLayout(font, text)
+        val textWidth = glyphLayout.width
+        val textHeight = glyphLayout.height
+        val pad = 2f
+
+        // Draw background rectangle
+        endBatch()
+        Gdx.gl.glEnable(GL20.GL_BLEND)
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
+        beginShapes(ShapeRenderer.ShapeType.Filled)
+        shapeRenderer.color = Color(0f, 0f, 0f, 0.6f)
+        shapeRenderer.rect(worldX - pad, screenY - textHeight - pad, textWidth + pad * 2, textHeight + pad * 2)
+        endShapes()
+        Gdx.gl.glDisable(GL20.GL_BLEND)
+
+        // Draw text
+        beginBatch()
+        font.color = color
+        font.draw(batch, text, worldX, screenY)
+    }
+
+    private fun abbreviateNavId(id: String): String = when {
+        id.startsWith("wb_corridor_") -> "w${id.last()}"
+        id.startsWith("white_board_") -> "W${id.last()}"
+        id.startsWith("corridor_") -> "c${id.removePrefix("corridor_").first().uppercase()}"
+        id.startsWith("left_aisle_y") -> "L${id.removePrefix("left_aisle_y").takeLast(2)}"
+        id.startsWith("center_aisle_y") -> "C${id.removePrefix("center_aisle_y").takeLast(2)}"
+        id.startsWith("right_aisle_y") -> "R${id.removePrefix("right_aisle_y").takeLast(2)}"
+        id == "left_aisle_bottom" -> "Lb"
+        id == "center_aisle_bottom" -> "Cb"
+        id == "right_aisle_bottom" -> "Rb"
+        id == "bottom_corridor_center" -> "bc"
+        id == "bottom_corridor_right" -> "br"
+        id.startsWith("deskColumn") -> "dC${id[10]}_d${id.substringAfterLast("desk")}"
+        id.startsWith("desk_") -> "d${id.removePrefix("desk_")}"
+        else -> id
+    }
+
+    /**
+     * Draw debug labels for the active label mode.
+     * Cycles through categories with F4, independent of F1 debug HUD.
+     */
+    private fun drawDebugLabels() {
+        if (labelMode == LabelMode.OFF) return
+
+        // Set font to small scale for labels
+        font.data.setScale(0.5f)
+
+        beginBatch()
+
+        when (labelMode) {
+            LabelMode.CHARACTERS -> {
+                for (dev in debugDevelopers) {
+                    if (!dev.visible) continue
+                    val color = when (dev.variant) {
+                        0 -> Colors.SKY_BLUE
+                        1 -> Colors.GREEN
+                        2 -> Colors.RED
+                        else -> Colors.GREEN
+                    }
+                    drawLabel(dev.entityId, dev.x, dev.y - 10f, color)
+                }
+                debugPM?.let {
+                    if (it.visible) drawLabel(it.entityId, it.x, it.y - 10f, Colors.GREEN)
+                }
+                debugPO?.let {
+                    if (it.visible) drawLabel(it.entityId, it.x, it.y - 10f, Colors.GREEN)
+                }
+            }
+            LabelMode.DESKS -> {
+                for (column in deskColumns) {
+                    val firstRowY = column.rows.firstOrNull()?.wallY ?: 125f
+                    drawLabel(column.id, column.baseX + 40f, firstRowY - 15f, Colors.ORANGE)
+                }
+                for (column in deskColumns) {
+                    for ((rowIndex, row) in column.rows.withIndex()) {
+                        row.westDesk?.let {
+                            val deskNumber = (rowIndex + 1) * 2
+                            val (dx, dy) = DeskColumn.getDeskPosition(column.baseX, rowIndex, isLeftDesk = true)
+                            drawLabel("D$deskNumber", dx, dy, Colors.WHITE)
+                        }
+                        row.eastDesk?.let {
+                            val deskNumber = (rowIndex + 1) * 2 - 1
+                            val (dx, dy) = DeskColumn.getDeskPosition(column.baseX, rowIndex, isLeftDesk = false)
+                            drawLabel("D$deskNumber", dx, dy, Colors.WHITE)
+                        }
+                    }
+                }
+            }
+            LabelMode.ROUTES -> {
+                val drawnPoints = mutableSetOf<String>()
+                for (line in lineNetwork) {
+                    if (line.from.id !in drawnPoints) {
+                        drawLabel(abbreviateNavId(line.from.id), line.from.x, line.from.y, Colors.RED)
+                        drawnPoints.add(line.from.id)
+                    }
+                    if (line.to.id !in drawnPoints) {
+                        drawLabel(abbreviateNavId(line.to.id), line.to.x, line.to.y, Colors.RED)
+                        drawnPoints.add(line.to.id)
+                    }
+                }
+            }
+            LabelMode.FURNITURE -> {
+                for ((name, wx, wy) in furnitureLabels) {
+                    drawLabel(name, wx, wy, Colors.PEACH)
+                }
+            }
+            LabelMode.OFF -> { /* unreachable */ }
+        }
+
+        endBatch()
+
+        // Restore font scale
+        font.data.setScale(1f)
     }
 
     /**

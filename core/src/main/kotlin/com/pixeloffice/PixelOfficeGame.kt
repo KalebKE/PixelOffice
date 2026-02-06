@@ -336,6 +336,11 @@ class PixelOfficeGame : ApplicationAdapter() {
             Gdx.app.log("Debug", "Force sitting mode: $forceSittingMode")
         }
 
+        // Cycle label mode (F4)
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F4)) {
+            renderer.cycleLabels()
+        }
+
         // Camera controls
         val cameraSpeed = 100f * Gdx.graphics.deltaTime
 

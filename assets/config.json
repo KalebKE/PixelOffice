@@ -35,7 +35,7 @@
       {"id": "top_corridor", "x": 0, "y": 104, "w": 320, "h": 21},
       {"id": "left_aisle", "x": 0, "y": 104, "w": 44, "h": 136},
       {"id": "center_aisle", "x": 124, "y": 104, "w": 51, "h": 136},
-      {"id": "right_aisle", "x": 254, "y": 104, "w": 66, "h": 136},
+      {"id": "right_aisle", "x": 255, "y": 104, "w": 44, "h": 136},
       {"id": "bottom_right_corridor", "x": 175, "y": 210, "w": 145, "h": 30},
       {"id": "left_desk_row_1", "x": 44, "y": 136, "w": 80, "h": 19},
       {"id": "left_desk_row_2", "x": 44, "y": 166, "w": 80, "h": 19},
