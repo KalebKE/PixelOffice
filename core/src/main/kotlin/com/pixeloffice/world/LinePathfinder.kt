@@ -69,6 +69,11 @@ class LinePathfinder(private val lineNetwork: LineNetwork) : Pathfinder {
         return result
     }
 
+    override fun getDeskMidpoint(deskId: String): Pair<Float, Float>? {
+        val point = lineNetwork.getDeskMidpoint(deskId)
+        return point?.let { Pair(it.x, it.y) }
+    }
+
     /**
      * Get the line network (for debug rendering).
      */

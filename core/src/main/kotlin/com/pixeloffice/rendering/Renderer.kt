@@ -1409,6 +1409,7 @@ class Renderer(
         id == "right_aisle_bottom" -> "Rb"
         id == "bottom_corridor_center" -> "bc"
         id == "bottom_corridor_right" -> "br"
+        id.startsWith("mid_deskColumn") -> "m${id[14]}_d${id.substringAfterLast("desk")}"
         id.startsWith("deskColumn") -> "dC${id[10]}_d${id.substringAfterLast("desk")}"
         id.startsWith("desk_") -> "d${id.removePrefix("desk_")}"
         else -> id

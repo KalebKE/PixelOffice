@@ -53,6 +53,11 @@ class ProductOwner(
     private val patrolSpeed = 15f
     private val patrolWaitDuration = 2f
 
+    // Sit-patrol-return cycle
+    var sitDuration = 0f  // 0 = sit forever (default)
+    private var sitTimer = 0f
+    private var returningToDesk = false
+
     // Bubble support
     private var thoughtBubble: ThoughtBubble? = null
     private var showBubble = false
@@ -160,8 +165,14 @@ class ProductOwner(
             "question_leaving" -> updateQuestionLeaving(dt)
             "chatting" -> updateChatting(dt)
             "sitting" -> {
-                // Stay at assigned desk, do nothing
                 setAnimation("idle")
+                if (sitDuration > 0f) {
+                    sitTimer += dt
+                    if (sitTimer >= sitDuration) {
+                        sitTimer = 0f
+                        beginPatrol()
+                    }
+                }
             }
         }
 
@@ -176,6 +187,10 @@ class ProductOwner(
 
     private fun pickNextDesk() {
         if (remainingDesks.isEmpty()) {
+            if (assignedDeskId != null) {
+                returnToAssignedDesk()
+                return
+            }
             remainingDesks = deskTargets.toMutableList().also { it.shuffle() }
         }
         if (remainingDesks.isEmpty()) {
@@ -185,8 +200,10 @@ class ProductOwner(
 
         val nextDesk = remainingDesks.removeAt(0)
         currentDeskId = nextDesk.first
-        val deskX = nextDesk.second - 20f
-        val deskY = nextDesk.third
+        // Stand at the midpoint between aisle and desk
+        val midpoint = pathfinder?.getDeskMidpoint(nextDesk.first)
+        val deskX = midpoint?.first ?: (nextDesk.second - 20f)
+        val deskY = midpoint?.second ?: nextDesk.third
 
         currentPath = pathfinder?.calculatePath(x, y, deskX, deskY)?.toMutableList()
             ?: mutableListOf(Pair(deskX, deskY))
@@ -213,6 +230,14 @@ class ProductOwner(
     }
 
     private fun arriveAtDesk() {
+        if (returningToDesk) {
+            assignedDeskPosition?.let { (dx, dy) -> x = dx; y = dy }
+            returningToDesk = false
+            state = "sitting"
+            setAnimation("idle")
+            return
+        }
+
         state = "at_desk"
         setAnimation("idle")
 
@@ -234,6 +259,35 @@ class ProductOwner(
             hideThoughtBubble()
             pickNextDesk()
         }
+    }
+
+    private fun beginPatrol() {
+        remainingDesks = deskTargets
+            .filter { it.first != assignedDeskId }
+            .toMutableList()
+            .also { it.shuffle() }
+        returningToDesk = false
+        if (remainingDesks.isNotEmpty()) {
+            pickNextDesk()
+        }
+    }
+
+    private fun returnToAssignedDesk() {
+        val deskPos = assignedDeskPosition ?: return
+        returningToDesk = true
+        currentDeskId = assignedDeskId
+        val pf = pathfinder
+        currentPath = if (pf != null) {
+            pf.calculatePath(x, y, deskPos.first, deskPos.second).toMutableList()
+        } else {
+            mutableListOf(Pair(deskPos.first, deskPos.second))
+        }
+        currentPathIndex = 0
+        state = "walking_to_desk"
+    }
+
+    fun setSitTimerStart(startValue: Float) {
+        sitTimer = startValue
     }
 
     private fun findDeveloperAtCurrentDesk(): Developer? {
