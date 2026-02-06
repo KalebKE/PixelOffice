@@ -43,6 +43,11 @@ class ProjectManager(
     private var chatCooldown = 0f
     private val chatCooldownDuration = 1f  // 1 second cooldown after chat
 
+    // Sit-patrol-return cycle
+    var sitDuration = 0f  // 0 = sit forever (default)
+    private var sitTimer = 0f
+    private var returningToDesk = false
+
     // Bubble support
     private var thoughtBubble: ThoughtBubble? = null
     private var showBubble = false
@@ -58,10 +63,10 @@ class ProjectManager(
         pathfinder = pf
     }
 
-    fun setDeskTargets(desks: List<Triple<String, Float, Float>>) {
+    fun setDeskTargets(desks: List<Triple<String, Float, Float>>, startPatrol: Boolean = true) {
         deskTargets = desks.toMutableList()
         remainingDesks = desks.toMutableList().also { it.shuffle() }
-        if (remainingDesks.isNotEmpty()) {
+        if (startPatrol && remainingDesks.isNotEmpty()) {
             pickNextDesk()
         }
     }
@@ -94,8 +99,14 @@ class ProjectManager(
             "waiting" -> updateWaiting(dt)
             "chatting" -> updateChatting(dt)
             "sitting" -> {
-                // Stay at assigned desk, do nothing
                 setAnimation("idle")
+                if (sitDuration > 0f) {
+                    sitTimer += dt
+                    if (sitTimer >= sitDuration) {
+                        sitTimer = 0f
+                        beginPatrol()
+                    }
+                }
             }
         }
 
@@ -127,6 +138,14 @@ class ProjectManager(
     }
 
     private fun arriveAtDesk() {
+        if (returningToDesk) {
+            assignedDeskPosition?.let { (dx, dy) -> x = dx; y = dy }
+            returningToDesk = false
+            state = "sitting"
+            setAnimation("idle")
+            return
+        }
+
         state = "at_desk"
         setAnimation("idle")
 
@@ -170,8 +189,12 @@ class ProjectManager(
     }
 
     private fun pickNextDesk() {
-        // If we've visited all desks, reshuffle and start over
+        // If we've visited all desks, return to assigned desk or reshuffle
         if (remainingDesks.isEmpty()) {
+            if (assignedDeskId != null) {
+                returnToAssignedDesk()
+                return
+            }
             remainingDesks = deskTargets.toMutableList().also { it.shuffle() }
         }
 
@@ -184,9 +207,10 @@ class ProjectManager(
         val nextDesk = remainingDesks.removeAt(0)
         currentDeskId = nextDesk.first
 
-        // Calculate path to desk (stand to the left of the desk)
-        val deskX = nextDesk.second - 20f  // Stand 20 pixels to the left
-        val deskY = nextDesk.third
+        // Stand at the midpoint between aisle and desk
+        val midpoint = pathfinder?.getDeskMidpoint(nextDesk.first)
+        val deskX = midpoint?.first ?: (nextDesk.second - 20f)
+        val deskY = midpoint?.second ?: nextDesk.third
 
         val pf = pathfinder
         currentPath = if (pf != null) {
@@ -196,6 +220,35 @@ class ProjectManager(
         }
         currentPathIndex = 0
         state = "walking_to_desk"
+    }
+
+    private fun beginPatrol() {
+        remainingDesks = deskTargets
+            .filter { it.first != assignedDeskId }
+            .toMutableList()
+            .also { it.shuffle() }
+        returningToDesk = false
+        if (remainingDesks.isNotEmpty()) {
+            pickNextDesk()
+        }
+    }
+
+    private fun returnToAssignedDesk() {
+        val deskPos = assignedDeskPosition ?: return
+        returningToDesk = true
+        currentDeskId = assignedDeskId
+        val pf = pathfinder
+        currentPath = if (pf != null) {
+            pf.calculatePath(x, y, deskPos.first, deskPos.second).toMutableList()
+        } else {
+            mutableListOf(Pair(deskPos.first, deskPos.second))
+        }
+        currentPathIndex = 0
+        state = "walking_to_desk"
+    }
+
+    fun setSitTimerStart(startValue: Float) {
+        sitTimer = startValue
     }
 
     private fun findDeveloperAtCurrentDesk(): Developer? {

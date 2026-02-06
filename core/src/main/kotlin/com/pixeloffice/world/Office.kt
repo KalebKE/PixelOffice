@@ -200,6 +200,13 @@ class Office(private val config: Config) {
         return desks.values.firstOrNull { it.occupiedBy == null }
     }
 
+    /**
+     * Get the next available (unoccupied) desk ID.
+     */
+    fun getNextAvailableDeskId(): String? {
+        return desks.values.firstOrNull { it.occupiedBy == null }?.id
+    }
+
     // Desk assignment API
 
     /**
@@ -259,6 +266,11 @@ class Office(private val config: Config) {
         desk.occupiedBy = pm.entityId
         desk.occupantType = "project_manager"
 
+        // Set desk targets for patrol and developer references
+        val deskList = desks.values.map { d -> Triple(d.id, d.x, d.y) }
+        pm.setDeskTargets(deskList, startPatrol = false)
+        pm.setDevelopers(developers.values.toList())
+
         return pm
     }
 
@@ -297,6 +309,11 @@ class Office(private val config: Config) {
         // Mark desk as occupied
         desk.occupiedBy = po.entityId
         desk.occupantType = "product_owner"
+
+        // Set desk targets for patrol and developer references
+        val deskList = desks.values.map { d -> Triple(d.id, d.x, d.y) }
+        po.setDeskTargets(deskList)
+        po.setDevelopers(developers.values.toList())
 
         return po
     }

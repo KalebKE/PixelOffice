@@ -15,4 +15,10 @@ interface Pathfinder {
      * @return List of waypoints (x, y pairs) to follow, including final destination
      */
     fun calculatePath(startX: Float, startY: Float, endX: Float, endY: Float): List<Pair<Float, Float>>
+
+    /**
+     * Get the midpoint position for a desk (between aisle and desk).
+     * Used by PM/PO to stop at the midpoint when visiting desks they don't own.
+     */
+    fun getDeskMidpoint(deskId: String): Pair<Float, Float>? = null
 }

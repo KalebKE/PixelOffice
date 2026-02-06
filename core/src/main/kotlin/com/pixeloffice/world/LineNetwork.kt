@@ -34,6 +34,7 @@ class LineNetwork(private val config: Config) {
     private val points = mutableMapOf<String, NavPoint>()
     private val lines = mutableListOf<NavLine>()
     private val adjacency = mutableMapOf<String, MutableList<String>>()
+    private val deskMidpoints = mutableMapOf<String, NavPoint>()  // deskId → midpoint NavPoint
 
     // Desk positions for navigation (can be overridden programmatically)
     private var deskPositions: List<DeskNavPosition> =
@@ -66,6 +67,7 @@ class LineNetwork(private val config: Config) {
         points.clear()
         lines.clear()
         adjacency.clear()
+        deskMidpoints.clear()
         buildNetwork()
     }
 
@@ -219,18 +221,18 @@ class LineNetwork(private val config: Config) {
             // Left side: leftmost desk → left aisle, others → center aisle
             for ((index, desk) in leftDesks.withIndex()) {
                 if (index == 0) {
-                    addLine("left_aisle_y$rowY", desk.id)
+                    connectDeskToAisle("left_aisle_y$rowY", desk.id)
                 } else {
-                    addLine("center_aisle_y$rowY", desk.id)
+                    connectDeskToAisle("center_aisle_y$rowY", desk.id)
                 }
             }
 
             // Right side: rightmost desk → right aisle (if exists), others → center aisle
             for ((index, desk) in rightDesks.sortedByDescending { it.x }.withIndex()) {
                 if (index == 0 && points.containsKey("right_aisle_y$rowY")) {
-                    addLine("right_aisle_y$rowY", desk.id)
+                    connectDeskToAisle("right_aisle_y$rowY", desk.id)
                 } else {
-                    addLine("center_aisle_y$rowY", desk.id)
+                    connectDeskToAisle("center_aisle_y$rowY", desk.id)
                 }
             }
         }
@@ -279,6 +281,27 @@ class LineNetwork(private val config: Config) {
             }
         }
     }
+
+    /**
+     * Connect a desk to an aisle point via a midpoint.
+     * Splits the direct aisle→desk line into aisle→mid→desk.
+     */
+    private fun connectDeskToAisle(aislePointId: String, deskId: String) {
+        val aislePoint = points[aislePointId] ?: return
+        val deskPoint = points[deskId] ?: return
+        val midX = (aislePoint.x + deskPoint.x) / 2f
+        val midY = aislePoint.y  // same Y — horizontal line
+        val midId = "mid_$deskId"
+        addPoint(NavPoint(midX, midY, midId))
+        deskMidpoints[deskId] = points[midId]!!
+        addLine(aislePointId, midId)
+        addLine(midId, deskId)
+    }
+
+    /**
+     * Get the midpoint NavPoint for a desk (between aisle and desk).
+     */
+    fun getDeskMidpoint(deskId: String): NavPoint? = deskMidpoints[deskId]
 
     /**
      * Build adjacency graph from lines.

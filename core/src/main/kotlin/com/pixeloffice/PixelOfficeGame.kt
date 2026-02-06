@@ -32,7 +32,6 @@ class PixelOfficeGame : ApplicationAdapter() {
     companion object {
         var forceSittingMode = false
         private const val DEMO_CYCLE_DURATION = 20f
-        private const val PM_PO_CYCLE_DURATION = 40f
     }
 
     // Configuration
@@ -64,8 +63,6 @@ class PixelOfficeGame : ApplicationAdapter() {
     private var demoTimer = 0f
     private var demoInitialized = false
     private var demoPrevState = ""
-    private var pmSitting = false
-    private var poSitting = false
 
     // Settings overlay
     private lateinit var settingsOverlay: SettingsOverlay
@@ -403,7 +400,8 @@ class PixelOfficeGame : ApplicationAdapter() {
                 if (pm?.getAssignedDeskId() != null) {
                     pm.clearAssignedDesk()
                 } else {
-                    office.assignPMToDesk("desk_5")
+                    val deskId = office.getNextAvailableDeskId()
+                    if (deskId != null) office.assignPMToDesk(deskId)
                 }
             }
             if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_8)) {
@@ -412,7 +410,8 @@ class PixelOfficeGame : ApplicationAdapter() {
                 if (po?.getAssignedDeskId() != null) {
                     po.clearAssignedDesk()
                 } else {
-                    office.assignPOToDesk("desk_6")
+                    val deskId = office.getNextAvailableDeskId()
+                    if (deskId != null) office.assignPOToDesk(deskId)
                 }
             }
         }
@@ -424,16 +423,24 @@ class PixelOfficeGame : ApplicationAdapter() {
         // Initialize demo on first frame
         if (!demoInitialized && demoTimer > 0.1f) {
             demoInitialized = true
-            // Spawn first developer (blue variant at desk_1)
             office.spawnDeveloper("demo_agent_1", colorVariant = 0)
-            // Spawn second developer (green/glasses variant at desk_2)
             office.spawnDeveloper("demo_agent_2", colorVariant = 1)
-            // Spawn third developer (red/cool_hair variant at desk_3)
             office.spawnDeveloper("demo_agent_3", colorVariant = 2)
-            // Spawn project manager
-            office.spawnProjectManager()
-            // Spawn product owner for patrol
-            office.spawnProductOwnerPatrol()
+
+            // Assign PM to available desk with 15s sit-patrol cycle
+            val pmDeskId = office.getNextAvailableDeskId()
+            if (pmDeskId != null) {
+                val pm = office.assignPMToDesk(pmDeskId)
+                pm?.sitDuration = 15f
+            }
+
+            // Assign PO to available desk (staggered — first sit is 22.5s)
+            val poDeskId = office.getNextAvailableDeskId()
+            if (poDeskId != null) {
+                val po = office.assignPOToDesk(poDeskId)
+                po?.sitDuration = 15f
+                po?.setSitTimerStart(-7.5f)
+            }
         }
 
         // Cycle through states for all developers
@@ -479,23 +486,6 @@ class PixelOfficeGame : ApplicationAdapter() {
             }
         }
 
-        // PM/PO sitting cycle (40 second cycle)
-        val pmPoCycleTime = demoTimer % PM_PO_CYCLE_DURATION
-        if (pmPoCycleTime >= DEMO_CYCLE_DURATION && !pmSitting) {
-            office.assignPMToDesk("desk_5")
-            pmSitting = true
-        } else if (pmPoCycleTime < DEMO_CYCLE_DURATION && pmSitting) {
-            office.getProjectManager()?.clearAssignedDesk()
-            pmSitting = false
-        }
-
-        if (pmPoCycleTime >= 25f && !poSitting) {
-            office.assignPOToDesk("desk_6")
-            poSitting = true
-        } else if (pmPoCycleTime < DEMO_CYCLE_DURATION && poSitting) {
-            office.getProductOwner()?.clearAssignedDesk()
-            poSitting = false
-        }
     }
 
     private fun toggleSettings() {
