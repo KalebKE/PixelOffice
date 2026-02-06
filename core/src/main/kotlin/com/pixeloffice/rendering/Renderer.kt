@@ -1198,6 +1198,10 @@ class Renderer(
                 if (hasRow2) {
                     drawFurniture("post_it_notes", RIGHT_COLUMN_X + 70f, 160f)
                 }
+                drawFurniture("small_art_blue", 110f, 160f)
+            }
+            if (wallY == 185f) {
+                drawFurniture("small_calendar", 110f, 190f)
             }
         } else {
             // Legacy fallback: hardcoded furniture rendering
@@ -1333,8 +1337,6 @@ class Renderer(
         }
 
         // Additional decorations not part of desk columns
-        drawFurniture("small_art_blue", 110f, 160f)
-        drawFurniture("small_calendar", 110f, 190f)
         drawDog(105f, 200f)
         drawCat(165f, 190f)
         drawFurniture("tree", 76f, 218f)
