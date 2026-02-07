@@ -577,23 +577,11 @@ class Renderer(
      * Draw the floor tiles.
      */
     fun drawFloor() {
-        val floorFrame = spriteSheet.getTileFrame("floor_tile") ?: return
-
-        val tileW = floorFrame.width
-        val tileH = floorFrame.height
-
-        // Floor starts at Y=104 in world coordinates (Y-down)
-        // Draw from Y=104 to Y=height
-        var worldY = 104
-        while (worldY < height) {
-            val screenY = flipY(worldY.toFloat(), tileH)
-            var x = 0
-            while (x < width) {
-                batch.draw(floorFrame.region, x.toFloat(), screenY)
-                x += tileW
-            }
-            worldY += tileH
-        }
+        val savedColor = batch.color.cpy()
+        batch.color = Color(0.76f, 0.76f, 0.78f, 1f)
+        val floorTopScreenY = flipY(104f, height - 104)
+        batch.draw(ledPixelRegion, 0f, floorTopScreenY, width.toFloat(), (height - 104).toFloat())
+        batch.color = savedColor
     }
 
     /**

@@ -130,7 +130,7 @@
     "product_owner": "dark_hair",
     "animals": {
       "cat": {"x": 65, "y": 129, "w": 16, "h": 13, "frames": 4, "frame_duration": 5.0},
-      "dog": {"x": 59, "y": 146, "w": 24, "h": 11, "frames": 1, "frame_duration": 0.15}
+      "dog": {"x": 59, "y": 146, "w": 24, "h": 11, "frames": 4, "frame_duration": 8.0}
     },
     "furniture": {
       "couch_green": {"x": 120, "y": 102, "w": 33, "h": 15},
