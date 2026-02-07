@@ -1160,9 +1160,34 @@ class Renderer(
             }
         }
 
+        // Step 2b: LED green glows for clock and company sign (still additive)
+        val glowGreen = Color(ledGreen.r, ledGreen.g, ledGreen.b, 0.12f)
+
+        // Clock glow — clock sprite is 19×6 at (126,65), center at (135.5, 68)
+        val clockGlowSize = 35f
+        val clockCenterX = 135.5f
+        val clockScreenCenterY = flipY(68f, 0)
+        batch.color = glowGreen
+        batch.draw(glowRegion, clockCenterX - clockGlowSize / 2f, clockScreenCenterY - clockGlowSize / 2f, clockGlowSize, clockGlowSize)
+
+        // Sign glow — sign centered at world (201, 67), elliptical ~55×30
+        val signGlowW = 55f
+        val signGlowH = 30f
+        val signCenterX = 201f
+        val signScreenCenterY = flipY(67f, 0)
+        batch.color = glowGreen
+        batch.draw(glowRegion, signCenterX - signGlowW / 2f, signScreenCenterY - signGlowH / 2f, signGlowW, signGlowH)
+
         // Step 3: Restore normal blending and color
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
+
+        // Step 4: Re-draw LED elements over the dark overlay so they appear bright
+        drawClockTime(125f, 65f)
+
         batch.color = savedColor
+
+        // drawCompanySign starts with endBatch() so batch must be open
+        drawCompanySign()
         endBatch()
     }
 
