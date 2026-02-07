@@ -15,7 +15,9 @@ import com.pixeloffice.animation.SpriteSheet
 import com.pixeloffice.core.WalkableZone
 import com.pixeloffice.world.*
 import java.util.Calendar
+import kotlin.math.max
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * Color palette matching Pyxel/PixelOfficeAssets.png
@@ -70,6 +72,7 @@ class Renderer(
 
     // UI state
     private var showDebug = false
+    var nightMode = false
 
     private enum class LabelMode { OFF, CHARACTERS, DESKS, ROUTES, FURNITURE }
     private var labelMode = LabelMode.OFF
@@ -88,6 +91,10 @@ class Renderer(
     private var ledPixelTexture: Texture? = null
     private lateinit var ledPixelRegion: TextureRegion
     private val ledGreen = Color(0x00 / 255f, 0xE4 / 255f, 0x36 / 255f, 1f)
+
+    // Soft radial glow texture for night mode monitor glow
+    private var glowTexture: Texture? = null
+    private lateinit var glowRegion: TextureRegion
 
     // 3×5 pixel patterns for 7-segment style digits (row-major, top to bottom)
     private val digitPatterns: Array<BooleanArray> = arrayOf(
@@ -391,6 +398,11 @@ class Renderer(
         private const val EAST_CHAIR_PUSHED_BACK = 60f  // Pulled away (occupied)
         private const val EAST_CHAIR_PUSHED_IN = 52f    // ~5px under right desk edge (unoccupied)
 
+        // Night mode colors
+        private val NIGHT_SKY_COLOR = Color(0.04f, 0.04f, 0.12f, 1f)
+        private val NIGHT_OVERLAY_COLOR = Color(0f, 0f, 0.05f, 0.55f)
+        private val NIGHT_GLOW_COLOR = Color(0.4f, 0.5f, 0.8f, 1f)
+
         @Deprecated("Use DeskColumn.getDeskPosition instead", ReplaceWith("DeskColumn.getDeskPosition(columnX, rowIndex, isLeftDesk)"))
         fun getDeskPosition(columnX: Float, rowIndex: Int, isLeftDesk: Boolean): Pair<Float, Float> =
             DeskColumn.getDeskPosition(columnX, rowIndex, isLeftDesk)
@@ -425,6 +437,26 @@ class Renderer(
         }
         ledPixelRegion = TextureRegion(ledPixelTexture)
         pixmap.dispose()
+
+        // Create 64×64 radial gradient texture for soft monitor glow
+        val glowSize = 64
+        val glowPixmap = Pixmap(glowSize, glowSize, Pixmap.Format.RGBA8888)
+        val center = glowSize / 2f
+        for (y in 0 until glowSize) {
+            for (x in 0 until glowSize) {
+                val dx = (x - center) / center
+                val dy = (y - center) / center
+                val dist = sqrt(dx * dx + dy * dy).coerceAtMost(1f)
+                val alpha = max(0f, 1f - dist * dist)
+                glowPixmap.setColor(1f, 1f, 1f, alpha)
+                glowPixmap.drawPixel(x, y)
+            }
+        }
+        glowTexture = Texture(glowPixmap).apply {
+            setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+        }
+        glowRegion = TextureRegion(glowTexture)
+        glowPixmap.dispose()
     }
 
     fun setCamera(camera: GameCamera) {
@@ -438,7 +470,8 @@ class Renderer(
     }
 
     fun clear(color: Color = Colors.SKY_BLUE) {
-        Gdx.gl.glClearColor(color.r, color.g, color.b, color.a)
+        val c = if (nightMode) NIGHT_SKY_COLOR else color
+        Gdx.gl.glClearColor(c.r, c.g, c.b, c.a)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
     }
 
@@ -1098,6 +1131,66 @@ class Renderer(
     }
 
     /**
+     * Draw night mode overlay with dim filter and monitor glows.
+     * Called after the main scene batch ends, before UI overlay.
+     */
+    private fun drawNightOverlay(renderData: RenderData) {
+        beginBatch()
+
+        // Step 1: Dim overlay covering the full screen
+        val savedColor = batch.color.cpy()
+        batch.color = NIGHT_OVERLAY_COLOR
+        batch.draw(ledPixelRegion, 0f, 0f, width.toFloat(), height.toFloat())
+
+        // Step 2: Monitor glows with additive blending
+        batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE)
+
+        for (column in renderData.deskColumns) {
+            for (row in column.rows) {
+                row.westDesk?.let { desk ->
+                    if (desk.equipment != Equipment.NONE) {
+                        drawMonitorGlow(column.baseX + 12f, row.wallY + 7f, desk.equipment)
+                    }
+                }
+                row.eastDesk?.let { desk ->
+                    if (desk.equipment != Equipment.NONE) {
+                        drawMonitorGlow(column.baseX + 49f, row.wallY + 7f, desk.equipment)
+                    }
+                }
+            }
+        }
+
+        // Step 3: Restore normal blending and color
+        batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
+        batch.color = savedColor
+        endBatch()
+    }
+
+    /**
+     * Draw soft radial glow around a monitor/computer at world coordinates.
+     */
+    private fun drawMonitorGlow(worldX: Float, worldY: Float, equipment: Equipment) {
+        val (spriteW, spriteH) = when (equipment) {
+            Equipment.MONITOR -> 13f to 23f
+            Equipment.COMPUTER -> 15f to 19f
+            Equipment.NONE -> return
+        }
+
+        val centerX = worldX + spriteW / 2f
+        val screenCenterY = flipY(worldY + spriteH / 2f, 0)
+
+        // Outer soft glow
+        val outerSize = 60f
+        batch.color = Color(NIGHT_GLOW_COLOR.r, NIGHT_GLOW_COLOR.g, NIGHT_GLOW_COLOR.b, 0.18f)
+        batch.draw(glowRegion, centerX - outerSize / 2f, screenCenterY - outerSize / 2f, outerSize, outerSize)
+
+        // Inner brighter core
+        val innerSize = 30f
+        batch.color = Color(NIGHT_GLOW_COLOR.r, NIGHT_GLOW_COLOR.g, NIGHT_GLOW_COLOR.b, 0.12f)
+        batch.draw(glowRegion, centerX - innerSize / 2f, screenCenterY - innerSize / 2f, innerSize, innerSize)
+    }
+
+    /**
      * Draw UI elements on top of the scene.
      */
     fun drawUIOverlay() {
@@ -1751,6 +1844,9 @@ class Renderer(
 
         endBatch()
 
+        // Night mode overlay (dim + monitor glows)
+        if (nightMode) drawNightOverlay(renderData)
+
         // Draw debug overlays
         drawWalkableZones()
         drawLineNetwork()
@@ -1899,5 +1995,6 @@ class Renderer(
         font.dispose()
         texture?.dispose()
         ledPixelTexture?.dispose()
+        glowTexture?.dispose()
     }
 }
