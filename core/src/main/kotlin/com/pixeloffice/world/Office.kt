@@ -16,6 +16,7 @@ data class Desk(
     val y: Float,
     val chairX: Float = x,
     val chairY: Float = y,
+    val side: DeskSide? = null,
     var occupiedBy: String? = null,      // Entity ID (any character type)
     var occupantType: String? = null     // "developer", "project_manager", "product_owner"
 )
@@ -154,6 +155,8 @@ class Office(private val config: Config) {
 
         developer.setDeskPosition(desk.x, desk.y)
         developer.setChairPosition(desk.chairX, desk.chairY)
+        developer.setDeskFacing(facingForDeskSide(desk))
+        pathfinder.getDeskMidpoint(desk.id)?.let { (mx, my) -> developer.setDeskMidpoint(mx, my) }
         whiteboard?.let {
             developer.setWhiteboardPosition(it.x, it.y, it.id)
             claimWhiteboard(it.id)
@@ -259,6 +262,8 @@ class Office(private val config: Config) {
 
         // Assign to desk
         pm.setAssignedDesk(deskId, desk.x, desk.y, desk.chairX, desk.chairY)
+        pm.setDeskFacing(facingForDeskSide(desk))
+        pathfinder.getDeskMidpoint(deskId)?.let { (mx, my) -> pm.setDeskMidpoint(mx, my) }
         pm.x = desk.x
         pm.y = desk.y
 
@@ -301,6 +306,8 @@ class Office(private val config: Config) {
 
         // Assign to desk
         po.setAssignedDesk(deskId, desk.x, desk.y, desk.chairX, desk.chairY)
+        po.setDeskFacing(facingForDeskSide(desk))
+        pathfinder.getDeskMidpoint(deskId)?.let { (mx, my) -> po.setDeskMidpoint(mx, my) }
         po.x = desk.x
         po.y = desk.y
         po.active = true
@@ -316,6 +323,14 @@ class Office(private val config: Config) {
         po.setDevelopers(developers.values.toList())
 
         return po
+    }
+
+    private fun facingForDeskSide(desk: Desk): String {
+        return when (desk.side) {
+            DeskSide.EAST -> "left"
+            DeskSide.WEST -> "right"
+            else -> "down"
+        }
     }
 
     private fun getNearestWhiteboard(x: Float, y: Float): Whiteboard? {
@@ -374,14 +389,14 @@ class Office(private val config: Config) {
                 val deskId = column.getDeskId((rowIndex + 1) * 2) // even = west
                 val (x, y) = DeskColumn.getDeskPosition(column.baseX, rowIndex, isLeftDesk = true)
                 val (cx, cy) = DeskColumn.getChairPosition(column.baseX, rowIndex, isLeftDesk = true)
-                desks[deskId] = Desk(id = deskId, x = x, y = y, chairX = cx, chairY = cy)
+                desks[deskId] = Desk(id = deskId, x = x, y = y, chairX = cx, chairY = cy, side = DeskSide.WEST)
                 registerNamedLocation(deskId, x, y)
             }
             row.eastDesk?.let {
                 val deskId = column.getDeskId((rowIndex + 1) * 2 - 1) // odd = east
                 val (x, y) = DeskColumn.getDeskPosition(column.baseX, rowIndex, isLeftDesk = false)
                 val (cx, cy) = DeskColumn.getChairPosition(column.baseX, rowIndex, isLeftDesk = false)
-                desks[deskId] = Desk(id = deskId, x = x, y = y, chairX = cx, chairY = cy)
+                desks[deskId] = Desk(id = deskId, x = x, y = y, chairX = cx, chairY = cy, side = DeskSide.EAST)
                 registerNamedLocation(deskId, x, y)
             }
         }

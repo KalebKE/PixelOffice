@@ -142,12 +142,14 @@ class Developer(
         val renderX = if (posture == "sitting") chairPosition?.first ?: x else x
         val renderY = if (posture == "sitting") chairPosition?.second ?: y else y
 
+        val effectiveFacing = if (posture == "sitting") deskFacingDirection ?: facingDirection else facingDirection
+
         val info = mutableMapOf<String, Any>(
             "type" to "developer",
             "x" to renderX,
             "y" to renderY,
             "animation" to currentAnimation,
-            "facing" to facingDirection,
+            "facing" to effectiveFacing,
             "variant" to spriteVariant,
             "posture" to posture,
             "visible" to visible,
@@ -197,6 +199,7 @@ class Developer(
 
         val renderX = if (posture == "sitting") chairPosition?.first ?: x else x
         val renderY = if (posture == "sitting") chairPosition?.second ?: y else y
+        val effectiveFacing = if (posture == "sitting") deskFacingDirection ?: facingDirection else facingDirection
 
         return CharacterRenderInfo(
             type = "developer",
@@ -204,7 +207,7 @@ class Developer(
             x = renderX,
             y = renderY,
             animation = currentAnimation,
-            facing = facingDirection,
+            facing = effectiveFacing,
             variant = spriteVariant,
             posture = posture,
             visible = visible,
@@ -289,6 +292,22 @@ class Developer(
             setWalkPath(path)
         } else {
             setWalkTarget(targetX, targetY)
+        }
+    }
+
+    /**
+     * Walk from the current desk to a target, going through the desk midpoint first.
+     * This prevents the character from appearing to stand on the desk surface.
+     * Falls back to walkToWithPathfinding if no midpoint is set.
+     */
+    fun walkFromDeskWithPathfinding(targetX: Float, targetY: Float) {
+        val mid = deskMidpoint
+        val pf = pathfinder
+        if (mid != null && pf != null) {
+            val pathFromMid = pf.calculatePath(mid.first, mid.second, targetX, targetY)
+            setWalkPath(listOf(mid) + pathFromMid)
+        } else {
+            walkToWithPathfinding(targetX, targetY)
         }
     }
 
