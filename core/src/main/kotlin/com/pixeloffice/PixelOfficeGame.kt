@@ -237,32 +237,33 @@ class PixelOfficeGame : ApplicationAdapter() {
                 resolveDeveloper(activity)?.handleEvent("thinking_started")
             }
             ActivityType.PLANNING -> {
-                resolveDeveloper(activity)?.handleEvent("thinking_started")
+                resolveDeveloper(activity)?.handleEvent("planning_started")
+            }
+            ActivityType.FILE_READ, ActivityType.WEB_SEARCH -> {
+                resolveDeveloper(activity)?.handleEvent("researching_started")
             }
             ActivityType.CODE_WRITING, ActivityType.CODE_EDITING -> {
                 resolveDeveloper(activity)?.handleEvent("code_writing_started")
             }
-            ActivityType.BUILD_EXECUTION, ActivityType.COMMITTING, ActivityType.INSTALLING_DEPS -> {
-                resolveDeveloper(activity)?.handleEvent("code_writing_started")
+            ActivityType.TEST_EXECUTION, ActivityType.BUILD_EXECUTION,
+            ActivityType.BASH_EXECUTION, ActivityType.COMMITTING,
+            ActivityType.INSTALLING_DEPS -> {
+                resolveDeveloper(activity)?.handleEvent("command_started")
             }
-            ActivityType.TEST_FAILURE -> {
-                resolveDeveloper(activity)?.handleEvent("tests_failed")
-                camera.shake(3f)
-            }
-            ActivityType.BUILD_FAILURE -> {
+            ActivityType.TEST_FAILURE, ActivityType.BUILD_FAILURE -> {
                 resolveDeveloper(activity)?.handleEvent("tests_failed")
                 camera.shake(3f)
             }
             ActivityType.TEST_SUCCESS, ActivityType.BUILD_SUCCESS -> {
-                resolveDeveloper(activity)?.handleEvent("code_writing_ended")
+                resolveDeveloper(activity)?.handleEvent("command_succeeded")
             }
             ActivityType.USER_QUESTION -> {
                 office.getAllDevelopers().lastOrNull()?.let { dev ->
                     office.spawnProductOwner(dev.agentId)
                 }
             }
-            else -> {
-                // Other activities don't trigger specific animations
+            ActivityType.UNKNOWN -> {
+                // Unknown activities don't trigger animations
             }
         }
     }
@@ -457,6 +458,17 @@ class PixelOfficeGame : ApplicationAdapter() {
                 } else {
                     val deskId = office.getNextAvailableDeskId()
                     if (deskId != null) office.assignPOToDesk(deskId)
+                }
+            }
+            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_9)) {
+                // Cycle through new states: researching → command → celebrating
+                val dev = office.getAllDevelopers().lastOrNull()
+                if (dev != null) {
+                    when (dev.getState()) {
+                        "researching" -> dev.handleEvent("command_started")
+                        "running_command" -> dev.handleEvent("command_succeeded")
+                        else -> dev.handleEvent("researching_started")
+                    }
                 }
             }
         }
