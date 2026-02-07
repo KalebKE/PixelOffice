@@ -138,6 +138,26 @@ object Patterns {
     )
 
     /**
+     * Detect activity type from a tool name alone (no input needed).
+     * Used by streaming mode where tool_use_start has the name but not yet the input.
+     * All tools except Bash are fully classifiable from name.
+     * For Bash, returns BASH_EXECUTION as initial classification (refined later when input arrives).
+     */
+    fun detectToolActivityFromName(toolName: String): ActivityType {
+        return when (toolName) {
+            "Task" -> ActivityType.AGENT_SPAWN
+            "AskUserQuestion" -> ActivityType.USER_QUESTION
+            "EnterPlanMode" -> ActivityType.PLANNING
+            "Write" -> ActivityType.CODE_WRITING
+            "Edit", "NotebookEdit" -> ActivityType.CODE_EDITING
+            "Read", "Glob", "Grep" -> ActivityType.FILE_READ
+            "WebSearch", "WebFetch" -> ActivityType.WEB_SEARCH
+            "Bash" -> ActivityType.BASH_EXECUTION
+            else -> ActivityType.UNKNOWN
+        }
+    }
+
+    /**
      * Detect activity type from a tool use.
      *
      * @param toolName Name of the tool being used.

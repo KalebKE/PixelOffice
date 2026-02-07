@@ -135,7 +135,10 @@ class Developer(
             (stateMachine.currentStateName == DeveloperStateNames.IDLE ||
              stateMachine.currentStateName == DeveloperStateNames.WRITING_CODE ||
              stateMachine.currentStateName == DeveloperStateNames.BEING_INTERRUPTED ||
-             stateMachine.currentStateName == DeveloperStateNames.TESTS_FAILING)
+             stateMachine.currentStateName == DeveloperStateNames.TESTS_FAILING ||
+             stateMachine.currentStateName == DeveloperStateNames.RESEARCHING ||
+             stateMachine.currentStateName == DeveloperStateNames.RUNNING_COMMAND ||
+             stateMachine.currentStateName == DeveloperStateNames.CELEBRATING)
         }
         val posture = if (shouldSit) "sitting" else "standing"
 
@@ -183,7 +186,10 @@ class Developer(
             (stateMachine.currentStateName == DeveloperStateNames.IDLE ||
              stateMachine.currentStateName == DeveloperStateNames.WRITING_CODE ||
              stateMachine.currentStateName == DeveloperStateNames.BEING_INTERRUPTED ||
-             stateMachine.currentStateName == DeveloperStateNames.TESTS_FAILING)
+             stateMachine.currentStateName == DeveloperStateNames.TESTS_FAILING ||
+             stateMachine.currentStateName == DeveloperStateNames.RESEARCHING ||
+             stateMachine.currentStateName == DeveloperStateNames.RUNNING_COMMAND ||
+             stateMachine.currentStateName == DeveloperStateNames.CELEBRATING)
         }
         val posture = if (shouldSit) "sitting" else "standing"
 

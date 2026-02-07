@@ -172,14 +172,14 @@ class StreamParser {
         when (msg.type) {
             "tool_use_start" -> {
                 if (msg.toolName != null) {
-                    // Track tool name for result routing (no input yet to classify)
+                    val activityType = Patterns.detectToolActivityFromName(msg.toolName)
                     lastToolName = msg.toolName
-                    lastToolActivityType = null
+                    lastToolActivityType = activityType
 
-                    // Emit thinking ended when tool use starts
                     activities.add(DetectedActivity(
-                        type = ActivityType.THINKING,
-                        agentId = currentAgentId
+                        type = activityType,
+                        agentId = currentAgentId,
+                        toolName = msg.toolName
                     ))
                 }
             }

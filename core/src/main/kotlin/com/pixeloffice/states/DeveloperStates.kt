@@ -8,10 +8,13 @@ import com.pixeloffice.entities.Developer
 object DeveloperStateNames {
     const val IDLE = "idle"
     const val THINKING = "thinking"
+    const val RESEARCHING = "researching"
     const val WALKING_TO_WHITEBOARD = "walking_to_whiteboard"
     const val AT_WHITEBOARD = "at_whiteboard"
     const val WALKING_TO_DESK = "walking_to_desk"
     const val WRITING_CODE = "writing_code"
+    const val RUNNING_COMMAND = "running_command"
+    const val CELEBRATING = "celebrating"
     const val TESTS_FAILING = "tests_failing"
     const val BEING_INTERRUPTED = "being_interrupted"
 }
@@ -31,7 +34,10 @@ class IdleState : State<Developer>(DeveloperStateNames.IDLE) {
     override fun onEvent(entity: Developer, event: String, data: Any?): String? {
         return when (event) {
             "thinking_started" -> DeveloperStateNames.THINKING
+            "researching_started" -> DeveloperStateNames.RESEARCHING
             "code_writing_started" -> DeveloperStateNames.WRITING_CODE
+            "command_started" -> DeveloperStateNames.RUNNING_COMMAND
+            "planning_started" -> DeveloperStateNames.WALKING_TO_WHITEBOARD
             "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
             else -> null
         }
@@ -66,6 +72,10 @@ class ThinkingState(private val duration: Float = 3.0f) : State<Developer>(Devel
         return when (event) {
             "done_thinking" -> DeveloperStateNames.WRITING_CODE
             "walk_to_whiteboard" -> DeveloperStateNames.WALKING_TO_WHITEBOARD
+            "researching_started" -> DeveloperStateNames.RESEARCHING
+            "code_writing_started" -> DeveloperStateNames.WRITING_CODE
+            "command_started" -> DeveloperStateNames.RUNNING_COMMAND
+            "planning_started" -> DeveloperStateNames.WALKING_TO_WHITEBOARD
             "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
             else -> null
         }
@@ -183,7 +193,101 @@ class WritingCodeState : State<Developer>(DeveloperStateNames.WRITING_CODE) {
             "code_writing_ended" -> DeveloperStateNames.IDLE
             "tests_failed" -> DeveloperStateNames.TESTS_FAILING
             "thinking_started" -> DeveloperStateNames.THINKING
+            "researching_started" -> DeveloperStateNames.RESEARCHING
+            "command_started" -> DeveloperStateNames.RUNNING_COMMAND
+            "planning_started" -> DeveloperStateNames.WALKING_TO_WHITEBOARD
             "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
+            else -> null
+        }
+    }
+}
+
+/**
+ * Developer is researching — reading files, searching code, browsing the web.
+ * Sits at desk with thinking animation and thought bubble.
+ * Does NOT handle "thinking_started" to avoid thrash during Read→text→Read sequences.
+ */
+class ResearchingState : State<Developer>(DeveloperStateNames.RESEARCHING) {
+    override fun enter(entity: Developer, prevState: State<Developer>?) {
+        entity.setAnimation("thinking")
+        entity.showBubbleOfType("thinking")
+    }
+
+    override fun update(entity: Developer, dt: Float): String? = null
+
+    override fun exit(entity: Developer, nextState: State<Developer>?) {
+        entity.showThoughtBubble(false)
+    }
+
+    override fun onEvent(entity: Developer, event: String, data: Any?): String? {
+        return when (event) {
+            "code_writing_started" -> DeveloperStateNames.WRITING_CODE
+            "command_started" -> DeveloperStateNames.RUNNING_COMMAND
+            "planning_started" -> DeveloperStateNames.WALKING_TO_WHITEBOARD
+            "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
+            else -> null
+        }
+    }
+}
+
+/**
+ * Developer kicked off a terminal command and is watching output scroll.
+ * Sits idle at desk — visually distinct from typing because they stopped.
+ * Does NOT handle "thinking_started" to avoid interrupting the "watching terminal" visual.
+ */
+class RunningCommandState : State<Developer>(DeveloperStateNames.RUNNING_COMMAND) {
+    override fun enter(entity: Developer, prevState: State<Developer>?) {
+        entity.setAnimation("idle")
+    }
+
+    override fun update(entity: Developer, dt: Float): String? = null
+
+    override fun exit(entity: Developer, nextState: State<Developer>?) {}
+
+    override fun onEvent(entity: Developer, event: String, data: Any?): String? {
+        return when (event) {
+            "command_succeeded" -> DeveloperStateNames.CELEBRATING
+            "tests_failed" -> DeveloperStateNames.TESTS_FAILING
+            "code_writing_started" -> DeveloperStateNames.WRITING_CODE
+            "researching_started" -> DeveloperStateNames.RESEARCHING
+            "command_ended" -> DeveloperStateNames.IDLE
+            "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
+            else -> null
+        }
+    }
+}
+
+/**
+ * Tests passed or build succeeded — brief moment of triumph.
+ * Auto-transitions to IDLE after 1.5 seconds. Any new work event cuts it short.
+ */
+class CelebratingState(private val duration: Float = 1.5f) : State<Developer>(DeveloperStateNames.CELEBRATING) {
+    private var timer = 0f
+
+    override fun enter(entity: Developer, prevState: State<Developer>?) {
+        entity.setAnimation("idle")
+        entity.showBubbleOfType("success")
+        timer = 0f
+    }
+
+    override fun update(entity: Developer, dt: Float): String? {
+        timer += dt
+        if (timer >= duration) {
+            return DeveloperStateNames.IDLE
+        }
+        return null
+    }
+
+    override fun exit(entity: Developer, nextState: State<Developer>?) {
+        entity.showThoughtBubble(false)
+    }
+
+    override fun onEvent(entity: Developer, event: String, data: Any?): String? {
+        return when (event) {
+            "thinking_started" -> DeveloperStateNames.THINKING
+            "researching_started" -> DeveloperStateNames.RESEARCHING
+            "code_writing_started" -> DeveloperStateNames.WRITING_CODE
+            "command_started" -> DeveloperStateNames.RUNNING_COMMAND
             else -> null
         }
     }
@@ -262,15 +366,19 @@ class DeveloperStateMachine(
     entity: Developer,
     thinkingDuration: Float = 3.0f,
     despairDuration: Float = 2.0f,
-    interruptDuration: Float = 3.0f
+    interruptDuration: Float = 3.0f,
+    celebrateDuration: Float = 1.5f
 ) : StateMachine<Developer>(entity) {
     init {
         addState(IdleState(), initial = true)
         addState(ThinkingState(thinkingDuration))
+        addState(ResearchingState())
         addState(WalkingToWhiteboardState())
         addState(AtWhiteboardState())
         addState(WalkingToDeskState())
         addState(WritingCodeState())
+        addState(RunningCommandState())
+        addState(CelebratingState(celebrateDuration))
         addState(TestsFailingState(despairDuration))
         addState(BeingInterruptedState(interruptDuration))
     }
