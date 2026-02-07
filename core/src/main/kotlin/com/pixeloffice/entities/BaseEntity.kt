@@ -32,6 +32,28 @@ abstract class BaseEntity(
     protected var facingDirection = "down" // up, down, left, right
     protected var spriteVariant = 0 // Color variant index
 
+    // Facing direction to use when sitting at a desk (set by desk side)
+    var deskFacingDirection: String? = null
+        protected set
+
+    fun setDeskFacing(direction: String) {
+        deskFacingDirection = direction
+    }
+
+    // Navigation midpoint between desk and aisle (for leaving desk without walking on surface)
+    var deskMidpoint: Pair<Float, Float>? = null
+        protected set
+
+    fun setDeskMidpoint(x: Float, y: Float) {
+        deskMidpoint = Pair(x, y)
+    }
+
+    fun snapToMidpoint() {
+        val mid = deskMidpoint ?: return
+        x = mid.first
+        y = mid.second
+    }
+
     // Sprite width for center-based positioning (characters are 16px wide)
     protected open val spriteHalfWidth: Float = 8f
 

@@ -32,6 +32,8 @@ class PixelOfficeGame : ApplicationAdapter() {
     companion object {
         var forceSittingMode = false
         private const val DEMO_CYCLE_DURATION = 20f
+        private const val DEMO_INITIAL_SIT_DURATION = 5f
+        private const val DEMO_STAGGER_INTERVAL = 2f
     }
 
     // Configuration
@@ -62,7 +64,7 @@ class PixelOfficeGame : ApplicationAdapter() {
     private var demoMode = false
     private var demoTimer = 0f
     private var demoInitialized = false
-    private var demoPrevState = ""
+    private var demoPrevStates = mutableListOf<String>()
 
     // Settings overlay
     private lateinit var settingsOverlay: SettingsOverlay
@@ -443,46 +445,47 @@ class PixelOfficeGame : ApplicationAdapter() {
             }
         }
 
-        // Cycle through states for all developers
+        // Cycle through states for all developers with initial sit period and stagger
         val developers = office.getAllDevelopers()
         if (developers.isNotEmpty()) {
-            val cycleTime = demoTimer % DEMO_CYCLE_DURATION
-
-            val newState = when {
-                cycleTime < 3f -> "thinking_started"
-                cycleTime < 6f -> "walk_to_whiteboard"
-                cycleTime < 9f -> "done"
-                cycleTime < 12f -> "code_writing_started"
-                cycleTime < 15f -> "tests_failed"
-                cycleTime < 18f -> "despair_complete"
-                else -> ""
+            // Ensure per-developer state tracking is sized correctly
+            while (demoPrevStates.size < developers.size) {
+                demoPrevStates.add("")
             }
 
-            if (newState.isNotEmpty()) {
-                // Send event to developers with staggered timing
+            // adjustedTimer accounts for the init delay (0.1s) and sit period
+            val adjustedTimer = demoTimer - 0.1f - DEMO_INITIAL_SIT_DURATION
+
+            // During initial sit period, skip all event processing
+            if (adjustedTimer >= 0f) {
                 developers.forEachIndexed { index, dev ->
-                    // Stagger by 1 second per developer
-                    val staggeredCycleTime = (demoTimer - index * 1f) % DEMO_CYCLE_DURATION
-                    val staggeredState = when {
-                        staggeredCycleTime < 0f -> "" // Not started yet
-                        staggeredCycleTime < 3f -> "thinking_started"
-                        staggeredCycleTime < 6f -> "walk_to_whiteboard"
-                        staggeredCycleTime < 9f -> "done"
-                        staggeredCycleTime < 12f -> "code_writing_started"
-                        staggeredCycleTime < 15f -> "tests_failed"
-                        staggeredCycleTime < 18f -> "despair_complete"
+                    val devStartTime = index * DEMO_STAGGER_INTERVAL
+                    val devTimer = adjustedTimer - devStartTime
+
+                    // This developer hasn't started yet
+                    if (devTimer < 0f) return@forEachIndexed
+
+                    val cycleTime = devTimer % DEMO_CYCLE_DURATION
+                    val devState = when {
+                        cycleTime < 3f -> "thinking_started"
+                        cycleTime < 6f -> "walk_to_whiteboard"
+                        cycleTime < 9f -> "done"
+                        cycleTime < 12f -> "code_writing_started"
+                        cycleTime < 15f -> "tests_failed"
+                        cycleTime < 18f -> "despair_complete"
                         else -> ""
                     }
-                    if (staggeredState.isNotEmpty()) {
-                        dev.handleEvent(staggeredState)
-                    }
-                }
 
-                // Trigger camera shake only when transitioning TO tests_failed
-                if (newState == "tests_failed" && demoPrevState != "tests_failed") {
-                    camera.shake(3f)
+                    if (devState.isNotEmpty()) {
+                        dev.handleEvent(devState)
+                    }
+
+                    // Trigger camera shake on transition to tests_failed
+                    if (devState == "tests_failed" && demoPrevStates[index] != "tests_failed") {
+                        camera.shake(3f)
+                    }
+                    demoPrevStates[index] = devState
                 }
-                demoPrevState = newState
             }
         }
 

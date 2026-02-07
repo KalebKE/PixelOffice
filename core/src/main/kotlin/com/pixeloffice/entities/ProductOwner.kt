@@ -205,8 +205,17 @@ class ProductOwner(
         val deskX = midpoint?.first ?: (nextDesk.second - 20f)
         val deskY = midpoint?.second ?: nextDesk.third
 
-        currentPath = pathfinder?.calculatePath(x, y, deskX, deskY)?.toMutableList()
-            ?: mutableListOf(Pair(deskX, deskY))
+        val pf = pathfinder
+        currentPath = if (pf != null) {
+            val path = pf.calculatePath(x, y, deskX, deskY).toMutableList()
+            val mid = deskMidpoint
+            if (mid != null && isAtAssignedDesk()) {
+                path.add(0, Pair(mid.first, mid.second))
+            }
+            path
+        } else {
+            mutableListOf(Pair(deskX, deskY))
+        }
         currentPathIndex = 0
         state = "walking_to_desk"
     }
@@ -262,6 +271,7 @@ class ProductOwner(
     }
 
     private fun beginPatrol() {
+        snapToMidpoint()
         remainingDesks = deskTargets
             .filter { it.first != assignedDeskId }
             .toMutableList()
@@ -419,13 +429,14 @@ class ProductOwner(
         val posture = if (state == "sitting" && isAtAssignedDesk()) "sitting" else "standing"
         val renderX = if (posture == "sitting") chairPosition?.first ?: x else x
         val renderY = if (posture == "sitting") chairPosition?.second ?: y else y
+        val effectiveFacing = if (posture == "sitting") deskFacingDirection ?: facingDirection else facingDirection
 
         val info = mutableMapOf<String, Any>(
             "type" to "product_owner",
             "x" to renderX,
             "y" to renderY,
             "animation" to currentAnimation,
-            "facing" to facingDirection,
+            "facing" to effectiveFacing,
             "variant" to spriteVariant,
             "visible" to visible,
             "state" to state,
@@ -448,6 +459,7 @@ class ProductOwner(
         val posture = if (state == "sitting" && isAtAssignedDesk()) "sitting" else "standing"
         val renderX = if (posture == "sitting") chairPosition?.first ?: x else x
         val renderY = if (posture == "sitting") chairPosition?.second ?: y else y
+        val effectiveFacing = if (posture == "sitting") deskFacingDirection ?: facingDirection else facingDirection
 
         val children = mutableListOf<EffectRenderInfo>()
         if (thoughtBubble != null && showBubble) {
@@ -460,7 +472,7 @@ class ProductOwner(
             x = renderX,
             y = renderY,
             animation = currentAnimation,
-            facing = facingDirection,
+            facing = effectiveFacing,
             variant = spriteVariant,
             posture = posture,
             visible = visible,

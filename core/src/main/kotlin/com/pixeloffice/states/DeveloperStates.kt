@@ -45,6 +45,9 @@ class ThinkingState(private val duration: Float = 3.0f) : State<Developer>(Devel
     private var timer = 0f
 
     override fun enter(entity: Developer, prevState: State<Developer>?) {
+        if (entity.isAtDesk()) {
+            entity.snapToMidpoint()
+        }
         entity.setAnimation("thinking")
         timer = 0f
     }
@@ -78,7 +81,7 @@ class WalkingToWhiteboardState : State<Developer>(DeveloperStateNames.WALKING_TO
         // Claim the whiteboard before walking
         entity.claimWhiteboard()
         entity.getWhiteboardPosition()?.let { (x, y) ->
-            entity.walkToWithPathfinding(x, y)
+            entity.walkFromDeskWithPathfinding(x, y)
         }
     }
 

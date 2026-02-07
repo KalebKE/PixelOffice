@@ -214,7 +214,12 @@ class ProjectManager(
 
         val pf = pathfinder
         currentPath = if (pf != null) {
-            pf.calculatePath(x, y, deskX, deskY).toMutableList()
+            val path = pf.calculatePath(x, y, deskX, deskY).toMutableList()
+            val mid = deskMidpoint
+            if (mid != null && isAtAssignedDesk()) {
+                path.add(0, Pair(mid.first, mid.second))
+            }
+            path
         } else {
             mutableListOf(Pair(deskX, deskY))
         }
@@ -223,6 +228,7 @@ class ProjectManager(
     }
 
     private fun beginPatrol() {
+        snapToMidpoint()
         remainingDesks = deskTargets
             .filter { it.first != assignedDeskId }
             .toMutableList()
@@ -312,13 +318,14 @@ class ProjectManager(
         val posture = if (state == "sitting" && isAtAssignedDesk()) "sitting" else "standing"
         val renderX = if (posture == "sitting") chairPosition?.first ?: x else x
         val renderY = if (posture == "sitting") chairPosition?.second ?: y else y
+        val effectiveFacing = if (posture == "sitting") deskFacingDirection ?: facingDirection else facingDirection
 
         val info = mutableMapOf<String, Any>(
             "type" to "project_manager",
             "x" to renderX,
             "y" to renderY,
             "animation" to currentAnimation,
-            "facing" to facingDirection,
+            "facing" to effectiveFacing,
             "variant" to spriteVariant,
             "visible" to visible,
             "state" to state,
@@ -343,6 +350,7 @@ class ProjectManager(
         val posture = if (state == "sitting" && isAtAssignedDesk()) "sitting" else "standing"
         val renderX = if (posture == "sitting") chairPosition?.first ?: x else x
         val renderY = if (posture == "sitting") chairPosition?.second ?: y else y
+        val effectiveFacing = if (posture == "sitting") deskFacingDirection ?: facingDirection else facingDirection
 
         val children = mutableListOf<EffectRenderInfo>()
         if (thoughtBubble != null && showBubble) {
@@ -355,7 +363,7 @@ class ProjectManager(
             x = renderX,
             y = renderY,
             animation = currentAnimation,
-            facing = facingDirection,
+            facing = effectiveFacing,
             variant = spriteVariant,
             posture = posture,
             visible = visible,
