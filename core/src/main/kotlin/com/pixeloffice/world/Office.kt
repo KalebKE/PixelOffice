@@ -2,6 +2,7 @@ package com.pixeloffice.world
 
 import com.pixeloffice.core.Config
 import com.pixeloffice.entities.*
+import com.pixeloffice.parsing.ActivityType
 import com.pixeloffice.rendering.*
 import com.pixeloffice.ui.ColumnSettings
 import com.pixeloffice.ui.SettingsConfig
@@ -72,6 +73,9 @@ class Office(private val config: Config) {
     private var projectManager: ProjectManager? = null
     private var productOwner: ProductOwner? = null
     private val effects = mutableListOf<BaseEntity>() // Ghosts, bubbles, etc.
+
+    // Per-agent activity tracking
+    private val activityTracker = AgentActivityTracker()
 
     // Entity ID counter
     private var nextEntityId = 0
@@ -179,6 +183,7 @@ class Office(private val config: Config) {
      */
     fun removeDeveloper(agentId: String) {
         val developer = developers.remove(agentId) ?: return
+        activityTracker.removeAgent(agentId)
         // Free up the desk
         for (desk in desks.values) {
             if (desk.occupiedBy == developer.entityId) {
@@ -198,6 +203,16 @@ class Office(private val config: Config) {
      * Get all developers.
      */
     fun getAllDevelopers(): List<Developer> = developers.values.toList()
+
+    // Activity tracking
+
+    fun getActivityTracker(): AgentActivityTracker = activityTracker
+
+    fun recordAgentActivity(agentId: String, type: ActivityType, toolName: String? = null, context: String? = null) {
+        activityTracker.recordActivity(agentId, type, toolName, context)
+    }
+
+    fun getAgentActivity(agentId: String): ActivityRecord? = activityTracker.getCurrentActivity(agentId)
 
     private fun getAvailableDesk(): Desk? {
         return desks.values.firstOrNull { it.occupiedBy == null }
@@ -476,6 +491,7 @@ class Office(private val config: Config) {
             removeDeveloper(agentId)
         }
         developers.clear()
+        activityTracker.clear()
 
         // Clear PM/PO
         projectManager?.let { pm ->

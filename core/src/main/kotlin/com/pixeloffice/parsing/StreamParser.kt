@@ -30,6 +30,10 @@ class StreamParser {
     private var currentAgentId: String? = null
     private val activeAgents = mutableMapOf<String, Map<String, Any>>()
 
+    // Track last tool so tool_result can be routed to the correct detector
+    private var lastToolName: String? = null
+    private var lastToolActivityType: ActivityType? = null
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -168,6 +172,10 @@ class StreamParser {
         when (msg.type) {
             "tool_use_start" -> {
                 if (msg.toolName != null) {
+                    // Track tool name for result routing (no input yet to classify)
+                    lastToolName = msg.toolName
+                    lastToolActivityType = null
+
                     // Emit thinking ended when tool use starts
                     activities.add(DetectedActivity(
                         type = ActivityType.THINKING,
@@ -179,6 +187,10 @@ class StreamParser {
                 if (msg.toolName != null) {
                     // Direct tool use message
                     val activityType = Patterns.detectToolActivity(msg.toolName, msg.toolInput)
+
+                    // Track for result routing
+                    lastToolName = msg.toolName
+                    lastToolActivityType = activityType
 
                     val activity = DetectedActivity(
                         type = activityType,
@@ -211,8 +223,7 @@ class StreamParser {
             }
             "tool_result" -> {
                 if (msg.toolResult != null) {
-                    // Analyze tool results for test outcomes
-                    val resultType = Patterns.detectTestResult(msg.toolResult)
+                    val resultType = detectResultForLastTool(msg.toolResult)
                     if (resultType != null) {
                         activities.add(DetectedActivity(
                             type = resultType,
@@ -220,10 +231,27 @@ class StreamParser {
                         ))
                     }
                 }
+                // Clear tool context after processing result
+                lastToolName = null
+                lastToolActivityType = null
             }
         }
 
         return activities
+    }
+
+    /**
+     * Route tool_result to the correct detector based on the last tool's activity type.
+     */
+    private fun detectResultForLastTool(output: String): ActivityType? {
+        return when (lastToolActivityType) {
+            ActivityType.BUILD_EXECUTION -> Patterns.detectBuildResult(output)
+            ActivityType.TEST_EXECUTION -> Patterns.detectTestResult(output)
+            else -> {
+                // Unknown or unclassified — try test first, then build (preserves existing behavior)
+                Patterns.detectTestResult(output) ?: Patterns.detectBuildResult(output)
+            }
+        }
     }
 
     /**
@@ -233,6 +261,8 @@ class StreamParser {
         buffer = ""
         currentAgentId = null
         activeAgents.clear()
+        lastToolName = null
+        lastToolActivityType = null
     }
 
     /**

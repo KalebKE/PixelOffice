@@ -6,11 +6,17 @@ package com.pixeloffice.parsing
 enum class ActivityType {
     AGENT_SPAWN,
     THINKING,
+    PLANNING,
     CODE_WRITING,
     CODE_EDITING,
     TEST_EXECUTION,
     TEST_FAILURE,
     TEST_SUCCESS,
+    BUILD_EXECUTION,
+    BUILD_FAILURE,
+    BUILD_SUCCESS,
+    COMMITTING,
+    INSTALLING_DEPS,
     USER_QUESTION,
     BASH_EXECUTION,
     WEB_SEARCH,
@@ -52,6 +58,42 @@ object Patterns {
         Regex("""\bmake\s+test\b""", RegexOption.IGNORE_CASE)
     )
 
+    // Patterns to detect build commands
+    private val BUILD_COMMAND_PATTERNS = listOf(
+        Regex("""\bgradlew?\b.*\b(compileKotlin|build|assemble)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bmake\b(?!\s+test)""", RegexOption.IGNORE_CASE),
+        Regex("""\bnpm\s+run\s+build\b""", RegexOption.IGNORE_CASE),
+        Regex("""\byarn\s+build\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bcargo\s+build\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bgcc\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bg\+\+\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bjavac\b""", RegexOption.IGNORE_CASE),
+        Regex("""\btsc\b"""),
+        Regex("""\bcmake\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bmvn\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bswiftc\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bpnpm\s+run\s+build\b""", RegexOption.IGNORE_CASE)
+    )
+
+    // Patterns to detect commit/push commands
+    private val COMMIT_COMMAND_PATTERNS = listOf(
+        Regex("""\bgit\s+commit\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bgit\s+push\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bgh\s+pr\s+create\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bgh\s+pr\s+merge\b""", RegexOption.IGNORE_CASE)
+    )
+
+    // Patterns to detect dependency installation commands
+    private val INSTALL_COMMAND_PATTERNS = listOf(
+        Regex("""\bnpm\s+install\b""", RegexOption.IGNORE_CASE),
+        Regex("""\byarn\s+add\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bpnpm\s+add\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bpip\s+install\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bcargo\s+add\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bgo\s+get\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bbundle\s+install\b""", RegexOption.IGNORE_CASE)
+    )
+
     // Patterns to detect test failures in output
     private val TEST_FAILURE_PATTERNS = listOf(
         Regex("""\bFAILED\b"""),
@@ -75,6 +117,26 @@ object Patterns {
         Regex("""\b0 failed\b""")
     )
 
+    // Patterns to detect build failures in output
+    private val BUILD_FAILURE_PATTERNS = listOf(
+        Regex("""\bBUILD FAILED\b"""),
+        Regex("""\bcompilation error\b""", RegexOption.IGNORE_CASE),
+        Regex("""\berror\[E\d+]"""),  // Rust compiler errors
+        Regex("""\bTS\d+:"""),        // TypeScript errors
+        Regex("""\bfatal error\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bBUILD FAILURE\b"""),
+        Regex("""\bCompile error\b""", RegexOption.IGNORE_CASE)
+    )
+
+    // Patterns to detect build success in output
+    private val BUILD_SUCCESS_PATTERNS = listOf(
+        Regex("""\bBUILD SUCCESSFUL\b"""),
+        Regex("""\bBuild complete\b""", RegexOption.IGNORE_CASE),
+        Regex("""\b0 errors\b"""),
+        Regex("""\bBUILD SUCCESS\b"""),
+        Regex("""\bCompilation complete\b""", RegexOption.IGNORE_CASE)
+    )
+
     /**
      * Detect activity type from a tool use.
      *
@@ -86,20 +148,25 @@ object Patterns {
         return when (toolName) {
             "Task" -> ActivityType.AGENT_SPAWN
             "AskUserQuestion" -> ActivityType.USER_QUESTION
+            "EnterPlanMode" -> ActivityType.PLANNING
             "Write" -> ActivityType.CODE_WRITING
             "Edit", "NotebookEdit" -> ActivityType.CODE_EDITING
-            "Bash" -> {
-                val command = toolInput?.get("command") as? String ?: ""
-                if (isTestCommand(command)) {
-                    ActivityType.TEST_EXECUTION
-                } else {
-                    ActivityType.BASH_EXECUTION
-                }
-            }
+            "Bash" -> classifyBashCommand(toolInput?.get("command") as? String ?: "")
             "Read", "Glob", "Grep" -> ActivityType.FILE_READ
             "WebSearch", "WebFetch" -> ActivityType.WEB_SEARCH
             else -> ActivityType.UNKNOWN
         }
+    }
+
+    /**
+     * Classify a Bash command in priority order: test > build > commit > install > generic.
+     */
+    private fun classifyBashCommand(command: String): ActivityType {
+        if (isTestCommand(command)) return ActivityType.TEST_EXECUTION
+        if (isBuildCommand(command)) return ActivityType.BUILD_EXECUTION
+        if (isCommitCommand(command)) return ActivityType.COMMITTING
+        if (isInstallCommand(command)) return ActivityType.INSTALLING_DEPS
+        return ActivityType.BASH_EXECUTION
     }
 
     /**
@@ -109,9 +176,19 @@ object Patterns {
      * @return True if this appears to be a test command.
      */
     fun isTestCommand(command: String): Boolean {
-        return TEST_COMMAND_PATTERNS.any { pattern ->
-            pattern.containsMatchIn(command)
-        }
+        return TEST_COMMAND_PATTERNS.any { it.containsMatchIn(command) }
+    }
+
+    fun isBuildCommand(command: String): Boolean {
+        return BUILD_COMMAND_PATTERNS.any { it.containsMatchIn(command) }
+    }
+
+    fun isCommitCommand(command: String): Boolean {
+        return COMMIT_COMMAND_PATTERNS.any { it.containsMatchIn(command) }
+    }
+
+    fun isInstallCommand(command: String): Boolean {
+        return INSTALL_COMMAND_PATTERNS.any { it.containsMatchIn(command) }
     }
 
     /**
@@ -132,6 +209,28 @@ object Patterns {
         for (pattern in TEST_SUCCESS_PATTERNS) {
             if (pattern.containsMatchIn(output)) {
                 return ActivityType.TEST_SUCCESS
+            }
+        }
+
+        return null
+    }
+
+    /**
+     * Analyze tool output to detect build results.
+     *
+     * @param output The output from a build execution.
+     * @return BUILD_FAILURE, BUILD_SUCCESS, or null if not determinable.
+     */
+    fun detectBuildResult(output: String): ActivityType? {
+        for (pattern in BUILD_FAILURE_PATTERNS) {
+            if (pattern.containsMatchIn(output)) {
+                return ActivityType.BUILD_FAILURE
+            }
+        }
+
+        for (pattern in BUILD_SUCCESS_PATTERNS) {
+            if (pattern.containsMatchIn(output)) {
+                return ActivityType.BUILD_SUCCESS
             }
         }
 
