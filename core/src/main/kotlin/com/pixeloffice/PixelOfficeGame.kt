@@ -222,43 +222,41 @@ class PixelOfficeGame : ApplicationAdapter() {
     }
 
     private fun handleActivity(activity: DetectedActivity) {
+        // Record every activity to the tracker before dispatching animations
+        val agentId = activity.agentId ?: office.getAllDevelopers().lastOrNull()?.agentId
+        if (agentId != null) {
+            office.recordAgentActivity(agentId, activity.type, activity.toolName, extractActivityContext(activity))
+        }
+
         when (activity.type) {
             ActivityType.AGENT_SPAWN -> {
-                // Spawn a new developer
-                val agentId = activity.agentId ?: "agent_${office.getAllDevelopers().size}"
-                office.spawnDeveloper(agentId)
+                val spawnId = activity.agentId ?: "agent_${office.getAllDevelopers().size}"
+                office.spawnDeveloper(spawnId)
             }
             ActivityType.THINKING -> {
-                // Developer starts thinking
-                val agentId = activity.agentId
-                val dev = if (agentId != null) {
-                    office.getDeveloper(agentId)
-                } else {
-                    office.getAllDevelopers().lastOrNull()
-                }
-                dev?.handleEvent("thinking_started")
+                resolveDeveloper(activity)?.handleEvent("thinking_started")
+            }
+            ActivityType.PLANNING -> {
+                resolveDeveloper(activity)?.handleEvent("thinking_started")
             }
             ActivityType.CODE_WRITING, ActivityType.CODE_EDITING -> {
-                // Developer starts coding
-                val agentId = activity.agentId
-                val dev = if (agentId != null) {
-                    office.getDeveloper(agentId)
-                } else {
-                    office.getAllDevelopers().lastOrNull()
-                }
-                dev?.handleEvent("code_writing_started")
+                resolveDeveloper(activity)?.handleEvent("code_writing_started")
+            }
+            ActivityType.BUILD_EXECUTION, ActivityType.COMMITTING, ActivityType.INSTALLING_DEPS -> {
+                resolveDeveloper(activity)?.handleEvent("code_writing_started")
             }
             ActivityType.TEST_FAILURE -> {
-                // Tests failed - trigger despair and camera shake
-                office.getAllDevelopers().lastOrNull()?.handleEvent("tests_failed")
+                resolveDeveloper(activity)?.handleEvent("tests_failed")
                 camera.shake(3f)
             }
-            ActivityType.TEST_SUCCESS -> {
-                // Tests passed - back to idle
-                office.getAllDevelopers().lastOrNull()?.handleEvent("code_writing_ended")
+            ActivityType.BUILD_FAILURE -> {
+                resolveDeveloper(activity)?.handleEvent("tests_failed")
+                camera.shake(3f)
+            }
+            ActivityType.TEST_SUCCESS, ActivityType.BUILD_SUCCESS -> {
+                resolveDeveloper(activity)?.handleEvent("code_writing_ended")
             }
             ActivityType.USER_QUESTION -> {
-                // Spawn PO for user question
                 office.getAllDevelopers().lastOrNull()?.let { dev ->
                     office.spawnProductOwner(dev.agentId)
                 }
@@ -266,6 +264,36 @@ class PixelOfficeGame : ApplicationAdapter() {
             else -> {
                 // Other activities don't trigger specific animations
             }
+        }
+    }
+
+    /**
+     * Resolve the developer for an activity, preferring the activity's agentId.
+     */
+    private fun resolveDeveloper(activity: DetectedActivity): com.pixeloffice.entities.Developer? {
+        val id = activity.agentId
+        return if (id != null) office.getDeveloper(id) else office.getAllDevelopers().lastOrNull()
+    }
+
+    /**
+     * Extract brief context from an activity's details for tracking.
+     */
+    private fun extractActivityContext(activity: DetectedActivity): String? {
+        val details = activity.details ?: return null
+        return when (activity.type) {
+            ActivityType.CODE_WRITING, ActivityType.CODE_EDITING -> {
+                (details["file_path"] as? String)?.substringAfterLast('/')
+            }
+            ActivityType.FILE_READ -> {
+                (details["file_path"] as? String)?.substringAfterLast('/')
+                    ?: (details["pattern"] as? String)
+            }
+            ActivityType.BASH_EXECUTION, ActivityType.TEST_EXECUTION,
+            ActivityType.BUILD_EXECUTION, ActivityType.COMMITTING,
+            ActivityType.INSTALLING_DEPS -> {
+                (details["command"] as? String)?.take(40)
+            }
+            else -> null
         }
     }
 
