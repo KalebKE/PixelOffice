@@ -3,15 +3,18 @@ package com.pixeloffice.rendering
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.GL20
+import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
+import com.badlogic.gdx.graphics.g2d.TextureRegion
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.pixeloffice.PixelOfficeGame
 import com.pixeloffice.animation.SpriteFrame
 import com.pixeloffice.animation.SpriteSheet
 import com.pixeloffice.core.WalkableZone
 import com.pixeloffice.world.*
+import java.util.Calendar
 import kotlin.math.sin
 
 /**
@@ -81,6 +84,291 @@ class Renderer(
     // Furniture label recording for debug overlay
     private val furnitureLabels = mutableListOf<Triple<String, Float, Float>>()
 
+    // LED clock rendering - 1×1 green pixel used to draw segment digits
+    private var ledPixelTexture: Texture? = null
+    private lateinit var ledPixelRegion: TextureRegion
+    private val ledGreen = Color(0x00 / 255f, 0xE4 / 255f, 0x36 / 255f, 1f)
+
+    // 3×5 pixel patterns for 7-segment style digits (row-major, top to bottom)
+    private val digitPatterns: Array<BooleanArray> = arrayOf(
+        // 0
+        booleanArrayOf(
+            true, true, true,
+            true, false, true,
+            true, false, true,
+            true, false, true,
+            true, true, true
+        ),
+        // 1
+        booleanArrayOf(
+            false, false, true,
+            false, false, true,
+            false, false, true,
+            false, false, true,
+            false, false, true
+        ),
+        // 2
+        booleanArrayOf(
+            true, true, true,
+            false, false, true,
+            true, true, true,
+            true, false, false,
+            true, true, true
+        ),
+        // 3
+        booleanArrayOf(
+            true, true, true,
+            false, false, true,
+            true, true, true,
+            false, false, true,
+            true, true, true
+        ),
+        // 4
+        booleanArrayOf(
+            true, false, true,
+            true, false, true,
+            true, true, true,
+            false, false, true,
+            false, false, true
+        ),
+        // 5
+        booleanArrayOf(
+            true, true, true,
+            true, false, false,
+            true, true, true,
+            false, false, true,
+            true, true, true
+        ),
+        // 6
+        booleanArrayOf(
+            true, true, true,
+            true, false, false,
+            true, true, true,
+            true, false, true,
+            true, true, true
+        ),
+        // 7
+        booleanArrayOf(
+            true, true, true,
+            false, false, true,
+            false, false, true,
+            false, false, true,
+            false, false, true
+        ),
+        // 8
+        booleanArrayOf(
+            true, true, true,
+            true, false, true,
+            true, true, true,
+            true, false, true,
+            true, true, true
+        ),
+        // 9
+        booleanArrayOf(
+            true, true, true,
+            true, false, true,
+            true, true, true,
+            false, false, true,
+            true, true, true
+        )
+    )
+
+    // 3×5 pixel patterns for uppercase letters (row-major, top to bottom)
+    private val letterPatterns: Map<Char, BooleanArray> = mapOf(
+        'A' to booleanArrayOf(
+            false, true, false,
+            true, false, true,
+            true, true, true,
+            true, false, true,
+            true, false, true
+        ),
+        'B' to booleanArrayOf(
+            true, true, false,
+            true, false, true,
+            true, true, false,
+            true, false, true,
+            true, true, false
+        ),
+        'C' to booleanArrayOf(
+            false, true, true,
+            true, false, false,
+            true, false, false,
+            true, false, false,
+            false, true, true
+        ),
+        'D' to booleanArrayOf(
+            true, true, false,
+            true, false, true,
+            true, false, true,
+            true, false, true,
+            true, true, false
+        ),
+        'E' to booleanArrayOf(
+            true, true, true,
+            true, false, false,
+            true, true, false,
+            true, false, false,
+            true, true, true
+        ),
+        'F' to booleanArrayOf(
+            true, true, true,
+            true, false, false,
+            true, true, false,
+            true, false, false,
+            true, false, false
+        ),
+        'G' to booleanArrayOf(
+            false, true, true,
+            true, false, false,
+            true, false, true,
+            true, false, true,
+            false, true, true
+        ),
+        'H' to booleanArrayOf(
+            true, false, true,
+            true, false, true,
+            true, true, true,
+            true, false, true,
+            true, false, true
+        ),
+        'I' to booleanArrayOf(
+            true, true, true,
+            false, true, false,
+            false, true, false,
+            false, true, false,
+            true, true, true
+        ),
+        'J' to booleanArrayOf(
+            false, false, true,
+            false, false, true,
+            false, false, true,
+            true, false, true,
+            false, true, false
+        ),
+        'K' to booleanArrayOf(
+            true, false, true,
+            true, false, true,
+            true, true, false,
+            true, false, true,
+            true, false, true
+        ),
+        'L' to booleanArrayOf(
+            true, false, false,
+            true, false, false,
+            true, false, false,
+            true, false, false,
+            true, true, true
+        ),
+        'M' to booleanArrayOf(
+            true, false, true,
+            true, true, true,
+            true, true, true,
+            true, false, true,
+            true, false, true
+        ),
+        'N' to booleanArrayOf(
+            true, false, true,
+            true, true, true,
+            true, true, true,
+            true, true, true,
+            true, false, true
+        ),
+        'O' to booleanArrayOf(
+            false, true, false,
+            true, false, true,
+            true, false, true,
+            true, false, true,
+            false, true, false
+        ),
+        'P' to booleanArrayOf(
+            true, true, false,
+            true, false, true,
+            true, true, false,
+            true, false, false,
+            true, false, false
+        ),
+        'Q' to booleanArrayOf(
+            false, true, false,
+            true, false, true,
+            true, false, true,
+            true, true, false,
+            false, true, true
+        ),
+        'R' to booleanArrayOf(
+            true, true, false,
+            true, false, true,
+            true, true, false,
+            true, false, true,
+            true, false, true
+        ),
+        'S' to booleanArrayOf(
+            false, true, true,
+            true, false, false,
+            false, true, false,
+            false, false, true,
+            true, true, false
+        ),
+        'T' to booleanArrayOf(
+            true, true, true,
+            false, true, false,
+            false, true, false,
+            false, true, false,
+            false, true, false
+        ),
+        'U' to booleanArrayOf(
+            true, false, true,
+            true, false, true,
+            true, false, true,
+            true, false, true,
+            false, true, false
+        ),
+        'V' to booleanArrayOf(
+            true, false, true,
+            true, false, true,
+            true, false, true,
+            false, true, false,
+            false, true, false
+        ),
+        'W' to booleanArrayOf(
+            true, false, true,
+            true, false, true,
+            true, true, true,
+            true, true, true,
+            true, false, true
+        ),
+        'X' to booleanArrayOf(
+            true, false, true,
+            true, false, true,
+            false, true, false,
+            true, false, true,
+            true, false, true
+        ),
+        'Y' to booleanArrayOf(
+            true, false, true,
+            true, false, true,
+            false, true, false,
+            false, true, false,
+            false, true, false
+        ),
+        'Z' to booleanArrayOf(
+            true, true, true,
+            false, false, true,
+            false, true, false,
+            true, false, false,
+            true, true, true
+        ),
+        ' ' to booleanArrayOf(
+            false, false, false,
+            false, false, false,
+            false, false, false,
+            false, false, false,
+            false, false, false
+        )
+    )
+
+    // Company name sign
+    var companyName: String = "Pixel Office"
+
     // Desk occupancy tracking for dynamic chair positions
     private var occupiedDesks: Set<String> = emptySet()
 
@@ -127,6 +415,16 @@ class Renderer(
         // Initialize sprite sheet with texture
         spriteSheet.setTexture(texture!!)
         spriteSheet.initialize()
+
+        // Create 1×1 white pixel texture for LED clock digits
+        val pixmap = Pixmap(1, 1, Pixmap.Format.RGBA8888)
+        pixmap.setColor(1f, 1f, 1f, 1f)
+        pixmap.fill()
+        ledPixelTexture = Texture(pixmap).apply {
+            setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
+        }
+        ledPixelRegion = TextureRegion(ledPixelTexture)
+        pixmap.dispose()
     }
 
     fun setCamera(camera: GameCamera) {
@@ -248,6 +546,8 @@ class Renderer(
         drawFurniture("door", 136f, 75f)
 
         drawFurniture("clock", 126f, 65f)
+        drawClockTime(125f, 65f)
+        drawCompanySign()
 
         drawFurniture("window", 250f, 70f)
     }
@@ -318,6 +618,113 @@ class Renderer(
         } else {
             batch.draw(frame.region, worldX, screenY)
         }
+    }
+
+    /**
+     * Draw the wall clock time as LED segment-style digits.
+     * Renders "HH:MM" in bright green over the clock sprite.
+     * @param worldX X position of the clock sprite in world coordinates.
+     * @param worldY Y position of the clock sprite in world coordinates (Y-down).
+     */
+    private fun drawClockTime(worldX: Float, worldY: Float) {
+        val cal = Calendar.getInstance()
+        val hour = cal.get(Calendar.HOUR_OF_DAY)
+        val minute = cal.get(Calendar.MINUTE)
+
+        val prevColor = Color(batch.color)
+        batch.color = ledGreen
+
+        // Clock sprite is 19×6. Digits are 3×5, colon is 1×5.
+        // Layout: 1px pad + 3 + 1 + 3 + 1 + 1 + 1 + 3 + 1 + 3 + 1px pad = 19
+        val startX = worldX + 1f
+        val startWorldY = worldY + 1f  // 1px top padding within the 6px sprite
+        val screenY = flipY(startWorldY, 5)
+
+        var cx = startX
+        drawLedDigit(hour / 10, cx, screenY); cx += 4f
+        drawLedDigit(hour % 10, cx, screenY); cx += 4f
+        // Colon: two dots at rows 1 and 3 (0-indexed)
+        val colonX = cx
+        batch.draw(ledPixelRegion, colonX, screenY + 3f, 1f, 1f)
+        batch.draw(ledPixelRegion, colonX, screenY + 1f, 1f, 1f)
+        cx += 2f
+        drawLedDigit(minute / 10, cx, screenY); cx += 4f
+        drawLedDigit(minute % 10, cx, screenY)
+
+        batch.color = prevColor
+    }
+
+    /**
+     * Draw a single 3×5 LED segment digit at screen coordinates.
+     */
+    private fun drawLedDigit(digit: Int, screenX: Float, screenY: Float) {
+        val pattern = digitPatterns[digit]
+        for (row in 0 until 5) {
+            for (col in 0 until 3) {
+                if (pattern[row * 3 + col]) {
+                    // row 0 = top of digit = highest screen Y (screenY + 4)
+                    batch.draw(ledPixelRegion, screenX + col, screenY + (4 - row), 1f, 1f)
+                }
+            }
+        }
+    }
+
+    /**
+     * Draw a single 3×5 LED character at screen coordinates.
+     * Supports A-Z (via letterPatterns) and 0-9 (via digitPatterns).
+     */
+    private fun drawLedChar(ch: Char, screenX: Float, screenY: Float) {
+        val pattern = when {
+            ch in '0'..'9' -> digitPatterns[ch - '0']
+            else -> letterPatterns[ch] ?: return
+        }
+        for (row in 0 until 5) {
+            for (col in 0 until 3) {
+                if (pattern[row * 3 + col]) {
+                    batch.draw(ledPixelRegion, screenX + col, screenY + (4 - row), 1f, 1f)
+                }
+            }
+        }
+    }
+
+    /**
+     * Draw the company name sign on the wall to the right of the clock.
+     * Black background with bright green LED-style text, matching the clock aesthetic.
+     */
+    private fun drawCompanySign() {
+        val text = companyName.uppercase()
+        val charWidth = 3
+        val gap = 1
+        val textWidth = text.length * (charWidth + gap) - gap
+        val padding = 2
+        val bgWidth = textWidth + padding * 2
+        val bgHeight = 5 + padding * 2  // 5px tall chars + padding
+
+        // Center over the two whiteboards (x=180..222, center=201)
+        val signWorldX = 201f - bgWidth / 2f
+        val signWorldY = 64f
+
+        // Draw black background (need shapeRenderer)
+        endBatch()
+        beginShapes()
+        shapeRenderer.color = Colors.BLACK
+        val bgScreenY = flipY(signWorldY, bgHeight)
+        shapeRenderer.rect(signWorldX, bgScreenY, bgWidth.toFloat(), bgHeight.toFloat())
+        endShapes()
+
+        // Draw green LED text
+        beginBatch()
+        val prevColor = Color(batch.color)
+        batch.color = ledGreen
+
+        val textScreenY = flipY(signWorldY + padding.toFloat(), 5)
+        var cx = signWorldX + padding
+        for (ch in text) {
+            drawLedChar(ch, cx, textScreenY)
+            cx += (charWidth + gap)
+        }
+
+        batch.color = prevColor
     }
 
     fun drawDog(worldX: Float, worldY: Float) {
@@ -1503,5 +1910,6 @@ class Renderer(
         shapeRenderer.dispose()
         font.dispose()
         texture?.dispose()
+        ledPixelTexture?.dispose()
     }
 }
