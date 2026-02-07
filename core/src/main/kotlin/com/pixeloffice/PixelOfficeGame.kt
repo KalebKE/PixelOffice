@@ -17,6 +17,7 @@ import com.pixeloffice.parsing.DetectedActivity
 import com.pixeloffice.parsing.StreamParser
 import com.pixeloffice.rendering.GameCamera
 import com.pixeloffice.rendering.Renderer
+import java.util.Calendar
 import com.pixeloffice.ui.SettingsConfig
 import com.pixeloffice.ui.SettingsOverlay
 import com.pixeloffice.world.Office
@@ -70,6 +71,9 @@ class PixelOfficeGame : ApplicationAdapter() {
     private lateinit var settingsOverlay: SettingsOverlay
     private var settingsOpen = false
     private var settingsConfig = SettingsConfig.fromDefaults()
+
+    // Night mode
+    private var nightModeAutomatic = true
 
     // Touch input
     private var lastTouchX = 0f
@@ -295,6 +299,11 @@ class PixelOfficeGame : ApplicationAdapter() {
         renderer.update(dt)
         office.update(dt)
 
+        // Night mode auto-detection
+        if (nightModeAutomatic) {
+            renderer.nightMode = isNightTime()
+        }
+
         // Clear and draw
         renderer.clear()
 
@@ -338,6 +347,12 @@ class PixelOfficeGame : ApplicationAdapter() {
         // Cycle label mode (F4)
         if (Gdx.input.isKeyJustPressed(Input.Keys.F4)) {
             renderer.cycleLabels()
+        }
+
+        // Toggle night mode (F5)
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F5)) {
+            renderer.nightMode = !renderer.nightMode
+            nightModeAutomatic = false
         }
 
         // Camera controls
@@ -507,6 +522,11 @@ class PixelOfficeGame : ApplicationAdapter() {
         office.resetAndApply(cfg)
         demoInitialized = true
         renderer.setLineNetwork(office.getLineNetwork().getAllLines())
+    }
+
+    private fun isNightTime(): Boolean {
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        return hour >= 19 || hour < 7
     }
 
     override fun dispose() {
