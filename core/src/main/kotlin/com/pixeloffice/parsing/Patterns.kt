@@ -181,7 +181,7 @@ object Patterns {
     /**
      * Classify a Bash command in priority order: test > build > commit > install > generic.
      */
-    private fun classifyBashCommand(command: String): ActivityType {
+    fun classifyBashCommand(command: String): ActivityType {
         if (isTestCommand(command)) return ActivityType.TEST_EXECUTION
         if (isBuildCommand(command)) return ActivityType.BUILD_EXECUTION
         if (isCommitCommand(command)) return ActivityType.COMMITTING

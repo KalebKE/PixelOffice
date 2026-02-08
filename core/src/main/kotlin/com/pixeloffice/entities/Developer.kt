@@ -24,7 +24,6 @@ class Developer(
     val agentId: String = "",
     colorVariant: Int = 0,
     private val walkSpeed: Float = 40f,
-    thinkingDuration: Float = 3f,
     despairDuration: Float = 2f
 ) : BaseEntity(x, y, entityId) {
 
@@ -51,7 +50,6 @@ class Developer(
     // State machine
     private val stateMachine = DeveloperStateMachine(
         this,
-        thinkingDuration = thinkingDuration,
         despairDuration = despairDuration
     )
 
@@ -133,6 +131,7 @@ class Developer(
             // Normal logic: sit when at desk and in appropriate state
             isAtDesk() &&
             (stateMachine.currentStateName == DeveloperStateNames.IDLE ||
+             stateMachine.currentStateName == DeveloperStateNames.THINKING ||
              stateMachine.currentStateName == DeveloperStateNames.WRITING_CODE ||
              stateMachine.currentStateName == DeveloperStateNames.BEING_INTERRUPTED ||
              stateMachine.currentStateName == DeveloperStateNames.TESTS_FAILING ||
@@ -184,6 +183,7 @@ class Developer(
         } else {
             isAtDesk() &&
             (stateMachine.currentStateName == DeveloperStateNames.IDLE ||
+             stateMachine.currentStateName == DeveloperStateNames.THINKING ||
              stateMachine.currentStateName == DeveloperStateNames.WRITING_CODE ||
              stateMachine.currentStateName == DeveloperStateNames.BEING_INTERRUPTED ||
              stateMachine.currentStateName == DeveloperStateNames.TESTS_FAILING ||

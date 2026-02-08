@@ -47,31 +47,31 @@ class IdleState : State<Developer>(DeveloperStateNames.IDLE) {
 /**
  * Developer is thinking, showing thought bubble.
  */
-class ThinkingState(private val duration: Float = 3.0f) : State<Developer>(DeveloperStateNames.THINKING) {
+class ThinkingState(private val timeout: Float = 4.0f) : State<Developer>(DeveloperStateNames.THINKING) {
     private var timer = 0f
 
     override fun enter(entity: Developer, prevState: State<Developer>?) {
-        if (entity.isAtDesk()) {
-            entity.snapToMidpoint()
-        }
-        entity.setAnimation("thinking")
+        entity.setAnimation("idle")
+        entity.showBubbleOfType("thinking")
         timer = 0f
     }
 
     override fun update(entity: Developer, dt: Float): String? {
         timer += dt
-        if (timer >= duration) {
-            return DeveloperStateNames.WALKING_TO_WHITEBOARD
+        if (timer >= timeout) {
+            return DeveloperStateNames.IDLE
         }
         return null
     }
 
-    override fun exit(entity: Developer, nextState: State<Developer>?) {}
+    override fun exit(entity: Developer, nextState: State<Developer>?) {
+        entity.showThoughtBubble(false)
+    }
 
     override fun onEvent(entity: Developer, event: String, data: Any?): String? {
         return when (event) {
-            "done_thinking" -> DeveloperStateNames.WRITING_CODE
-            "walk_to_whiteboard" -> DeveloperStateNames.WALKING_TO_WHITEBOARD
+            "thinking_started" -> { timer = 0f; null }
+            "done_thinking" -> DeveloperStateNames.IDLE
             "researching_started" -> DeveloperStateNames.RESEARCHING
             "code_writing_started" -> DeveloperStateNames.WRITING_CODE
             "command_started" -> DeveloperStateNames.RUNNING_COMMAND
@@ -140,6 +140,7 @@ class AtWhiteboardState(private val duration: Float = 5.0f) : State<Developer>(D
 
     override fun onEvent(entity: Developer, event: String, data: Any?): String? {
         return when (event) {
+            "planning_started" -> { timer = 0f; null }
             "done" -> DeveloperStateNames.WALKING_TO_DESK
             "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
             else -> null
@@ -169,6 +170,7 @@ class WalkingToDeskState : State<Developer>(DeveloperStateNames.WALKING_TO_DESK)
 
     override fun onEvent(entity: Developer, event: String, data: Any?): String? {
         return when (event) {
+            "planning_started" -> DeveloperStateNames.WALKING_TO_WHITEBOARD
             "arrived" -> DeveloperStateNames.WRITING_CODE
             "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
             else -> null
@@ -364,14 +366,13 @@ class BeingInterruptedState(private val duration: Float = 3.0f) : State<Develope
  */
 class DeveloperStateMachine(
     entity: Developer,
-    thinkingDuration: Float = 3.0f,
     despairDuration: Float = 2.0f,
     interruptDuration: Float = 3.0f,
     celebrateDuration: Float = 1.5f
 ) : StateMachine<Developer>(entity) {
     init {
         addState(IdleState(), initial = true)
-        addState(ThinkingState(thinkingDuration))
+        addState(ThinkingState())
         addState(ResearchingState())
         addState(WalkingToWhiteboardState())
         addState(AtWhiteboardState())

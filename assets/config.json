@@ -205,7 +205,7 @@
     "question_timeout": 30.0
   },
   "demo": {
-    "enabled": true,
+    "enabled": false,
     "sample_events_file": "tests/fixtures/sample_events.json"
   }
 }

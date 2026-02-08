@@ -133,6 +133,18 @@ class SettingsOverlay(
         content.add(Label("Desk:", skin)).padLeft(8f)
         content.add(poDeskBox).width(160f).row()
 
+        // --- Debug ---
+        content.add(Label("Debug", skin, "header")).colspan(6).padTop(10f).row()
+
+        val debugCheck = CheckBox(" Debug Mode (F1)", skin)
+        debugCheck.isChecked = config.debugMode
+        debugCheck.addListener(object : ChangeListener() {
+            override fun changed(event: ChangeEvent, actor: Actor) {
+                config.debugMode = debugCheck.isChecked
+            }
+        })
+        content.add(debugCheck).colspan(6).row()
+
         // Scroll pane wrapping content
         val scrollPane = ScrollPane(content, skin)
         scrollPane.setFadeScrollBars(false)

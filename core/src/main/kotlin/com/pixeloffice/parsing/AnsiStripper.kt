@@ -27,8 +27,8 @@ object AnsiStripper {
         RegexOption.COMMENTS
     )
 
-    // Simple pattern for most common ANSI codes
-    private val SIMPLE_ANSI_PATTERN = Regex("\u001B\\[[0-9;]*[A-Za-z]")
+    // Simple pattern for most common ANSI codes (including DEC private mode like \e[?2026h)
+    private val SIMPLE_ANSI_PATTERN = Regex("\u001B\\[\\??[0-9;]*[A-Za-z]")
 
     // Additional control characters to strip (except newline, carriage return, tab)
     private val CONTROL_CHARS_PATTERN = Regex("[\u0000-\u0008\u000b\u000c\u000e-\u001f]")

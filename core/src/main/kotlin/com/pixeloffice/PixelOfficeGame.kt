@@ -216,12 +216,18 @@ class PixelOfficeGame : ApplicationAdapter() {
     }
 
     private fun handleData(data: String) {
-        for (activity in streamParser.feed(data)) {
+        val activities = streamParser.feed(data)
+        for (activity in activities) {
             handleActivity(activity)
         }
     }
 
     private fun handleActivity(activity: DetectedActivity) {
+        // Auto-spawn a primary developer if none exist yet
+        if (office.getAllDevelopers().isEmpty() && activity.type != ActivityType.AGENT_SPAWN) {
+            office.spawnDeveloper("primary_agent")
+        }
+
         // Record every activity to the tracker before dispatching animations
         val agentId = activity.agentId ?: office.getAllDevelopers().lastOrNull()?.agentId
         if (agentId != null) {
@@ -316,7 +322,8 @@ class PixelOfficeGame : ApplicationAdapter() {
 
         // Process network data (if not demo mode)
         if (!demoMode) {
-            for (data in receiver.drainData()) {
+            val drained = receiver.drainData()
+            for (data in drained) {
                 handleData(data)
             }
         } else {
@@ -365,6 +372,7 @@ class PixelOfficeGame : ApplicationAdapter() {
         // Toggle debug
         if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) {
             renderer.toggleDebug()
+            settingsConfig.debugMode = renderer.showDebug
         }
 
         // Toggle forced sitting mode (F2)
@@ -559,6 +567,7 @@ class PixelOfficeGame : ApplicationAdapter() {
 
     private fun applySettings(cfg: SettingsConfig) {
         settingsConfig = cfg.deepCopy()
+        renderer.showDebug = cfg.debugMode
         office.resetAndApply(cfg)
         demoInitialized = true
         renderer.setLineNetwork(office.getLineNetwork().getAllLines())

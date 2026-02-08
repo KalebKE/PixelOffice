@@ -153,7 +153,6 @@ class Office(private val config: Config) {
             agentId = agentId,
             colorVariant = colorVariant,
             walkSpeed = config.developer.walkSpeed,
-            thinkingDuration = config.developer.thinkingDuration,
             despairDuration = config.developer.despairDuration
         )
 

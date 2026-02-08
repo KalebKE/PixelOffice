@@ -207,6 +207,7 @@ Tap the top-right corner of the screen (or open programmatically) to access runt
 | **Desk Items** | Red/Blue/Green Book, Notes, Document, Coffee Mug, None |
 | **Developer** | Add/remove, assign color variant (0-3), assign to desk |
 | **PM / PO** | Spawn toggle, assign to patrol or specific desk |
+| **Debug Mode** | Toggle debug overlay (FPS, coords, walkable zones, line network) |
 
 > **Gavin Belson:** You can change the chair color to *orange*. Do you understand what that means? It means freedom. It means choice. It means making the world a better place through customizable office furniture.
 >
@@ -406,7 +407,7 @@ tmux pipe-pane ─→ TCP (port 9999) ─→ TmuxReceiver
 | Key | Action | Context |
 |---|---|---|
 | `ESC` / `Q` | Quit | Always |
-| `F1` | Toggle debug overlay | Always |
+| `F1` | Toggle debug overlay (also in Settings) | Always |
 | `F2` | Force sitting mode | Always |
 | `F4` | Cycle label mode | Always |
 | `F5` | Toggle night mode | Always |
