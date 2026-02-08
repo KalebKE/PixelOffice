@@ -3,21 +3,18 @@ package com.pixeloffice
 import com.badlogic.gdx.ApplicationAdapter
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input
-import com.badlogic.gdx.InputAdapter
 import com.badlogic.gdx.InputMultiplexer
 import com.badlogic.gdx.input.GestureDetector
 import com.badlogic.gdx.input.GestureDetector.GestureAdapter
 import com.pixeloffice.animation.SpriteSheet
 import com.pixeloffice.core.Config
 import com.pixeloffice.core.EventBus
-import com.pixeloffice.core.EventType
 import com.pixeloffice.network.TmuxReceiver
 import com.pixeloffice.parsing.ActivityType
 import com.pixeloffice.parsing.DetectedActivity
 import com.pixeloffice.parsing.StreamParser
 import com.pixeloffice.rendering.GameCamera
 import com.pixeloffice.rendering.Renderer
-import java.util.Calendar
 import com.pixeloffice.ui.SettingsConfig
 import com.pixeloffice.ui.SettingsOverlay
 import com.pixeloffice.world.Office
@@ -42,7 +39,10 @@ class PixelOfficeGame : ApplicationAdapter() {
 
     // Core systems
     private lateinit var eventBus: EventBus
-    private lateinit var streamParser: StreamParser
+
+    // Per-connection parsers and agent mappings
+    private val streamParsers = mutableMapOf<String, StreamParser>()
+    private val connectionToAgent = mutableMapOf<String, String>()
 
     // Network
     private lateinit var receiver: TmuxReceiver
@@ -86,7 +86,6 @@ class PixelOfficeGame : ApplicationAdapter() {
 
         // Initialize core systems
         eventBus = EventBus()
-        streamParser = StreamParser()
 
         // Initialize network
         receiver = TmuxReceiver(
@@ -138,9 +137,6 @@ class PixelOfficeGame : ApplicationAdapter() {
             receiver.start()
         }
 
-        // Set up event handlers
-        setupEventHandlers()
-
         // Set up touch input for mobile
         setupTouchInput()
 
@@ -187,47 +183,50 @@ class PixelOfficeGame : ApplicationAdapter() {
     }
 
     private fun setupNetworkCallbacks() {
-        receiver.onConnect = {
-            // Post to GL thread for thread safety
+        receiver.onConnect = { connectionId ->
             receiver.postToGLThread {
-                renderer.setConnectionStatus("Connected")
-                eventBus.emit(EventType.CONNECTION_ESTABLISHED)
+                handleNewConnection(connectionId)
             }
         }
 
-        receiver.onDisconnect = {
+        receiver.onDisconnect = { connectionId ->
             receiver.postToGLThread {
-                renderer.setConnectionStatus("Disconnected")
-                eventBus.emit(EventType.CONNECTION_LOST)
-            }
-        }
-
-        receiver.onData = { data ->
-            receiver.postToGLThread {
-                eventBus.emit(EventType.DATA_RECEIVED, mapOf("data" to data))
+                handleDisconnection(connectionId)
             }
         }
     }
 
-    private fun setupEventHandlers() {
-        eventBus.subscribe(EventType.DATA_RECEIVED) { event ->
-            handleData(event.data["data"] as? String ?: "")
-        }
+    private fun handleNewConnection(connectionId: String) {
+        val parser = StreamParser()
+        streamParsers[connectionId] = parser
+
+        val agentId = "agent_$connectionId"
+        connectionToAgent[connectionId] = agentId
+        office.spawnDeveloper(agentId)
+
+        val count = receiver.getConnectionCount()
+        renderer.setConnectionStatus("Connected ($count)")
+        Gdx.app.log("PixelOffice", "New connection: $connectionId → agent $agentId")
     }
 
-    private fun handleData(data: String) {
-        val activities = streamParser.feed(data)
-        for (activity in activities) {
-            handleActivity(activity)
+    private fun handleDisconnection(connectionId: String) {
+        streamParsers.remove(connectionId)
+
+        val agentId = connectionToAgent.remove(connectionId)
+        if (agentId != null) {
+            office.getDeveloper(agentId)?.handleEvent("idle")
         }
+
+        val count = receiver.getConnectionCount()
+        if (count > 0) {
+            renderer.setConnectionStatus("Connected ($count)")
+        } else {
+            renderer.setConnectionStatus("Disconnected")
+        }
+        Gdx.app.log("PixelOffice", "Disconnected: $connectionId (agent $agentId)")
     }
 
     private fun handleActivity(activity: DetectedActivity) {
-        // Auto-spawn a primary developer if none exist yet
-        if (office.getAllDevelopers().isEmpty() && activity.type != ActivityType.AGENT_SPAWN) {
-            office.spawnDeveloper("primary_agent")
-        }
-
         // Record every activity to the tracker before dispatching animations
         val agentId = activity.agentId ?: office.getAllDevelopers().lastOrNull()?.agentId
         if (agentId != null) {
@@ -236,7 +235,8 @@ class PixelOfficeGame : ApplicationAdapter() {
 
         when (activity.type) {
             ActivityType.AGENT_SPAWN -> {
-                val spawnId = activity.agentId ?: "agent_${office.getAllDevelopers().size}"
+                val parentId = activity.agentId ?: "unknown"
+                val spawnId = "${parentId}_sub_${office.getAllDevelopers().size}"
                 office.spawnDeveloper(spawnId)
             }
             ActivityType.THINKING -> {
@@ -323,8 +323,14 @@ class PixelOfficeGame : ApplicationAdapter() {
         // Process network data (if not demo mode)
         if (!demoMode) {
             val drained = receiver.drainData()
-            for (data in drained) {
-                handleData(data)
+            for ((connectionId, data) in drained) {
+                val parser = streamParsers[connectionId] ?: continue
+                val agentId = connectionToAgent[connectionId] ?: continue
+                val activities = parser.feed(data)
+                for (activity in activities) {
+                    activity.agentId = activity.agentId ?: agentId
+                    handleActivity(activity)
+                }
             }
         } else {
             runDemo(dt)
@@ -335,9 +341,9 @@ class PixelOfficeGame : ApplicationAdapter() {
         renderer.update(dt)
         office.update(dt)
 
-        // Night mode auto-detection
+        // Night mode auto-detection (synced with procedural sky)
         if (nightModeAutomatic) {
-            renderer.nightMode = isNightTime()
+            renderer.nightMode = renderer.isSkyNightTime()
         }
 
         // Clear and draw
@@ -571,11 +577,6 @@ class PixelOfficeGame : ApplicationAdapter() {
         office.resetAndApply(cfg)
         demoInitialized = true
         renderer.setLineNetwork(office.getLineNetwork().getAllLines())
-    }
-
-    private fun isNightTime(): Boolean {
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        return hour >= 19 || hour < 7
     }
 
     override fun dispose() {
