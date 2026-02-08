@@ -137,6 +137,18 @@ class SpriteSheet(
                 )
                 val sittingFrame = SpriteFrame.fromRect(tex, sittingRect)
                 createStandardAnimations(sittingSprite, sittingFrame, devAnimNames)
+
+                // Add "reading" animation (head tilt pose) if sprite exists
+                val sittingReadingRect = config?.getDeveloperCharacterSittingReading(variant)
+                if (sittingReadingRect != null) {
+                    val readingFrame = SpriteFrame.fromRect(tex, sittingReadingRect)
+                    sittingSprite.addAnimation(Animation(
+                        name = "reading",
+                        frames = listOf(readingFrame),
+                        frameDuration = 0.5f
+                    ))
+                }
+
                 sprites[sittingSprite.name] = sittingSprite
             }
         }

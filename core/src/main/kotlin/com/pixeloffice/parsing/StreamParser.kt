@@ -137,21 +137,34 @@ class StreamParser {
             ))
         }
 
-        // 2. Status text fallback (auto-approved tools don't show ToolName(...))
-        if (activities.isEmpty()) {
-            // Check plan mode first so inPlanMode is set before evaluating edit/write
-            if (STATUS_PLAN_MODE.containsMatchIn(searchText)) {
+        // 2. Mode transition detection — runs on EVERY chunk regardless of tool matches
+        val wasInPlanMode = inPlanMode
+        when {
+            STATUS_EDIT.containsMatchIn(searchText) || STATUS_WROTE.containsMatchIn(searchText) -> {
+                inPlanMode = false
+            }
+            STATUS_PLAN_MODE.containsMatchIn(searchText) -> {
                 inPlanMode = true
             }
+        }
+        // If we just left plan mode, ensure a code activity is emitted so the developer walks back
+        if (wasInPlanMode && !inPlanMode) {
+            val hasCodeActivity = activities.any {
+                it.type == ActivityType.CODE_EDITING || it.type == ActivityType.CODE_WRITING
+            }
+            if (!hasCodeActivity) {
+                activities.add(DetectedActivity(type = ActivityType.CODE_EDITING))
+            }
+        }
 
+        // 3. Status text fallback (auto-approved tools don't show ToolName(...))
+        if (activities.isEmpty()) {
             val statusMatch = when {
                 STATUS_PLAN_MODE.containsMatchIn(searchText) -> "status_plan_mode" to ActivityType.PLANNING
                 STATUS_FILE_READ.containsMatchIn(searchText) -> "status_file_read" to ActivityType.FILE_READ
                 STATUS_SEARCH.containsMatchIn(searchText) -> "status_search" to ActivityType.FILE_READ
-                STATUS_EDIT.containsMatchIn(searchText) ->
-                    "status_edit" to if (inPlanMode) ActivityType.PLANNING else ActivityType.CODE_EDITING
-                STATUS_WROTE.containsMatchIn(searchText) ->
-                    "status_wrote" to if (inPlanMode) ActivityType.PLANNING else ActivityType.CODE_WRITING
+                STATUS_EDIT.containsMatchIn(searchText) -> "status_edit" to ActivityType.CODE_EDITING
+                STATUS_WROTE.containsMatchIn(searchText) -> "status_wrote" to ActivityType.CODE_WRITING
                 STATUS_THINKING.containsMatchIn(searchText) -> "status_thinking" to ActivityType.THINKING
                 else -> null
             }
@@ -165,7 +178,7 @@ class StreamParser {
             }
         }
 
-        // 3. Build/test results (within result window of a Bash-type command)
+        // 4. Build/test results (within result window of a Bash-type command)
         if (lastToolActivityType != null && (now - lastToolTimestampForResult) < RESULT_WINDOW_MS) {
             val resultActivity = detectBuildTestResult(searchText)
             if (resultActivity != null) {
