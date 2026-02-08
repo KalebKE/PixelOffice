@@ -71,7 +71,7 @@ class Renderer(
     private var time = 0f
 
     // UI state
-    private var showDebug = false
+    var showDebug = false
     var nightMode = false
 
     private enum class LabelMode { OFF, CHARACTERS, DESKS, ROUTES, FURNITURE }

@@ -36,7 +36,8 @@ data class SettingsConfig(
     var spawnPM: Boolean = true,
     var pmDeskId: String? = null,
     var spawnPO: Boolean = true,
-    var poDeskId: String? = null
+    var poDeskId: String? = null,
+    var debugMode: Boolean = false
 ) {
     companion object {
         fun fromDefaults(): SettingsConfig {
@@ -124,7 +125,8 @@ data class SettingsConfig(
                 spawnPM = true,
                 pmDeskId = null,
                 spawnPO = true,
-                poDeskId = null
+                poDeskId = null,
+                debugMode = false
             )
         }
     }
