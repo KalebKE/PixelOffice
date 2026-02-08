@@ -28,9 +28,12 @@ class StreamParser {
     private var previousChunkTail = ""
     private val OVERLAP_SIZE = 50
 
+    // Plan mode tracking: suppress CODE_WRITING/CODE_EDITING while in plan mode
+    private var inPlanMode = false
+
     // Tool detection: matches ToolName( preceded by a non-alpha character or start of string
     private val TOOL_PATTERN = Regex(
-        """(?:^|[^A-Za-z])(Read|Edit|Write|Bash|Task|Glob|Grep|WebSearch|WebFetch|EnterPlanMode|AskUserQuestion|NotebookEdit)\("""
+        """(?:^|[^A-Za-z])(Read|Edit|Write|Bash|Task|Glob|Grep|WebSearch|WebFetch|EnterPlanMode|ExitPlanMode|AskUserQuestion|NotebookEdit)\("""
     )
 
     // Extract command from Bash(command) — captures content inside parens
@@ -88,7 +91,7 @@ class StreamParser {
             lastToolSignature = signature
             lastToolTimestamp = now
 
-            val activityType = when (toolName) {
+            var activityType = when (toolName) {
                 "Bash" -> {
                     // Try to extract and classify the bash command
                     val bashMatch = BASH_COMMAND_PATTERN.find(searchText, match.range.first)
@@ -100,7 +103,24 @@ class StreamParser {
                     }
                     classified
                 }
+                "ExitPlanMode" -> {
+                    inPlanMode = false
+                    ActivityType.THINKING
+                }
                 else -> Patterns.detectToolActivityFromName(toolName)
+            }
+
+            // Track plan mode entry
+            if (activityType == ActivityType.PLANNING) {
+                inPlanMode = true
+            }
+
+            // Suppress activities while in plan mode — keep developer at whiteboard with thinking bubble
+            if (inPlanMode && activityType !in setOf(
+                ActivityType.PLANNING, ActivityType.THINKING, ActivityType.FILE_READ,
+                ActivityType.WEB_SEARCH, ActivityType.AGENT_SPAWN, ActivityType.USER_QUESTION
+            )) {
+                activityType = ActivityType.PLANNING
             }
 
             // Track for result routing
@@ -119,12 +139,19 @@ class StreamParser {
 
         // 2. Status text fallback (auto-approved tools don't show ToolName(...))
         if (activities.isEmpty()) {
+            // Check plan mode first so inPlanMode is set before evaluating edit/write
+            if (STATUS_PLAN_MODE.containsMatchIn(searchText)) {
+                inPlanMode = true
+            }
+
             val statusMatch = when {
+                STATUS_PLAN_MODE.containsMatchIn(searchText) -> "status_plan_mode" to ActivityType.PLANNING
                 STATUS_FILE_READ.containsMatchIn(searchText) -> "status_file_read" to ActivityType.FILE_READ
                 STATUS_SEARCH.containsMatchIn(searchText) -> "status_search" to ActivityType.FILE_READ
-                STATUS_EDIT.containsMatchIn(searchText) -> "status_edit" to ActivityType.CODE_EDITING
-                STATUS_WROTE.containsMatchIn(searchText) -> "status_wrote" to ActivityType.CODE_WRITING
-                STATUS_PLAN_MODE.containsMatchIn(searchText) -> "status_plan_mode" to ActivityType.PLANNING
+                STATUS_EDIT.containsMatchIn(searchText) ->
+                    "status_edit" to if (inPlanMode) ActivityType.PLANNING else ActivityType.CODE_EDITING
+                STATUS_WROTE.containsMatchIn(searchText) ->
+                    "status_wrote" to if (inPlanMode) ActivityType.PLANNING else ActivityType.CODE_WRITING
                 STATUS_THINKING.containsMatchIn(searchText) -> "status_thinking" to ActivityType.THINKING
                 else -> null
             }
@@ -186,6 +213,7 @@ class StreamParser {
         lastToolActivityType = null
         lastToolTimestampForResult = 0L
         previousChunkTail = ""
+        inPlanMode = false
     }
 
     /**

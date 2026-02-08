@@ -101,8 +101,7 @@ class Developer(
 
         // Update thought bubble position if visible
         if (thoughtBubble != null && showBubble) {
-            thoughtBubble?.x = x + 8
-            thoughtBubble?.y = y - 26
+            thoughtBubble?.attachTo(x + 8, y - 26)
             thoughtBubble?.update(dt)
         }
 

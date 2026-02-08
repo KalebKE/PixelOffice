@@ -39,6 +39,8 @@ object Colors {
     val INDIGO = Color(0x83 / 255f, 0x76 / 255f, 0x9C / 255f, 1f)
     val PINK = Color(0xFF / 255f, 0x77 / 255f, 0xA8 / 255f, 1f)
     val PEACH = Color(0xFF / 255f, 0xCC / 255f, 0xAA / 255f, 1f)
+    val MATRIX_GREEN = Color(0x00 / 255f, 0xFF / 255f, 0x41 / 255f, 1f)
+    val MATRIX_BG = Color(0x0A / 255f, 0x0A / 255f, 0x0A / 255f, 1f)
 }
 
 /**
@@ -50,7 +52,11 @@ object Colors {
 class Renderer(
     private val width: Int,
     private val height: Int,
-    private val spriteSheet: SpriteSheet
+    private val spriteSheet: SpriteSheet,
+    private val skyTrafficInterval: Float = 30f,
+    private val skyTrafficEnabled: Boolean = true,
+    private val skyTrafficSprite: String = "sprites/32bit-PaperAirplane",
+    private val skyTrafficFrameCount: Int = 4
 ) {
     // libGDX rendering objects
     lateinit var batch: SpriteBatch
@@ -76,7 +82,8 @@ class Renderer(
 
     private enum class LabelMode { OFF, CHARACTERS, DESKS, ROUTES, FURNITURE }
     private var labelMode = LabelMode.OFF
-    private var connectionStatus = "Disconnected"
+    private var connectedCount = 0
+    private var isDemoMode = false
     private var fps = 0
     private var walkableZones: List<WalkableZone> = emptyList()
     private var lineNetwork: List<NavLine> = emptyList()
@@ -377,6 +384,19 @@ class Renderer(
         )
     )
 
+    // 9×9 pixel gear icon pattern (row-major, top to bottom)
+    private val gearPattern: BooleanArray = booleanArrayOf(
+        false, false, true,  false, true,  false, true,  false, false,
+        false, false, true,  true,  true,  true,  true,  false, false,
+        true,  true,  true,  false, false, false, true,  true,  true,
+        false, true,  false, false, false, false, false, true,  false,
+        true,  true,  false, false, true,  false, false, true,  true,
+        false, true,  false, false, false, false, false, true,  false,
+        true,  true,  true,  false, false, false, true,  true,  true,
+        false, false, true,  true,  true,  true,  true,  false, false,
+        false, false, true,  false, true,  false, true,  false, false
+    )
+
     // Company name sign
     var companyName: String = "Pixel Office"
 
@@ -463,7 +483,7 @@ class Renderer(
         glowPixmap.dispose()
 
         // Initialize procedural sky
-        skyRenderer = SkyRenderer(width, height)
+        skyRenderer = SkyRenderer(width, height, skyTrafficInterval, skyTrafficEnabled, skyTrafficSprite, skyTrafficFrameCount)
     }
 
     fun setCamera(camera: GameCamera) {
@@ -556,6 +576,11 @@ class Renderer(
 
         // Procedural clouds (ShapeRenderer)
         skyRenderer.drawClouds(shapeRenderer)
+
+        // Flying objects (SpriteBatch) — behind stars, in front of clouds
+        beginBatch()
+        skyRenderer.drawFlyingObjects(batch)
+        endBatch()
 
         // Stars at night (SpriteBatch)
         beginBatch()
@@ -712,6 +737,20 @@ class Renderer(
     }
 
     /**
+     * Draw the 9×9 pixel gear icon at screen coordinates.
+     * screenX/screenY is the bottom-left corner of the icon.
+     */
+    private fun drawGearIcon(screenX: Float, screenY: Float) {
+        for (row in 0 until 9) {
+            for (col in 0 until 9) {
+                if (gearPattern[row * 9 + col]) {
+                    batch.draw(ledPixelRegion, screenX + col, screenY + (8 - row), 1f, 1f)
+                }
+            }
+        }
+    }
+
+    /**
      * Draw the company name sign on the wall to the right of the clock.
      * Black background with bright green LED-style text, matching the clock aesthetic.
      */
@@ -746,6 +785,39 @@ class Renderer(
         for (ch in text) {
             drawLedChar(ch, cx, textScreenY)
             cx += (charWidth + gap)
+        }
+
+        batch.color = prevColor
+
+        drawLedBar()
+    }
+
+    /**
+     * Draw LED light bar above the company sign showing connection count.
+     * 8 LED slots: lit green for connected panes, yellow in demo mode, dark gray for unlit.
+     */
+    private fun drawLedBar() {
+        val ledCount = 8
+        val ledW = 3f
+        val ledH = 2f
+        val gap = 2f
+        val totalWidth = ledCount * ledW + (ledCount - 1) * gap
+        val barX = 201f - totalWidth / 2f
+        val barWorldY = 60f
+        val screenY = flipY(barWorldY, ledH.toInt())
+
+        val prevColor = Color(batch.color)
+        val unlitColor = Color(0.15f, 0.15f, 0.15f, 1f)
+
+        for (i in 0 until ledCount) {
+            val x = barX + i * (ledW + gap)
+            val lit = if (isDemoMode) true else i < connectedCount
+            batch.color = when {
+                isDemoMode && lit -> Colors.YELLOW
+                lit -> ledGreen
+                else -> unlitColor
+            }
+            batch.draw(ledPixelRegion, x, screenY, ledW, ledH)
         }
 
         batch.color = prevColor
@@ -885,18 +957,26 @@ class Renderer(
         drawSprite(worldX, worldY, frame, flipX, bobOffset)
     }
 
+    private fun bubbleColor(base: Color) = Color(base.r, base.g, base.b, 0.25f)
+
     /**
      * Draw a thought bubble effect (procedural).
      * @param bubbleType Type of bubble: "thinking", "blah", "question", "annoyed"
      */
     fun drawThoughtBubble(worldX: Float, worldY: Float, frameIndex: Int, bubbleType: String = "thinking") {
+        Gdx.gl.glEnable(GL20.GL_BLEND)
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
+
         when (bubbleType) {
             "thinking" -> drawThinkingBubble(worldX, worldY, frameIndex)
             "blah" -> drawBlahBubble(worldX, worldY, frameIndex)
             "question" -> drawQuestionBubble(worldX, worldY, frameIndex)
             "annoyed" -> drawAnnoyedBubble(worldX, worldY, frameIndex)
+            "coding" -> drawCodingBubble(worldX, worldY, frameIndex)
             else -> drawThinkingBubble(worldX, worldY, frameIndex)
         }
+
+        Gdx.gl.glDisable(GL20.GL_BLEND)
     }
 
     /**
@@ -914,19 +994,19 @@ class Renderer(
         beginShapes()
 
         // Main bubble
-        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
         shapeRenderer.circle(worldX + 8, screenY + 12 - pulse, 8f)
 
         endShapes()
 
         beginShapes(ShapeRenderer.ShapeType.Line)
-        shapeRenderer.color = Colors.DARK_GRAY
+        shapeRenderer.color = bubbleColor(Colors.DARK_GRAY)
         shapeRenderer.circle(worldX + 8, screenY + 12 - pulse, 8f)
         endShapes()
 
         // Animated dots inside bubble
         beginShapes()
-        shapeRenderer.color = Colors.DARK_GRAY
+        shapeRenderer.color = bubbleColor(Colors.DARK_GRAY)
         val dotOffset = ((time * 4).toInt()) % 4
         for (i in 0 until 3) {
             var dotY = screenY + 12 - pulse
@@ -939,7 +1019,7 @@ class Renderer(
 
         beginShapes()
         // Small connecting bubbles (below main bubble in screen coords)
-        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
         shapeRenderer.circle(worldX - 2, screenY + 6, 2f)
         shapeRenderer.circle(worldX - 4, screenY + 2, 1f)
         endShapes()
@@ -958,18 +1038,18 @@ class Renderer(
 
         // Speech bubble (slightly larger, more oval)
         beginShapes()
-        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
         shapeRenderer.circle(worldX + 8, screenY + 12 - pulse, 10f)
         endShapes()
 
         beginShapes(ShapeRenderer.ShapeType.Line)
-        shapeRenderer.color = Colors.DARK_GRAY
+        shapeRenderer.color = bubbleColor(Colors.DARK_GRAY)
         shapeRenderer.circle(worldX + 8, screenY + 12 - pulse, 10f)
         endShapes()
 
         // Speech lines inside (horizontal lines to represent talking)
         beginShapes()
-        shapeRenderer.color = Colors.DARK_GRAY
+        shapeRenderer.color = bubbleColor(Colors.DARK_GRAY)
         val lineY = screenY + 12 - pulse
         shapeRenderer.rectLine(worldX + 2, lineY + 2, worldX + 14, lineY + 2, 1f)
         shapeRenderer.rectLine(worldX + 4, lineY - 1, worldX + 12, lineY - 1, 1f)
@@ -978,7 +1058,7 @@ class Renderer(
 
         // Speech bubble tail (pointing down-left)
         beginShapes()
-        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
         shapeRenderer.triangle(
             worldX, screenY + 6,
             worldX + 4, screenY + 6,
@@ -987,7 +1067,7 @@ class Renderer(
         endShapes()
 
         beginShapes(ShapeRenderer.ShapeType.Line)
-        shapeRenderer.color = Colors.DARK_GRAY
+        shapeRenderer.color = bubbleColor(Colors.DARK_GRAY)
         shapeRenderer.line(worldX, screenY + 6, worldX - 2, screenY + 2)
         shapeRenderer.line(worldX - 2, screenY + 2, worldX + 4, screenY + 6)
         endShapes()
@@ -1006,30 +1086,30 @@ class Renderer(
 
         // Main bubble
         beginShapes()
-        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
         shapeRenderer.circle(worldX + 8, screenY + 12 - pulse, 8f)
         endShapes()
 
         beginShapes(ShapeRenderer.ShapeType.Line)
-        shapeRenderer.color = Colors.DARK_GRAY
+        shapeRenderer.color = bubbleColor(Colors.DARK_GRAY)
         shapeRenderer.circle(worldX + 8, screenY + 12 - pulse, 8f)
         endShapes()
 
         // Question mark drawn with shapes
         beginShapes()
-        shapeRenderer.color = Colors.DARK_PURPLE
+        shapeRenderer.color = bubbleColor(Colors.DARK_PURPLE)
         // Top curve of ?
         shapeRenderer.circle(worldX + 8, screenY + 15 - pulse, 3f)
         // Clear center to make it hollow
         endShapes()
 
         beginShapes()
-        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
         shapeRenderer.circle(worldX + 8, screenY + 15 - pulse, 1.5f)
         endShapes()
 
         beginShapes()
-        shapeRenderer.color = Colors.DARK_PURPLE
+        shapeRenderer.color = bubbleColor(Colors.DARK_PURPLE)
         // Stem of ?
         shapeRenderer.rect(worldX + 7, screenY + 10 - pulse, 2f, 3f)
         // Dot of ?
@@ -1038,7 +1118,7 @@ class Renderer(
 
         // Small connecting bubbles
         beginShapes()
-        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
         shapeRenderer.circle(worldX - 2, screenY + 6, 2f)
         shapeRenderer.circle(worldX - 4, screenY + 2, 1f)
         endShapes()
@@ -1057,18 +1137,18 @@ class Renderer(
 
         // Main bubble (slightly red-tinted for annoyance)
         beginShapes()
-        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
         shapeRenderer.circle(worldX + 8, screenY + 12 - pulse, 8f)
         endShapes()
 
         beginShapes(ShapeRenderer.ShapeType.Line)
-        shapeRenderer.color = Colors.RED
+        shapeRenderer.color = bubbleColor(Colors.RED)
         shapeRenderer.circle(worldX + 8, screenY + 12 - pulse, 8f)
         endShapes()
 
         // Exclamation mark
         beginShapes()
-        shapeRenderer.color = Colors.RED
+        shapeRenderer.color = bubbleColor(Colors.RED)
         // Stem of !
         shapeRenderer.rect(worldX + 7, screenY + 10 - pulse, 2f, 6f)
         // Dot of !
@@ -1077,9 +1157,80 @@ class Renderer(
 
         // Small connecting bubbles
         beginShapes()
-        shapeRenderer.color = Colors.WHITE
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
         shapeRenderer.circle(worldX - 2, screenY + 6, 2f)
         shapeRenderer.circle(worldX - 4, screenY + 2, 1f)
+        endShapes()
+
+        beginBatch()
+    }
+
+    /**
+     * Draw Matrix-style coding bubble with cascading green binary digits.
+     */
+    private fun drawCodingBubble(worldX: Float, worldY: Float, frameIndex: Int) {
+        endBatch()
+
+        val screenY = flipY(worldY, 20)
+
+        // Bubble dimensions (slightly wider/taller than standard circle bubbles)
+        val bw = 20f
+        val bh = 16f
+        val bx = worldX
+        val by = screenY + 6f
+
+        // Dark background rectangle
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Colors.MATRIX_BG)
+        shapeRenderer.rect(bx, by, bw, bh)
+        endShapes()
+
+        // Dark green border
+        beginShapes(ShapeRenderer.ShapeType.Line)
+        shapeRenderer.color = bubbleColor(Colors.DARK_GREEN)
+        shapeRenderer.rect(bx, by, bw, bh)
+        endShapes()
+
+        // Cascading binary digits using font
+        beginBatch()
+        val oldScale = font.data.scaleX
+        font.data.setScale(0.25f)
+
+        val columns = 4
+        val colWidth = bw / columns
+        val speeds = floatArrayOf(0.4f, 0.6f, 0.3f, 0.5f)
+        val offsets = floatArrayOf(0f, 1.7f, 0.8f, 2.3f)
+        val rows = 3
+
+        for (col in 0 until columns) {
+            val cx = bx + 2f + col * colWidth
+            for (row in 0 until rows) {
+                // Scroll position based on time, speed, and offset
+                val scroll = (time * speeds[col] + offsets[col] + row * 0.7f)
+                val digit = if (((scroll * 3).toInt()) % 2 == 0) "1" else "0"
+                // Brightness varies by row for depth effect
+                val brightness = when (row) {
+                    0 -> 1.0f
+                    1 -> 0.7f
+                    else -> 0.4f
+                }
+                font.color = Color(0f, brightness, 0.25f * brightness, 0.25f)
+                val dy = by + bh - 3f - row * 5f
+                // Only draw if within bubble bounds
+                if (dy > by + 1f) {
+                    font.draw(batch, digit, cx, dy)
+                }
+            }
+        }
+
+        font.data.setScale(oldScale)
+        endBatch()
+
+        // Small connecting thought-bubbles below
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Colors.MATRIX_BG)
+        shapeRenderer.circle(worldX - 2, screenY + 4, 2f)
+        shapeRenderer.circle(worldX - 4, screenY + 1, 1f)
         endShapes()
 
         beginBatch()
@@ -1226,18 +1377,9 @@ class Renderer(
         batch.projectionMatrix.setToOrtho2D(0f, 0f, width.toFloat(), height.toFloat())
         batch.begin()
 
-        // Connection status (top-left, Y-up so high Y = top)
-        val statusColor = when (connectionStatus) {
-            "Connected" -> Colors.GREEN
-            "Demo Mode" -> Colors.YELLOW
-            else -> Colors.RED
-        }
-        font.color = statusColor
-        font.draw(batch, "Status: $connectionStatus", 4f, height - 4f)
-
-        // Settings button (top-right)
-        font.color = Colors.WHITE
-        font.draw(batch, "[Settings]", width - 75f, height - 4f)
+        // Settings gear icon (top-right)
+        batch.color = Colors.WHITE
+        drawGearIcon(width - 12f, height - 12f)
 
         // FPS (if debug mode)
         if (showDebug) {
@@ -1324,8 +1466,12 @@ class Renderer(
         Gdx.gl.glDisable(GL20.GL_BLEND)
     }
 
-    fun setConnectionStatus(status: String) {
-        connectionStatus = status
+    fun setConnectionCount(count: Int) {
+        connectedCount = count
+    }
+
+    fun setDemoMode(enabled: Boolean) {
+        isDemoMode = enabled
     }
 
     fun setFps(fps: Int) {
@@ -2024,6 +2170,7 @@ class Renderer(
      * Dispose of rendering resources.
      */
     fun dispose() {
+        skyRenderer.dispose()
         batch.dispose()
         shapeRenderer.dispose()
         font.dispose()
