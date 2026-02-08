@@ -183,18 +183,44 @@ class WalkingToDeskState : State<Developer>(DeveloperStateNames.WALKING_TO_DESK)
 
 /**
  * Developer is typing/writing code at their desk.
+ * Alternates between "typing" and "reading" animations to simulate
+ * scanning the screen while coding.
  */
 class WritingCodeState : State<Developer>(DeveloperStateNames.WRITING_CODE) {
+    private var timer = 0f
+    private var nextSwitch = 0f
+    private var isReading = false
+
     override fun enter(entity: Developer, prevState: State<Developer>?) {
         entity.setAnimation("typing")
         entity.showBubbleOfType("coding")
+        isReading = false
+        timer = 0f
+        nextSwitch = randomTypingDuration()
     }
 
-    override fun update(entity: Developer, dt: Float): String? = null
+    override fun update(entity: Developer, dt: Float): String? {
+        timer += dt
+        if (timer >= nextSwitch) {
+            timer = 0f
+            isReading = !isReading
+            if (isReading) {
+                entity.setAnimation("reading")
+                nextSwitch = randomReadingDuration()
+            } else {
+                entity.setAnimation("typing")
+                nextSwitch = randomTypingDuration()
+            }
+        }
+        return null
+    }
 
     override fun exit(entity: Developer, nextState: State<Developer>?) {
         entity.showThoughtBubble(false)
     }
+
+    private fun randomTypingDuration(): Float = 4f + Math.random().toFloat() * 4f   // 4-8s
+    private fun randomReadingDuration(): Float = 1.5f + Math.random().toFloat() * 1.5f // 1.5-3s
 
     override fun onEvent(entity: Developer, event: String, data: Any?): String? {
         return when (event) {

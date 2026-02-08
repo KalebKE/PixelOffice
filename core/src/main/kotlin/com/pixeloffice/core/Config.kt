@@ -164,6 +164,11 @@ data class SpriteSheetConfig(
         return characters[sittingName]
     }
 
+    fun getDeveloperCharacterSittingReading(variant: String): SpriteRect? {
+        val charName = developerVariants[variant] ?: return null
+        return characters["${charName}_sitting_reading"]
+    }
+
     fun getFurniture(name: String): SpriteRect? = furniture[name]
 
     fun getTile(name: String): SpriteRect? = tiles[name]

@@ -43,6 +43,7 @@ class PixelOfficeGame : ApplicationAdapter() {
     // Per-connection parsers and agent mappings
     private val streamParsers = mutableMapOf<String, StreamParser>()
     private val connectionToAgent = mutableMapOf<String, String>()
+    private val pendingConnections = mutableSetOf<String>()
 
     // Network
     private lateinit var receiver: TmuxReceiver
@@ -206,22 +207,27 @@ class PixelOfficeGame : ApplicationAdapter() {
 
         val agentId = "agent_$connectionId"
         connectionToAgent[connectionId] = agentId
-        office.spawnDeveloper(agentId)
+        pendingConnections.add(connectionId)
 
         renderer.setConnectionCount(receiver.getConnectionCount())
-        Gdx.app.log("PixelOffice", "New connection: $connectionId → agent $agentId")
+        Gdx.app.log("PixelOffice", "New connection (pending): $connectionId → agent $agentId")
     }
 
     private fun handleDisconnection(connectionId: String) {
+        val wasPending = pendingConnections.remove(connectionId)
         streamParsers.remove(connectionId)
 
         val agentId = connectionToAgent.remove(connectionId)
-        if (agentId != null) {
+        if (agentId != null && !wasPending) {
             office.getDeveloper(agentId)?.handleEvent("idle")
         }
 
         renderer.setConnectionCount(receiver.getConnectionCount())
-        Gdx.app.log("PixelOffice", "Disconnected: $connectionId (agent $agentId)")
+        if (wasPending) {
+            Gdx.app.log("PixelOffice", "Probe disconnected (no developer spawned): $connectionId")
+        } else {
+            Gdx.app.log("PixelOffice", "Disconnected: $connectionId (agent $agentId)")
+        }
     }
 
     private fun handleActivity(activity: DetectedActivity) {
@@ -324,6 +330,13 @@ class PixelOfficeGame : ApplicationAdapter() {
             for ((connectionId, data) in drained) {
                 val parser = streamParsers[connectionId] ?: continue
                 val agentId = connectionToAgent[connectionId] ?: continue
+
+                // Spawn developer on first real data (skips TCP probes)
+                if (pendingConnections.remove(connectionId)) {
+                    office.spawnDeveloper(agentId)
+                    Gdx.app.log("PixelOffice", "Developer spawned on first data: $agentId")
+                }
+
                 val activities = parser.feed(data)
                 for (activity in activities) {
                     activity.agentId = activity.agentId ?: agentId

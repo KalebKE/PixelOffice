@@ -427,6 +427,11 @@ class Renderer(
         private val NIGHT_OVERLAY_COLOR = Color(0f, 0f, 0.05f, 0.55f)
         private val NIGHT_GLOW_COLOR = Color(0.4f, 0.5f, 0.8f, 1f)
 
+        // Monitor face glow (CRT green on developer's face while coding)
+        private val MONITOR_FACE_GLOW_COLOR = Color(0.1f, 0.85f, 0.3f, 1f)
+        private const val MONITOR_FACE_GLOW_SIZE = 22f
+        private const val MONITOR_FACE_GLOW_ALPHA = 0.16f
+
         @Deprecated("Use DeskColumn.getDeskPosition instead", ReplaceWith("DeskColumn.getDeskPosition(columnX, rowIndex, isLeftDesk)"))
         fun getDeskPosition(columnX: Float, rowIndex: Int, isLeftDesk: Boolean): Pair<Float, Float> =
             DeskColumn.getDeskPosition(columnX, rowIndex, isLeftDesk)
@@ -900,6 +905,40 @@ class Renderer(
         val bobOffset = getBobOffset(entityId, isWalking)
 
         drawSprite(worldX, worldY, frame, flipX, bobOffset)
+    }
+
+    /**
+     * Draw a subtle green CRT glow on a developer's face while coding.
+     * Uses the existing glowRegion radial gradient, tinted green.
+     */
+    private fun drawMonitorFaceGlow(info: CharacterRenderInfo) {
+        val savedColor = batch.color.cpy()
+
+        // Face center: upper third of sprite, ~4px below top in world coords
+        val faceCenterX = info.x + 8f  // roughly center of 16px-wide sprite
+        val faceCenterY = info.y + 4f  // near top of sprite (Y-down world)
+
+        // Offset toward the monitor side based on facing direction
+        val monitorOffsetX = if (info.facing == "left") -3f else 3f
+
+        val glowX = faceCenterX + monitorOffsetX
+        val screenY = flipY(faceCenterY, 0)
+
+        batch.color = Color(
+            MONITOR_FACE_GLOW_COLOR.r,
+            MONITOR_FACE_GLOW_COLOR.g,
+            MONITOR_FACE_GLOW_COLOR.b,
+            MONITOR_FACE_GLOW_ALPHA
+        )
+        batch.draw(
+            glowRegion,
+            glowX - MONITOR_FACE_GLOW_SIZE / 2f,
+            screenY - MONITOR_FACE_GLOW_SIZE / 2f,
+            MONITOR_FACE_GLOW_SIZE,
+            MONITOR_FACE_GLOW_SIZE
+        )
+
+        batch.color = savedColor
     }
 
     /**
@@ -1549,6 +1588,9 @@ class Renderer(
                     info.animation, info.facing, info.variant,
                     info.entityId, info.posture
                 )
+                if (info.state == "writing_code" && info.posture == "sitting") {
+                    drawMonitorFaceGlow(info)
+                }
             }
             "project_manager" -> {
                 drawPMOrPO(
