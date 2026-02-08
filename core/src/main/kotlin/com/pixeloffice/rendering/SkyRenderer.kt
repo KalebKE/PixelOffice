@@ -18,7 +18,11 @@ import kotlin.random.Random
  */
 class SkyRenderer(
     private val screenWidth: Int,
-    private val screenHeight: Int
+    private val screenHeight: Int,
+    skyTrafficInterval: Float = 30f,
+    skyTrafficEnabled: Boolean = true,
+    skyTrafficSprite: String = "sprites/32bit-PaperAirplane",
+    skyTrafficFrameCount: Int = 4
 ) {
     // Sky strip height in pixels
     private val skyHeight = 38
@@ -59,6 +63,12 @@ class SkyRenderer(
     private data class Star(val x: Float, val y: Float, val brightness: Float, val twinkleSpeed: Float, val phase: Float)
 
     private val stars: List<Star>
+
+    // Flying objects
+    private val skyTraffic = SkyTraffic(screenWidth, skyHeight, skyTrafficSprite, skyTrafficFrameCount).apply {
+        spawnInterval = skyTrafficInterval
+        enabled = skyTrafficEnabled
+    }
 
     // Temp color for lerp operations
     private val tmpColor = Color()
@@ -108,6 +118,9 @@ class SkyRenderer(
 
         // Interpolate sky colors
         interpolateSkyColors()
+
+        // Update flying objects
+        skyTraffic.update(dt)
 
         // Update cloud positions
         for (cloud in clouds) {
@@ -245,10 +258,18 @@ class SkyRenderer(
     }
 
     /**
-     * Smooth nightness factor (0 = full day, 1 = full night).
-     * Used for cloud/star color interpolation.
+     * Draw flying objects (planes, etc.) in the sky strip.
+     * Call within an active SpriteBatch.
      */
-    private fun getNightness(): Float {
+    fun drawFlyingObjects(batch: SpriteBatch) {
+        skyTraffic.draw(batch, getNightness(), screenHeight)
+    }
+
+    /**
+     * Smooth nightness factor (0 = full day, 1 = full night).
+     * Used for cloud/star/flying-object color interpolation.
+     */
+    internal fun getNightness(): Float {
         val h = hourFraction
         return when {
             h in 8f..17f -> 0f           // Full day
@@ -281,5 +302,9 @@ class SkyRenderer(
         // Use ShapeRenderer's built-in circle with enough segments for pixel art
         val segments = (radius * 4).toInt().coerceIn(6, 16)
         sr.circle(cx, cy, radius, segments)
+    }
+
+    fun dispose() {
+        skyTraffic.dispose()
     }
 }

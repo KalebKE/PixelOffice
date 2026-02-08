@@ -107,7 +107,11 @@ class PixelOfficeGame : ApplicationAdapter() {
         renderer = Renderer(
             config.display.width,
             config.display.height,
-            spriteSheet
+            spriteSheet,
+            skyTrafficInterval = config.skyTraffic.spawnInterval,
+            skyTrafficEnabled = config.skyTraffic.enabled,
+            skyTrafficSprite = config.skyTraffic.sprite,
+            skyTrafficFrameCount = config.skyTraffic.frameCount
         )
         renderer.initialize()
         renderer.setWalkableZones(config.office.walkableZones)
@@ -131,7 +135,7 @@ class PixelOfficeGame : ApplicationAdapter() {
         // Demo mode
         demoMode = config.demo.enabled
         if (demoMode) {
-            renderer.setConnectionStatus("Demo Mode")
+            renderer.setDemoMode(true)
         } else {
             // Start network receiver
             receiver.start()
@@ -163,7 +167,7 @@ class PixelOfficeGame : ApplicationAdapter() {
                 // The button is drawn at (width-75, height-4) in screen coords
                 // Tap coords: x is from left, y is from top (Gdx.input style)
                 val screenWidth = config.display.width
-                if (x >= screenWidth - 80f && y <= 20f && !settingsOpen) {
+                if (x >= screenWidth - 16f && y <= 16f && !settingsOpen) {
                     toggleSettings()
                     return true
                 }
@@ -204,8 +208,7 @@ class PixelOfficeGame : ApplicationAdapter() {
         connectionToAgent[connectionId] = agentId
         office.spawnDeveloper(agentId)
 
-        val count = receiver.getConnectionCount()
-        renderer.setConnectionStatus("Connected ($count)")
+        renderer.setConnectionCount(receiver.getConnectionCount())
         Gdx.app.log("PixelOffice", "New connection: $connectionId → agent $agentId")
     }
 
@@ -217,12 +220,7 @@ class PixelOfficeGame : ApplicationAdapter() {
             office.getDeveloper(agentId)?.handleEvent("idle")
         }
 
-        val count = receiver.getConnectionCount()
-        if (count > 0) {
-            renderer.setConnectionStatus("Connected ($count)")
-        } else {
-            renderer.setConnectionStatus("Disconnected")
-        }
+        renderer.setConnectionCount(receiver.getConnectionCount())
         Gdx.app.log("PixelOffice", "Disconnected: $connectionId (agent $agentId)")
     }
 

@@ -120,7 +120,7 @@ class AtWhiteboardState : State<Developer>(DeveloperStateNames.AT_WHITEBOARD) {
 
     override fun enter(entity: Developer, prevState: State<Developer>?) {
         entity.setAnimation("thinking")
-        entity.showThoughtBubble(true)
+        entity.showBubbleOfType("thinking")
     }
 
     override fun update(entity: Developer, dt: Float): String? {
@@ -137,8 +137,11 @@ class AtWhiteboardState : State<Developer>(DeveloperStateNames.AT_WHITEBOARD) {
             "planning_started" -> null
             "code_writing_started" -> DeveloperStateNames.WALKING_TO_DESK
             "command_started" -> DeveloperStateNames.WALKING_TO_DESK
-            "researching_started" -> DeveloperStateNames.WALKING_TO_DESK
-            "thinking_started" -> DeveloperStateNames.WALKING_TO_DESK
+            "thinking_started" -> {
+                entity.showBubbleOfType("thinking")
+                null
+            }
+            "researching_started" -> null
             "tests_failed" -> DeveloperStateNames.WALKING_TO_DESK
             "command_succeeded" -> DeveloperStateNames.WALKING_TO_DESK
             "done" -> DeveloperStateNames.WALKING_TO_DESK
@@ -184,11 +187,14 @@ class WalkingToDeskState : State<Developer>(DeveloperStateNames.WALKING_TO_DESK)
 class WritingCodeState : State<Developer>(DeveloperStateNames.WRITING_CODE) {
     override fun enter(entity: Developer, prevState: State<Developer>?) {
         entity.setAnimation("typing")
+        entity.showBubbleOfType("coding")
     }
 
     override fun update(entity: Developer, dt: Float): String? = null
 
-    override fun exit(entity: Developer, nextState: State<Developer>?) {}
+    override fun exit(entity: Developer, nextState: State<Developer>?) {
+        entity.showThoughtBubble(false)
+    }
 
     override fun onEvent(entity: Developer, event: String, data: Any?): String? {
         return when (event) {

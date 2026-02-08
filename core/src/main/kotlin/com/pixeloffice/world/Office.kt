@@ -713,7 +713,6 @@ class Office(private val config: Config) {
             bubbleType = bubbleType
         )
         bubble.show()
-        effects.add(bubble)
         return bubble
     }
 

@@ -207,5 +207,9 @@
   "demo": {
     "enabled": false,
     "sample_events_file": "tests/fixtures/sample_events.json"
+  },
+  "sky_traffic": {
+    "enabled": true,
+    "spawn_interval": 30.0
   }
 }

@@ -148,6 +148,7 @@ object Patterns {
             "Task" -> ActivityType.AGENT_SPAWN
             "AskUserQuestion" -> ActivityType.USER_QUESTION
             "EnterPlanMode" -> ActivityType.PLANNING
+            "ExitPlanMode" -> ActivityType.THINKING
             "Write" -> ActivityType.CODE_WRITING
             "Edit", "NotebookEdit" -> ActivityType.CODE_EDITING
             "Read", "Glob", "Grep" -> ActivityType.FILE_READ
@@ -169,6 +170,7 @@ object Patterns {
             "Task" -> ActivityType.AGENT_SPAWN
             "AskUserQuestion" -> ActivityType.USER_QUESTION
             "EnterPlanMode" -> ActivityType.PLANNING
+            "ExitPlanMode" -> ActivityType.THINKING
             "Write" -> ActivityType.CODE_WRITING
             "Edit", "NotebookEdit" -> ActivityType.CODE_EDITING
             "Bash" -> classifyBashCommand(toolInput?.get("command") as? String ?: "")

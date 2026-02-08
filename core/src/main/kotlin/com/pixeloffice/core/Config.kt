@@ -212,6 +212,16 @@ data class POConfig(
 )
 
 @Serializable
+data class SkyTrafficConfig(
+    val enabled: Boolean = true,
+    @SerialName("spawn_interval")
+    val spawnInterval: Float = 30f,
+    val sprite: String = "sprites/32bit-PaperAirplane",
+    @SerialName("frame_count")
+    val frameCount: Int = 4
+)
+
+@Serializable
 data class DemoConfig(
     val enabled: Boolean = false
 )
@@ -230,7 +240,9 @@ data class Config(
     val projectManager: PMConfig = PMConfig(),
     @SerialName("product_owner")
     val productOwner: POConfig = POConfig(),
-    val demo: DemoConfig = DemoConfig()
+    val demo: DemoConfig = DemoConfig(),
+    @SerialName("sky_traffic")
+    val skyTraffic: SkyTrafficConfig = SkyTrafficConfig()
 ) {
     companion object {
         private val json = Json {
