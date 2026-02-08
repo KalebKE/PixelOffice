@@ -86,11 +86,15 @@ class Renderer(
 
     // Furniture label recording for debug overlay
     private val furnitureLabels = mutableListOf<Triple<String, Float, Float>>()
+    private val deferredEffects = mutableListOf<EffectRenderInfo>()
 
     // LED clock rendering - 1×1 green pixel used to draw segment digits
     private var ledPixelTexture: Texture? = null
     private lateinit var ledPixelRegion: TextureRegion
     private val ledGreen = Color(0x00 / 255f, 0xE4 / 255f, 0x36 / 255f, 1f)
+
+    // Procedural sky
+    private lateinit var skyRenderer: SkyRenderer
 
     // Soft radial glow texture for night mode monitor glow
     private var glowTexture: Texture? = null
@@ -457,6 +461,9 @@ class Renderer(
         }
         glowRegion = TextureRegion(glowTexture)
         glowPixmap.dispose()
+
+        // Initialize procedural sky
+        skyRenderer = SkyRenderer(width, height)
     }
 
     fun setCamera(camera: GameCamera) {
@@ -467,10 +474,11 @@ class Renderer(
 
     fun update(dt: Float) {
         time += dt
+        skyRenderer.update(dt)
     }
 
-    fun clear(color: Color = Colors.SKY_BLUE) {
-        val c = if (nightMode) NIGHT_SKY_COLOR else color
+    fun clear() {
+        val c = skyRenderer.getCurrentTopColor()
         Gdx.gl.glClearColor(c.r, c.g, c.b, c.a)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
     }
@@ -537,26 +545,21 @@ class Renderer(
     }
 
     /**
-     * Draw the background: clouds at top, gray bar, wall tiles.
+     * Draw the background: procedural sky, gray bar, wall tiles.
      */
     fun drawBackground() {
-        val tex = texture ?: return
-        val clouds = spriteSheet.getCloudList()
+        // End the batch opened by drawScene so we can use ShapeRenderer
+        endBatch()
 
-        // Draw clouds at top of screen
-        if (clouds.isNotEmpty()) {
-            val cloud = clouds[0]
-            val cloudY = flipY(0f, cloud.h)  // Y=0 in world = top of screen
-            var x = 0
-            while (x < width) {
-                batch.draw(tex, x.toFloat(), cloudY,
-                    cloud.w.toFloat(), cloud.h.toFloat(),
-                    cloud.x, cloud.y, cloud.w, cloud.h, false, false)
-                x += cloud.w
-            }
-        }
+        // Procedural sky gradient (ShapeRenderer)
+        skyRenderer.drawGradient(shapeRenderer)
 
-        // End batch to draw shapes (gray bar)
+        // Procedural clouds (ShapeRenderer)
+        skyRenderer.drawClouds(shapeRenderer)
+
+        // Stars at night (SpriteBatch)
+        beginBatch()
+        skyRenderer.drawStars(batch, ledPixelRegion)
         endBatch()
 
         // Draw gray wall strip below clouds (6px high)
@@ -1333,6 +1336,8 @@ class Renderer(
         showDebug = !showDebug
     }
 
+    fun isSkyNightTime(): Boolean = skyRenderer.isNightTime()
+
     fun cycleLabels() {
         val modes = LabelMode.entries
         labelMode = modes[(labelMode.ordinal + 1) % modes.size]
@@ -1416,9 +1421,7 @@ class Renderer(
                 )
             }
         }
-        for (child in info.children) {
-            drawEffectInfo(child)
-        }
+        deferredEffects.addAll(info.children)
     }
 
     /**
@@ -1862,15 +1865,21 @@ class Renderer(
         drawFurniture("tree", 305f, 153f)
         drawFurniture("tree", 305f, 188f)
 
-        // Draw effects on top
-        for (effect in renderData.effects) {
-            drawEffectInfo(effect)
-        }
-
         endBatch()
 
         // Night mode overlay (dim + monitor glows)
         if (nightMode) drawNightOverlay(renderData)
+
+        // Draw effects on top of everything (including night overlay sign)
+        beginBatch()
+        for (effect in renderData.effects) {
+            drawEffectInfo(effect)
+        }
+        for (effect in deferredEffects) {
+            drawEffectInfo(effect)
+        }
+        deferredEffects.clear()
+        endBatch()
 
         // Draw debug overlays
         drawWalkableZones()

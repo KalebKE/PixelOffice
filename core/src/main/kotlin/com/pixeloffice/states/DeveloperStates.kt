@@ -116,20 +116,14 @@ class WalkingToWhiteboardState : State<Developer>(DeveloperStateNames.WALKING_TO
 /**
  * Developer is at the whiteboard, drawing/planning.
  */
-class AtWhiteboardState(private val duration: Float = 5.0f) : State<Developer>(DeveloperStateNames.AT_WHITEBOARD) {
-    private var timer = 0f
+class AtWhiteboardState : State<Developer>(DeveloperStateNames.AT_WHITEBOARD) {
 
     override fun enter(entity: Developer, prevState: State<Developer>?) {
         entity.setAnimation("thinking")
         entity.showThoughtBubble(true)
-        timer = 0f
     }
 
     override fun update(entity: Developer, dt: Float): String? {
-        timer += dt
-        if (timer >= duration) {
-            return DeveloperStateNames.WALKING_TO_DESK
-        }
         return null
     }
 
@@ -140,7 +134,13 @@ class AtWhiteboardState(private val duration: Float = 5.0f) : State<Developer>(D
 
     override fun onEvent(entity: Developer, event: String, data: Any?): String? {
         return when (event) {
-            "planning_started" -> { timer = 0f; null }
+            "planning_started" -> null
+            "code_writing_started" -> DeveloperStateNames.WALKING_TO_DESK
+            "command_started" -> DeveloperStateNames.WALKING_TO_DESK
+            "researching_started" -> DeveloperStateNames.WALKING_TO_DESK
+            "thinking_started" -> DeveloperStateNames.WALKING_TO_DESK
+            "tests_failed" -> DeveloperStateNames.WALKING_TO_DESK
+            "command_succeeded" -> DeveloperStateNames.WALKING_TO_DESK
             "done" -> DeveloperStateNames.WALKING_TO_DESK
             "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
             else -> null

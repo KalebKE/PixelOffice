@@ -4,17 +4,24 @@ import com.badlogic.gdx.Gdx
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketTimeoutException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * State of the network connection.
+ * Data tagged with the connection it came from.
  */
-data class ConnectionState(
-    var connected: Boolean = false,
-    var lastDataTime: Long = 0L,
+data class TaggedData(val connectionId: String, val data: String)
+
+/**
+ * State for a single client connection.
+ */
+private class ClientConnection(
+    val socket: Socket,
+    val thread: Thread,
     var bytesReceived: Long = 0L,
-    var error: String? = null
+    var lastDataTime: Long = 0L
 )
 
 /**
@@ -22,6 +29,8 @@ data class ConnectionState(
  *
  * Listens for connections on a specified port and receives
  * data streamed from tmux via `tmux pipe-pane -o 'nc localhost PORT'`.
+ *
+ * Supports multiple simultaneous connections — each gets a unique connectionId.
  */
 class TmuxReceiver(
     private val host: String = "localhost",
@@ -31,20 +40,19 @@ class TmuxReceiver(
 ) {
     // Server socket
     private var serverSocket: ServerSocket? = null
-    private var clientSocket: Socket? = null
 
     // Threading
     private val running = AtomicBoolean(false)
-    private var thread: Thread? = null
-    private val dataQueue = ConcurrentLinkedQueue<String>()
+    private var acceptThread: Thread? = null
+    private val dataQueue = ConcurrentLinkedQueue<TaggedData>()
 
-    // State
-    private val state = ConnectionState()
+    // Multi-connection state
+    private val clients = ConcurrentHashMap<String, ClientConnection>()
+    private val connectionCounter = AtomicInteger(0)
 
     // Callbacks (called on receiver thread, NOT GL thread!)
-    var onConnect: (() -> Unit)? = null
-    var onDisconnect: (() -> Unit)? = null
-    var onData: ((String) -> Unit)? = null
+    var onConnect: ((connectionId: String) -> Unit)? = null
+    var onDisconnect: ((connectionId: String) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
     /**
@@ -54,49 +62,40 @@ class TmuxReceiver(
         if (running.get()) return
 
         running.set(true)
-        thread = Thread({ run() }, "TmuxReceiver").apply {
+        acceptThread = Thread({ run() }, "TmuxReceiver-Accept").apply {
             isDaemon = true
             start()
         }
     }
 
     /**
-     * Stop the receiver.
+     * Stop the receiver and close all connections.
      */
     fun stop() {
         running.set(false)
 
-        // Close sockets to unblock accept/recv
-        try {
-            clientSocket?.close()
-        } catch (e: Exception) {
-            // Ignore
+        // Close all client sockets to unblock their reader threads
+        for ((_, client) in clients) {
+            try {
+                client.socket.close()
+            } catch (_: Exception) {}
         }
-        clientSocket = null
+        clients.clear()
 
         try {
             serverSocket?.close()
-        } catch (e: Exception) {
-            // Ignore
-        }
+        } catch (_: Exception) {}
         serverSocket = null
 
-        thread?.join(2000)
-        thread = null
+        acceptThread?.join(2000)
+        acceptThread = null
     }
 
     /**
-     * Get data from the receive queue.
-     *
-     * @return Received data string, or null if no data available.
+     * Get all available data from the queue, tagged with connection IDs.
      */
-    fun getData(): String? = dataQueue.poll()
-
-    /**
-     * Get all available data from the queue.
-     */
-    fun drainData(): List<String> {
-        val data = mutableListOf<String>()
+    fun drainData(): List<TaggedData> {
+        val data = mutableListOf<TaggedData>()
         while (true) {
             val item = dataQueue.poll() ?: break
             data.add(item)
@@ -105,14 +104,22 @@ class TmuxReceiver(
     }
 
     /**
-     * Get current connection state.
+     * Check if any client is connected.
      */
-    fun getState(): ConnectionState = state
+    fun isConnected(): Boolean = clients.isNotEmpty()
 
     /**
-     * Check if a client is connected.
+     * Get the number of active connections.
      */
-    fun isConnected(): Boolean = state.connected
+    fun getConnectionCount(): Int = clients.size
+
+    /**
+     * Post a runnable to be executed on the GL thread.
+     * Use this when you need to update game state from network callbacks.
+     */
+    fun postToGLThread(runnable: Runnable) {
+        Gdx.app?.postRunnable(runnable)
+    }
 
     // Internal methods
 
@@ -120,12 +127,10 @@ class TmuxReceiver(
         while (running.get()) {
             try {
                 createServer()
-                acceptAndReceive()
+                acceptLoop()
             } catch (e: Exception) {
-                state.error = e.message
                 onError?.invoke(e.message ?: "Unknown error")
 
-                // Wait before retrying
                 if (running.get()) {
                     Thread.sleep((reconnectDelay * 1000).toLong())
                 }
@@ -136,99 +141,82 @@ class TmuxReceiver(
     private fun createServer() {
         serverSocket = ServerSocket(port).apply {
             reuseAddress = true
-            soTimeout = 1000 // Allow periodic checks for running flag
+            soTimeout = 1000
         }
         Gdx.app?.log("TmuxReceiver", "Server listening on $host:$port")
     }
 
-    private fun acceptAndReceive() {
+    private fun acceptLoop() {
         while (running.get()) {
-            try {
-                // Wait for connection
-                clientSocket = try {
-                    serverSocket?.accept()
-                } catch (e: SocketTimeoutException) {
-                    continue
-                }
-
-                // Connected
-                state.connected = true
-                state.error = null
-                Gdx.app?.log("TmuxReceiver", "Client connected")
-                onConnect?.invoke()
-
-                // Receive data
-                receiveLoop()
-
+            val socket = try {
+                serverSocket?.accept()
+            } catch (_: SocketTimeoutException) {
+                continue
             } catch (e: Exception) {
                 if (running.get()) {
-                    state.error = e.message
+                    onError?.invoke(e.message ?: "Accept error")
                 }
-            } finally {
-                // Disconnected
-                try {
-                    clientSocket?.close()
-                } catch (e: Exception) {
-                    // Ignore
-                }
-                clientSocket = null
+                break
+            } ?: continue
 
-                if (state.connected) {
-                    state.connected = false
-                    Gdx.app?.log("TmuxReceiver", "Client disconnected")
-                    onDisconnect?.invoke()
-                }
+            val connId = "conn_${connectionCounter.incrementAndGet()}"
+
+            val readerThread = Thread({
+                receiveLoop(connId, socket)
+            }, "TmuxReceiver-$connId").apply {
+                isDaemon = true
             }
+
+            val client = ClientConnection(socket, readerThread)
+            clients[connId] = client
+
+            Gdx.app?.log("TmuxReceiver", "Client connected: $connId (${clients.size} total)")
+            onConnect?.invoke(connId)
+
+            readerThread.start()
         }
 
         // Clean up server socket when done
         try {
             serverSocket?.close()
-        } catch (e: Exception) {
-            // Ignore
-        }
+        } catch (_: Exception) {}
         serverSocket = null
     }
 
-    private fun receiveLoop() {
-        val socket = clientSocket ?: return
-        socket.soTimeout = 1000
+    private fun receiveLoop(connId: String, socket: Socket) {
+        try {
+            socket.soTimeout = 1000
+            val buffer = ByteArray(bufferSize)
 
-        val buffer = ByteArray(bufferSize)
+            while (running.get()) {
+                try {
+                    val bytesRead = socket.inputStream.read(buffer)
 
-        while (running.get()) {
-            try {
-                val bytesRead = socket.inputStream.read(buffer)
+                    if (bytesRead == -1) break
 
-                if (bytesRead == -1) {
-                    // Client disconnected
+                    if (bytesRead > 0) {
+                        val text = String(buffer, 0, bytesRead, Charsets.UTF_8)
+                        val client = clients[connId]
+                        if (client != null) {
+                            client.lastDataTime = System.currentTimeMillis()
+                            client.bytesReceived += bytesRead
+                        }
+                        dataQueue.offer(TaggedData(connId, text))
+                    }
+                } catch (_: SocketTimeoutException) {
+                    continue
+                } catch (_: Exception) {
                     break
                 }
-
-                if (bytesRead > 0) {
-                    // Decode and queue data
-                    val text = String(buffer, 0, bytesRead, Charsets.UTF_8)
-                    state.lastDataTime = System.currentTimeMillis()
-                    state.bytesReceived += bytesRead
-
-                    dataQueue.offer(text)
-                    onData?.invoke(text)
-                }
-
-            } catch (e: SocketTimeoutException) {
-                // Normal - check if we should continue
-                continue
-            } catch (e: Exception) {
-                break
             }
-        }
-    }
+        } finally {
+            try {
+                socket.close()
+            } catch (_: Exception) {}
 
-    /**
-     * Post a runnable to be executed on the GL thread.
-     * Use this when you need to update game state from network callbacks.
-     */
-    fun postToGLThread(runnable: Runnable) {
-        Gdx.app?.postRunnable(runnable)
+            clients.remove(connId)
+            Gdx.app?.log("TmuxReceiver", "Client disconnected: $connId (${clients.size} remaining)")
+            onDisconnect?.invoke(connId)
+        }
     }
 }
