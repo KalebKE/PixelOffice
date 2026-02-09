@@ -432,6 +432,9 @@ class Renderer(
         private const val MONITOR_FACE_GLOW_SIZE = 22f
         private const val MONITOR_FACE_GLOW_ALPHA = 0.16f
 
+        // Floor lamp glow (warm amber for nighttime illumination)
+        private val LAMP_GLOW_COLOR = Color(1.0f, 0.85f, 0.4f, 1f)
+
         @Deprecated("Use DeskColumn.getDeskPosition instead", ReplaceWith("DeskColumn.getDeskPosition(columnX, rowIndex, isLeftDesk)"))
         fun getDeskPosition(columnX: Float, rowIndex: Int, isLeftDesk: Boolean): Pair<Float, Float> =
             DeskColumn.getDeskPosition(columnX, rowIndex, isLeftDesk)
@@ -753,6 +756,53 @@ class Renderer(
                 }
             }
         }
+    }
+
+    /**
+     * Draw a modern arc floor lamp at world coordinates using procedural pixels.
+     * The lamp turns on at night with a warm glow.
+     */
+    private fun drawFloorLamp(worldX: Float, worldY: Float) {
+        val savedColor = batch.color.cpy()
+        val lampColor = Colors.BLACK
+        val litColor = Color(1.0f, 0.85f, 0.4f, 1f)
+
+        // Base: 5px wide, 1px tall
+        batch.color = lampColor
+        for (i in 0 until 5) {
+            batch.draw(ledPixelRegion, worldX + i - 2f, flipY(worldY + 21f, 0), 1f, 1f)
+        }
+
+        // Pole: 1px wide, 18px tall (from y+3 to y+20)
+        for (i in 3 until 21) {
+            batch.draw(ledPixelRegion, worldX, flipY(worldY + i.toFloat(), 0), 1f, 1f)
+        }
+
+        // Arc arm: extends right from top of pole, 4px
+        for (i in 1..4) {
+            batch.draw(ledPixelRegion, worldX + i, flipY(worldY + 2f, 0), 1f, 1f)
+        }
+
+        // Shade/head: 5px wide, 2px tall, hanging down from arm end
+        val headColor = if (nightMode) litColor else lampColor
+        batch.color = headColor
+        for (row in 0 until 2) {
+            for (col in 0 until 5) {
+                batch.draw(ledPixelRegion, worldX + 2f + col, flipY(worldY + 3f + row, 0), 1f, 1f)
+            }
+        }
+
+        // Small bulb pixel directly below shade center when lit
+        if (nightMode) {
+            batch.color = Color(1.0f, 0.95f, 0.7f, 1f)
+            batch.draw(ledPixelRegion, worldX + 4f, flipY(worldY + 5f, 0), 1f, 1f)
+        }
+
+        // Top cap: 1px connecting pole top to arm
+        batch.color = lampColor
+        batch.draw(ledPixelRegion, worldX, flipY(worldY + 2f, 0), 1f, 1f)
+
+        batch.color = savedColor
     }
 
     /**
@@ -1370,6 +1420,23 @@ class Renderer(
         val signScreenCenterY = flipY(67f, 0)
         batch.color = glowGreen
         batch.draw(glowRegion, signCenterX - signGlowW / 2f, signScreenCenterY - signGlowH / 2f, signGlowW, signGlowH)
+
+        // Floor lamp glow — warm amber downward cone from lamp head at (283, 82)
+        val lampHeadX = 283f + 4f  // center of lamp shade
+        val lampHeadY = 87f        // just below the shade (worldY + 5)
+        val lampScreenY = flipY(lampHeadY, 0)
+
+        // Outer glow: elliptical, wider at bottom for downward light cone
+        val lampOuterW = 45f
+        val lampOuterH = 55f
+        batch.color = Color(LAMP_GLOW_COLOR.r, LAMP_GLOW_COLOR.g, LAMP_GLOW_COLOR.b, 0.15f)
+        batch.draw(glowRegion, lampHeadX - lampOuterW / 2f, lampScreenY - lampOuterH * 0.7f, lampOuterW, lampOuterH)
+
+        // Inner glow: tighter, slightly brighter
+        val lampInnerW = 20f
+        val lampInnerH = 30f
+        batch.color = Color(LAMP_GLOW_COLOR.r, LAMP_GLOW_COLOR.g, LAMP_GLOW_COLOR.b, 0.10f)
+        batch.draw(glowRegion, lampHeadX - lampInnerW / 2f, lampScreenY - lampInnerH * 0.6f, lampInnerW, lampInnerH)
 
         // Step 3: Restore normal blending and color
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
@@ -2010,6 +2077,7 @@ class Renderer(
         drawFurniture("couch_orange", 225f, 95f)
         drawFurniture("blue_trash_can", 260f, 95f)
         drawFurniture("bookshelf", 290f, 80f)
+        drawFloorLamp(283f, 82f)
 
         // Collect and sort all entities once
         val entities = collectAndSortEntities(renderData)
