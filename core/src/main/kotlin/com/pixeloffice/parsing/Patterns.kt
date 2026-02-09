@@ -145,7 +145,7 @@ object Patterns {
      */
     fun detectToolActivityFromName(toolName: String): ActivityType {
         return when (toolName) {
-            "Task" -> ActivityType.AGENT_SPAWN
+            "Task", "Explore", "Plan" -> ActivityType.AGENT_SPAWN
             "AskUserQuestion" -> ActivityType.USER_QUESTION
             "EnterPlanMode" -> ActivityType.PLANNING
             "ExitPlanMode" -> ActivityType.THINKING
@@ -167,7 +167,7 @@ object Patterns {
      */
     fun detectToolActivity(toolName: String, toolInput: Map<String, Any>? = null): ActivityType {
         return when (toolName) {
-            "Task" -> ActivityType.AGENT_SPAWN
+            "Task", "Explore", "Plan" -> ActivityType.AGENT_SPAWN
             "AskUserQuestion" -> ActivityType.USER_QUESTION
             "EnterPlanMode" -> ActivityType.PLANNING
             "ExitPlanMode" -> ActivityType.THINKING

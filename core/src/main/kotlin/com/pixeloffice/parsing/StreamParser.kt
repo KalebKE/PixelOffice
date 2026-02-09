@@ -39,8 +39,9 @@ class StreamParser {
     private var inCodeBlock = false
 
     // Tool detection: matches ToolName( preceded by a non-alpha character or start of string
+    // Includes subagent type names (Explore, Plan) which TUI renders as AgentType(description)
     private val TOOL_PATTERN = Regex(
-        """(?:^|[^A-Za-z])(Read|Edit|Write|Bash|Task|Glob|Grep|WebSearch|WebFetch|EnterPlanMode|ExitPlanMode|AskUserQuestion|NotebookEdit)\("""
+        """(?:^|[^A-Za-z])(Read|Edit|Write|Bash|Task|Glob|Grep|WebSearch|WebFetch|EnterPlanMode|ExitPlanMode|AskUserQuestion|NotebookEdit|Explore|Plan)\("""
     )
 
     // Extract command from Bash(command) — captures content inside parens
@@ -55,7 +56,7 @@ class StreamParser {
     private val STATUS_WROTE = Regex("""Wrote to """)
     private val STATUS_PLAN_MODE = Regex("""plan mode on""", RegexOption.IGNORE_CASE)
     private val STATUS_THINKING = Regex("""\(thinking\)""")
-    private val STATUS_AGENT_LAUNCH = Regex("""(?:Launching|launching)\s+\w+\s+agent""")
+    private val STATUS_AGENT_LAUNCH = Regex("""(?:(?:Launching|launching)\s+\w+\s+agent|(\d+)\s+\w+\s+agents?\s+launched)""")
 
     // Build/test result patterns (checked within RESULT_WINDOW_MS of a Bash command)
     private val BUILD_SUCCESS_PATTERN = Regex("""\bBUILD SUCCESSFUL\b""")
@@ -104,10 +105,11 @@ class StreamParser {
         // 1. Detect tool invocations
         for (match in TOOL_PATTERN.findAll(searchText)) {
             val toolName = match.groupValues[1]
-            val signature = if (toolName == "Task") {
-                // Include context after Task( to differentiate distinct calls
+            val isAgentSpawn = toolName in setOf("Task", "Explore", "Plan")
+            val signature = if (isAgentSpawn) {
+                // Include context after tool( to differentiate distinct agent calls
                 val contextEnd = (match.range.last + 30).coerceAtMost(searchText.length)
-                "Task:" + searchText.substring(match.range.first, contextEnd)
+                "$toolName:" + searchText.substring(match.range.first, contextEnd)
             } else {
                 toolName
             }
@@ -206,7 +208,6 @@ class StreamParser {
             STATUS_EDIT.containsMatchIn(searchText) -> "status_edit" to ActivityType.CODE_EDITING
             STATUS_WROTE.containsMatchIn(searchText) -> "status_wrote" to ActivityType.CODE_WRITING
             STATUS_THINKING.containsMatchIn(searchText) -> "status_thinking" to ActivityType.THINKING
-            STATUS_AGENT_LAUNCH.containsMatchIn(searchText) -> "status_agent" to ActivityType.AGENT_SPAWN
             else -> null
         }
         if (statusMatch != null) {
@@ -218,6 +219,24 @@ class StreamParser {
                 lastStatusTimestamp = now
                 activities.add(DetectedActivity(type = activityType))
                 emittedTypes.add(activityType)
+            }
+        }
+
+        // Multi-agent launch detection: "3 Explore agents launched" → emit N AGENT_SPAWN
+        if (ActivityType.AGENT_SPAWN !in emittedTypes) {
+            val agentLaunchMatch = STATUS_AGENT_LAUNCH.find(searchText)
+            if (agentLaunchMatch != null) {
+                val countStr = agentLaunchMatch.groupValues.getOrNull(1)
+                val count = countStr?.toIntOrNull() ?: 1
+                val sig = "status_agent_$count"
+                if (sig != lastStatusSignature || (now - lastStatusTimestamp) >= DEBOUNCE_MS) {
+                    lastStatusSignature = sig
+                    lastStatusTimestamp = now
+                    repeat(count) {
+                        activities.add(DetectedActivity(type = ActivityType.AGENT_SPAWN))
+                    }
+                    emittedTypes.add(ActivityType.AGENT_SPAWN)
+                }
             }
         }
 
