@@ -123,7 +123,11 @@ class Office(private val config: Config) {
      * @return The spawned developer, or null if no desk available.
      */
     fun spawnDeveloper(agentId: String, colorVariant: Int? = null): Developer? {
-        val desk = getAvailableDesk() ?: return null
+        val desk = getAvailableDesk()
+        if (desk == null) {
+            com.badlogic.gdx.Gdx.app?.log("Office", "No available desk for agent: $agentId")
+            return null
+        }
         val variant = colorVariant ?: (developers.size % 4)
         return setupDeveloperAtDesk(agentId, desk, variant)
     }

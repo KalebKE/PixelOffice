@@ -32,6 +32,13 @@ class PixelOfficeGame : ApplicationAdapter() {
         private const val DEMO_CYCLE_DURATION = 20f
         private const val DEMO_INITIAL_SIT_DURATION = 5f
         private const val DEMO_STAGGER_INTERVAL = 2f
+
+        private val BROADCAST_TYPES = setOf(
+            ActivityType.TEST_FAILURE,
+            ActivityType.BUILD_FAILURE,
+            ActivityType.TEST_SUCCESS,
+            ActivityType.BUILD_SUCCESS
+        )
     }
 
     // Configuration
@@ -44,6 +51,10 @@ class PixelOfficeGame : ApplicationAdapter() {
     private val streamParsers = mutableMapOf<String, StreamParser>()
     private val connectionToAgent = mutableMapOf<String, String>()
     private val pendingConnections = mutableSetOf<String>()
+
+    // Subagent tracking: connectionId → list of spawned subagent agentIds
+    private val connectionSubagents = mutableMapOf<String, MutableList<String>>()
+    private val roundRobinCounters = mutableMapOf<String, Int>()
 
     // Network
     private lateinit var receiver: TmuxReceiver
@@ -222,6 +233,12 @@ class PixelOfficeGame : ApplicationAdapter() {
             office.getDeveloper(agentId)?.handleEvent("idle")
         }
 
+        // Idle subagent developers and clean up tracking
+        connectionSubagents.remove(connectionId)?.forEach { subId ->
+            office.getDeveloper(subId)?.handleEvent("idle")
+        }
+        roundRobinCounters.remove(connectionId)
+
         renderer.setConnectionCount(receiver.getConnectionCount())
         if (wasPending) {
             Gdx.app.log("PixelOffice", "Probe disconnected (no developer spawned): $connectionId")
@@ -231,6 +248,7 @@ class PixelOfficeGame : ApplicationAdapter() {
     }
 
     private fun handleActivity(activity: DetectedActivity) {
+        Gdx.app.log("PixelOffice", "Activity: ${activity.type} agent=${activity.agentId} tool=${activity.toolName}")
         // Record every activity to the tracker before dispatching animations
         val agentId = activity.agentId ?: office.getAllDevelopers().lastOrNull()?.agentId
         if (agentId != null) {
@@ -241,7 +259,16 @@ class PixelOfficeGame : ApplicationAdapter() {
             ActivityType.AGENT_SPAWN -> {
                 val parentId = activity.agentId ?: "unknown"
                 val spawnId = "${parentId}_sub_${office.getAllDevelopers().size}"
-                office.spawnDeveloper(spawnId)
+                val dev = office.spawnDeveloper(spawnId)
+                if (dev != null) {
+                    val connId = connectionToAgent.entries.find { it.value == parentId }?.key
+                    if (connId != null) {
+                        connectionSubagents.getOrPut(connId) { mutableListOf() }.add(spawnId)
+                    }
+                    Gdx.app.log("PixelOffice", "Subagent spawned: $spawnId (parent: $parentId)")
+                } else {
+                    Gdx.app.log("PixelOffice", "Subagent spawn FAILED (no desk): $spawnId")
+                }
             }
             ActivityType.THINKING -> {
                 resolveDeveloper(activity)?.handleEvent("thinking_started")
@@ -338,9 +365,34 @@ class PixelOfficeGame : ApplicationAdapter() {
                 }
 
                 val activities = parser.feed(data)
+                if (activities.isNotEmpty()) {
+                    Gdx.app.log("PixelOffice", "Parsed ${activities.size} activities from $connectionId (${data.length} bytes)")
+                }
+                val subagents = connectionSubagents[connectionId]
                 for (activity in activities) {
-                    activity.agentId = activity.agentId ?: agentId
-                    handleActivity(activity)
+                    if (activity.type == ActivityType.AGENT_SPAWN) {
+                        // AGENT_SPAWN always goes to parent (it creates the subagent)
+                        activity.agentId = activity.agentId ?: agentId
+                        handleActivity(activity)
+                    } else if (!subagents.isNullOrEmpty() && activity.type in BROADCAST_TYPES) {
+                        // Broadcast: send to all developers (parent + subagents)
+                        val allAgents = listOf(agentId) + subagents
+                        for (targetId in allAgents) {
+                            val copy = activity.copy(agentId = targetId)
+                            handleActivity(copy)
+                        }
+                    } else if (!subagents.isNullOrEmpty()) {
+                        // Round-robin: distribute across parent + subagents
+                        val allAgents = listOf(agentId) + subagents
+                        val counter = roundRobinCounters.getOrPut(connectionId) { 0 }
+                        activity.agentId = allAgents[counter % allAgents.size]
+                        roundRobinCounters[connectionId] = counter + 1
+                        handleActivity(activity)
+                    } else {
+                        // No subagents: original behavior
+                        activity.agentId = activity.agentId ?: agentId
+                        handleActivity(activity)
+                    }
                 }
             }
         } else {
