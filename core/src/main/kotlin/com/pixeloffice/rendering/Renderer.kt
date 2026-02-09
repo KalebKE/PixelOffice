@@ -100,6 +100,9 @@ class Renderer(
     private lateinit var ledPixelRegion: TextureRegion
     private val ledGreen = Color(0x00 / 255f, 0xE4 / 255f, 0x36 / 255f, 1f)
 
+    // Animated lava lamp on SE corner table
+    private lateinit var lavaLamp: LavaLamp
+
     // Procedural sky
     private lateinit var skyRenderer: SkyRenderer
 
@@ -492,6 +495,9 @@ class Renderer(
 
         // Initialize procedural sky
         skyRenderer = SkyRenderer(width, height, skyTrafficInterval, skyTrafficEnabled, skyTrafficSprite, skyTrafficFrameCount)
+
+        // Initialize lava lamp on SE corner table
+        lavaLamp = LavaLamp(195f, 211f)
     }
 
     fun setCamera(camera: GameCamera) {
@@ -503,6 +509,7 @@ class Renderer(
     fun update(dt: Float) {
         time += dt
         skyRenderer.update(dt)
+        lavaLamp.update(dt)
     }
 
     fun clear() {
@@ -1438,6 +1445,9 @@ class Renderer(
         batch.color = Color(LAMP_GLOW_COLOR.r, LAMP_GLOW_COLOR.g, LAMP_GLOW_COLOR.b, 0.10f)
         batch.draw(glowRegion, lampHeadX - lampInnerW / 2f, lampScreenY - lampInnerH * 0.6f, lampInnerW, lampInnerH)
 
+        // Lava lamp glow on SE corner table
+        lavaLamp.drawNightGlow(batch, glowRegion, ::flipY)
+
         // Step 3: Restore normal blending and color
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
 
@@ -2116,6 +2126,7 @@ class Renderer(
         drawFurniture("large_table", 193f, 220f)
         drawFurniture("printer", 215f, 221f)
         drawFurniture("document", 205f, 222f)
+        lavaLamp.draw(batch, ledPixelRegion, ::flipY)
 
         drawFurniture("tree", 305f, 123f)
         drawFurniture("tree", 305f, 153f)
