@@ -147,13 +147,17 @@ class StreamParser {
                 inPlanMode = true
             }
         }
-        // If we just left plan mode, ensure a code activity is emitted so the developer walks back
+        // If we just left plan mode, emit the right activity based on current status
         if (wasInPlanMode && !inPlanMode) {
             val hasCodeActivity = activities.any {
                 it.type == ActivityType.CODE_EDITING || it.type == ActivityType.CODE_WRITING
             }
             if (!hasCodeActivity) {
-                activities.add(DetectedActivity(type = ActivityType.CODE_EDITING))
+                if (STATUS_THINKING.containsMatchIn(searchText)) {
+                    activities.add(DetectedActivity(type = ActivityType.THINKING))
+                } else {
+                    activities.add(DetectedActivity(type = ActivityType.CODE_EDITING))
+                }
             }
         }
 
