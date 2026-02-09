@@ -96,7 +96,7 @@ class SpriteSheet(
 
     private fun createDeveloperSprites() {
         val tex = texture ?: return
-        val variants = listOf("blue", "green", "red", "purple")
+        val variants = listOf("blue", "green", "red")
 
         for (variant in variants) {
             val sprite = SpriteDefinition(
@@ -114,8 +114,7 @@ class SpriteSheet(
                 val defaults = mapOf(
                     "blue" to (0 to 104),
                     "green" to (16 to 104),
-                    "red" to (32 to 104),
-                    "purple" to (48 to 104)
+                    "red" to (32 to 104)
                 )
                 val (x, y) = defaults[variant] ?: (0 to 104)
                 SpriteFrame(TextureRegion(tex, x, y, 16, 24), 16, 24)
@@ -357,7 +356,7 @@ class SpriteSheet(
     }
 
     fun getDeveloperSpriteName(variant: Int): String {
-        val variants = listOf("blue", "green", "red", "purple")
+        val variants = listOf("blue", "green", "red")
         val variantName = variants[variant % variants.size]
         return "developer_$variantName"
     }

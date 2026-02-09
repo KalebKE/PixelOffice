@@ -128,7 +128,7 @@ class Office(private val config: Config) {
             com.badlogic.gdx.Gdx.app?.log("Office", "No available desk for agent: $agentId")
             return null
         }
-        val variant = colorVariant ?: (developers.size % 4)
+        val variant = colorVariant ?: (developers.size % 3)
         return setupDeveloperAtDesk(agentId, desk, variant)
     }
 
@@ -143,7 +143,7 @@ class Office(private val config: Config) {
     fun assignDeveloperToDesk(agentId: String, deskId: String, colorVariant: Int? = null): Developer? {
         val desk = getDeskById(deskId) ?: return null
         if (!isDeskAvailable(deskId)) return null
-        val variant = colorVariant ?: (developers.size % 4)
+        val variant = colorVariant ?: (developers.size % 3)
         return setupDeveloperAtDesk(agentId, desk, variant)
     }
 

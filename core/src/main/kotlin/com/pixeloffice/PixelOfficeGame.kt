@@ -248,7 +248,6 @@ class PixelOfficeGame : ApplicationAdapter() {
     }
 
     private fun handleActivity(activity: DetectedActivity) {
-        Gdx.app.log("PixelOffice", "Activity: ${activity.type} agent=${activity.agentId} tool=${activity.toolName}")
         // Record every activity to the tracker before dispatching animations
         val agentId = activity.agentId ?: office.getAllDevelopers().lastOrNull()?.agentId
         if (agentId != null) {
@@ -365,9 +364,6 @@ class PixelOfficeGame : ApplicationAdapter() {
                 }
 
                 val activities = parser.feed(data)
-                if (activities.isNotEmpty()) {
-                    Gdx.app.log("PixelOffice", "Parsed ${activities.size} activities from $connectionId (${data.length} bytes)")
-                }
                 val subagents = connectionSubagents[connectionId]
                 for (activity in activities) {
                     if (activity.type == ActivityType.AGENT_SPAWN) {
