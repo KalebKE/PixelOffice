@@ -108,7 +108,7 @@ class StreamParser {
             val isAgentSpawn = toolName in setOf("Task", "Explore", "Plan")
             val signature = if (isAgentSpawn) {
                 // Include context after tool( to differentiate distinct agent calls
-                val contextEnd = (match.range.last + 30).coerceAtMost(searchText.length)
+                val contextEnd = (match.range.last + 60).coerceAtMost(searchText.length)
                 "$toolName:" + searchText.substring(match.range.first, contextEnd)
             } else {
                 toolName
@@ -161,9 +161,17 @@ class StreamParser {
                 lastToolTimestampForResult = now
             }
 
+            val activityDetails = if (isAgentSpawn) {
+                val contextEnd = (match.range.last + 60).coerceAtMost(searchText.length)
+                val desc = searchText.substring(match.range.last + 1, contextEnd)
+                    .substringBefore(')').trim()
+                if (desc.isNotEmpty()) mapOf("description" to desc) else null
+            } else null
+
             activities.add(DetectedActivity(
                 type = activityType,
-                toolName = toolName
+                toolName = toolName,
+                details = activityDetails
             ))
             emittedTypes.add(activityType)
         }

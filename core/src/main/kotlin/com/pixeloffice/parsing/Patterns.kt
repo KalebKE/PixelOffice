@@ -273,4 +273,30 @@ object Patterns {
             "name" to (toolInput["name"] ?: "")
         )
     }
+
+    private val MANAGER_KEYWORDS = Regex("""(?i)\b(product|project|manager)\b""")
+
+    /**
+     * Check if a subagent description matches PM/PO keywords.
+     *
+     * @param description The subagent description text.
+     * @return True if the description contains 'product', 'project', or 'manager'.
+     */
+    fun isManagerSubagent(description: String): Boolean {
+        return MANAGER_KEYWORDS.containsMatchIn(description)
+    }
+
+    /**
+     * Determine which manager type a description maps to.
+     *
+     * @return "po" if 'product' is found, "pm" if 'project' or 'manager' is found, null otherwise.
+     */
+    fun managerTypeForDescription(description: String): String? {
+        val lower = description.lowercase()
+        return when {
+            "product" in lower -> "po"
+            "project" in lower || "manager" in lower -> "pm"
+            else -> null
+        }
+    }
 }
