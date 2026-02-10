@@ -12,6 +12,7 @@ import com.pixeloffice.core.EventBus
 import com.pixeloffice.network.TmuxReceiver
 import com.pixeloffice.parsing.ActivityType
 import com.pixeloffice.parsing.DetectedActivity
+import com.pixeloffice.parsing.Patterns
 import com.pixeloffice.parsing.StreamParser
 import com.pixeloffice.rendering.GameCamera
 import com.pixeloffice.rendering.Renderer
@@ -233,9 +234,13 @@ class PixelOfficeGame : ApplicationAdapter() {
             office.getDeveloper(agentId)?.handleEvent("idle")
         }
 
-        // Idle subagent developers and clean up tracking
+        // Idle subagent developers/managers and clean up tracking
         connectionSubagents.remove(connectionId)?.forEach { subId ->
-            office.getDeveloper(subId)?.handleEvent("idle")
+            when (subId) {
+                "pm" -> office.getProjectManager()?.handleEvent("idle")
+                "po" -> office.getProductOwner()?.handleEvent("idle")
+                else -> office.getDeveloper(subId)?.handleEvent("idle")
+            }
         }
         roundRobinCounters.remove(connectionId)
 
@@ -257,41 +262,53 @@ class PixelOfficeGame : ApplicationAdapter() {
         when (activity.type) {
             ActivityType.AGENT_SPAWN -> {
                 val parentId = activity.agentId ?: "unknown"
-                val spawnId = "${parentId}_sub_${office.getAllDevelopers().size}"
-                val dev = office.spawnDeveloper(spawnId)
-                if (dev != null) {
+                val description = (activity.details?.get("description") as? String) ?: ""
+                val managerType = Patterns.managerTypeForDescription(description)
+
+                if (managerType != null) {
+                    // Route to PM or PO instead of spawning a developer
                     val connId = connectionToAgent.entries.find { it.value == parentId }?.key
                     if (connId != null) {
-                        connectionSubagents.getOrPut(connId) { mutableListOf() }.add(spawnId)
+                        connectionSubagents.getOrPut(connId) { mutableListOf() }.add(managerType)
                     }
-                    Gdx.app.log("PixelOffice", "Subagent spawned: $spawnId (parent: $parentId)")
+                    Gdx.app.log("PixelOffice", "Manager subagent routed: $managerType (parent: $parentId, desc: $description)")
                 } else {
-                    Gdx.app.log("PixelOffice", "Subagent spawn FAILED (no desk): $spawnId")
+                    val spawnId = "${parentId}_sub_${office.getAllDevelopers().size}"
+                    val dev = office.spawnDeveloper(spawnId)
+                    if (dev != null) {
+                        val connId = connectionToAgent.entries.find { it.value == parentId }?.key
+                        if (connId != null) {
+                            connectionSubagents.getOrPut(connId) { mutableListOf() }.add(spawnId)
+                        }
+                        Gdx.app.log("PixelOffice", "Subagent spawned: $spawnId (parent: $parentId)")
+                    } else {
+                        Gdx.app.log("PixelOffice", "Subagent spawn FAILED (no desk): $spawnId")
+                    }
                 }
             }
             ActivityType.THINKING -> {
-                resolveDeveloper(activity)?.handleEvent("thinking_started")
+                dispatchEvent(activity, "thinking_started")
             }
             ActivityType.PLANNING -> {
-                resolveDeveloper(activity)?.handleEvent("planning_started")
+                dispatchEvent(activity, "planning_started")
             }
             ActivityType.FILE_READ, ActivityType.WEB_SEARCH -> {
-                resolveDeveloper(activity)?.handleEvent("researching_started")
+                dispatchEvent(activity, "researching_started")
             }
             ActivityType.CODE_WRITING, ActivityType.CODE_EDITING -> {
-                resolveDeveloper(activity)?.handleEvent("code_writing_started")
+                dispatchEvent(activity, "code_writing_started")
             }
             ActivityType.TEST_EXECUTION, ActivityType.BUILD_EXECUTION,
             ActivityType.BASH_EXECUTION, ActivityType.COMMITTING,
             ActivityType.INSTALLING_DEPS -> {
-                resolveDeveloper(activity)?.handleEvent("command_started")
+                dispatchEvent(activity, "command_started")
             }
             ActivityType.TEST_FAILURE, ActivityType.BUILD_FAILURE -> {
-                resolveDeveloper(activity)?.handleEvent("tests_failed")
+                dispatchEvent(activity, "tests_failed")
                 camera.shake(3f)
             }
             ActivityType.TEST_SUCCESS, ActivityType.BUILD_SUCCESS -> {
-                resolveDeveloper(activity)?.handleEvent("command_succeeded")
+                dispatchEvent(activity, "command_succeeded")
             }
             ActivityType.USER_QUESTION -> {
                 office.getAllDevelopers().lastOrNull()?.let { dev ->
@@ -300,6 +317,21 @@ class PixelOfficeGame : ApplicationAdapter() {
             }
             ActivityType.UNKNOWN -> {
                 // Unknown activities don't trigger animations
+            }
+        }
+    }
+
+    /**
+     * Dispatch an event to the correct entity (developer, PM, or PO) based on the activity's agentId.
+     */
+    private fun dispatchEvent(activity: DetectedActivity, event: String) {
+        val id = activity.agentId
+        when (id) {
+            "pm" -> office.getProjectManager()?.handleEvent(event)
+            "po" -> office.getProductOwner()?.handleEvent(event)
+            else -> {
+                val dev = if (id != null) office.getDeveloper(id) else office.getAllDevelopers().lastOrNull()
+                dev?.handleEvent(event)
             }
         }
     }
@@ -557,19 +589,12 @@ class PixelOfficeGame : ApplicationAdapter() {
             office.spawnDeveloper("demo_agent_2", colorVariant = 1)
             office.spawnDeveloper("demo_agent_3", colorVariant = 2)
 
-            // Assign PM to available desk with 15s sit-patrol cycle
-            val pmDeskId = office.getNextAvailableDeskId()
-            if (pmDeskId != null) {
-                val pm = office.assignPMToDesk(pmDeskId)
-                pm?.sitDuration = 15f
-            }
-
-            // Assign PO to available desk (staggered — first sit is 22.5s)
-            val poDeskId = office.getNextAvailableDeskId()
-            if (poDeskId != null) {
-                val po = office.assignPOToDesk(poDeskId)
-                po?.sitDuration = 15f
-                po?.setSitTimerStart(-7.5f)
+            // PM and PO are already spawned as permanent managers by Office.setupDefaultDeskColumns()
+            // Just adjust their sit durations for demo pacing
+            office.getProjectManager()?.sitDuration = 15f
+            office.getProductOwner()?.let { po ->
+                po.sitDuration = 15f
+                po.setSitTimerStart(-7.5f)
             }
         }
 

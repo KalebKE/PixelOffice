@@ -3,6 +3,7 @@ package com.pixeloffice.entities
 import com.pixeloffice.rendering.CharacterRenderInfo
 import com.pixeloffice.rendering.EffectRenderInfo
 import com.pixeloffice.world.Pathfinder
+import kotlin.random.Random
 
 /**
  * The Product Owner that patrols the office and responds to user questions.
@@ -57,6 +58,17 @@ class ProductOwner(
     var sitDuration = 0f  // 0 = sit forever (default)
     private var sitTimer = 0f
     private var returningToDesk = false
+    private var patrolDesksVisited = 0
+    private val maxPatrolDesks = 3
+
+    // Working animation while sitting (idle/typing alternation)
+    private var workAnimTimer = 0f
+    private var workAnimDuration = 0f
+    private var isTyping = false
+
+    // External event control (subagent routing)
+    var controlled = false
+        private set
 
     // Bubble support
     private var thoughtBubble: ThoughtBubble? = null
@@ -165,12 +177,26 @@ class ProductOwner(
             "question_leaving" -> updateQuestionLeaving(dt)
             "chatting" -> updateChatting(dt)
             "sitting" -> {
-                setAnimation("idle")
-                if (sitDuration > 0f) {
-                    sitTimer += dt
-                    if (sitTimer >= sitDuration) {
-                        sitTimer = 0f
-                        beginPatrol()
+                if (!controlled) {
+                    // Working animation: alternate idle/typing
+                    workAnimTimer += dt
+                    if (workAnimTimer >= workAnimDuration) {
+                        isTyping = !isTyping
+                        workAnimDuration = if (isTyping) {
+                            3f + Random.nextFloat() * 3f // typing 3-6s
+                        } else {
+                            2f + Random.nextFloat() * 2f // idle 2-4s
+                        }
+                        workAnimTimer = 0f
+                    }
+                    setAnimation(if (isTyping) "typing" else "idle")
+
+                    if (sitDuration > 0f) {
+                        sitTimer += dt
+                        if (sitTimer >= sitDuration) {
+                            sitTimer = 0f
+                            beginPatrol()
+                        }
                     }
                 }
             }
@@ -186,6 +212,11 @@ class ProductOwner(
     // Patrol methods
 
     private fun pickNextDesk() {
+        // If we've hit patrol limit, return to assigned desk
+        if (assignedDeskId != null && patrolDesksVisited >= maxPatrolDesks) {
+            returnToAssignedDesk()
+            return
+        }
         if (remainingDesks.isEmpty()) {
             if (assignedDeskId != null) {
                 returnToAssignedDesk()
@@ -197,6 +228,8 @@ class ProductOwner(
             state = "patrolling"
             return
         }
+
+        patrolDesksVisited++
 
         val nextDesk = remainingDesks.removeAt(0)
         currentDeskId = nextDesk.first
@@ -243,6 +276,8 @@ class ProductOwner(
             assignedDeskPosition?.let { (dx, dy) -> x = dx; y = dy }
             returningToDesk = false
             state = "sitting"
+            randomizeSitDuration()
+            resetWorkAnimation()
             setAnimation("idle")
             return
         }
@@ -272,6 +307,7 @@ class ProductOwner(
 
     private fun beginPatrol() {
         snapToMidpoint()
+        patrolDesksVisited = 0
         remainingDesks = deskTargets
             .filter { it.first != assignedDeskId }
             .toMutableList()
@@ -502,6 +538,10 @@ class ProductOwner(
         assignedDeskPosition = Pair(deskX, deskY)
         chairPosition = Pair(chairX, chairY)
         state = "sitting"
+        active = true
+        visible = true
+        randomizeSitDuration()
+        resetWorkAnimation()
         setAnimation("idle")
     }
 
@@ -535,5 +575,83 @@ class ProductOwner(
         val dx = kotlin.math.abs(x - deskPos.first)
         val dy = kotlin.math.abs(y - deskPos.second)
         return dx < 15f && dy < 15f
+    }
+
+    // Sit duration randomization
+
+    private fun randomizeSitDuration() {
+        sitDuration = 45f + Random.nextFloat() * 30f // 45-75s
+    }
+
+    private fun resetWorkAnimation() {
+        isTyping = false
+        workAnimTimer = 0f
+        workAnimDuration = 2f + Random.nextFloat() * 2f
+    }
+
+    // External event handling (subagent routing)
+
+    /**
+     * Handle an external event (from subagent routing).
+     * When controlled, PO stays at desk and shows appropriate animation/bubble.
+     */
+    fun handleEvent(event: String) {
+        when (event) {
+            "thinking_started" -> {
+                controlled = true
+                showThoughtBubble("thinking")
+                setAnimation("idle")
+                if (state != "sitting") goToDesk()
+            }
+            "code_writing_started" -> {
+                controlled = true
+                hideThoughtBubble()
+                setAnimation("typing")
+                if (state != "sitting") goToDesk()
+            }
+            "researching_started" -> {
+                controlled = true
+                showThoughtBubble("reading")
+                setAnimation("idle")
+                if (state != "sitting") goToDesk()
+            }
+            "command_started" -> {
+                controlled = true
+                hideThoughtBubble()
+                setAnimation("idle")
+                if (state != "sitting") goToDesk()
+            }
+            "tests_failed" -> {
+                controlled = true
+                showThoughtBubble("annoyed")
+                if (state != "sitting") goToDesk()
+            }
+            "command_succeeded" -> {
+                controlled = true
+                showThoughtBubble("success")
+                if (state != "sitting") goToDesk()
+            }
+            "idle" -> {
+                controlled = false
+                hideThoughtBubble()
+                if (state == "sitting") {
+                    resetWorkAnimation()
+                    randomizeSitDuration()
+                    sitTimer = 0f
+                }
+            }
+        }
+    }
+
+    /**
+     * Navigate back to assigned desk if not already there.
+     */
+    private fun goToDesk() {
+        if (assignedDeskId != null && !isAtAssignedDesk()) {
+            returnToAssignedDesk()
+        } else if (assignedDeskId != null) {
+            assignedDeskPosition?.let { (dx, dy) -> x = dx; y = dy }
+            state = "sitting"
+        }
     }
 }

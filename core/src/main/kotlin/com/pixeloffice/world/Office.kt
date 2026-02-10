@@ -46,6 +46,10 @@ class Office(private val config: Config) {
         const val PO_PATROL_START_X = 150f
         const val PO_PATROL_START_Y = 110f
 
+        // Permanent manager desk assignments (east-side desks in column 2)
+        const val PM_DESK_ID = "deskColumn2_desk1"  // row 0 east
+        const val PO_DESK_ID = "deskColumn2_desk3"  // row 1 east
+
         // Collision detection
         const val MANAGER_COLLISION_DIST = 15f
 
@@ -217,15 +221,18 @@ class Office(private val config: Config) {
 
     fun getAgentActivity(agentId: String): ActivityRecord? = activityTracker.getCurrentActivity(agentId)
 
+    // Desk IDs reserved for permanent managers (skip during developer allocation)
+    private val reservedDeskIds = setOf(PM_DESK_ID, PO_DESK_ID)
+
     private fun getAvailableDesk(): Desk? {
-        return desks.values.firstOrNull { it.occupiedBy == null }
+        return desks.values.firstOrNull { it.occupiedBy == null && it.id !in reservedDeskIds }
     }
 
     /**
-     * Get the next available (unoccupied) desk ID.
+     * Get the next available (unoccupied) desk ID, excluding reserved manager desks.
      */
     fun getNextAvailableDeskId(): String? {
-        return desks.values.firstOrNull { it.occupiedBy == null }?.id
+        return desks.values.firstOrNull { it.occupiedBy == null && it.id !in reservedDeskIds }?.id
     }
 
     // Desk assignment API
@@ -430,6 +437,7 @@ class Office(private val config: Config) {
 
         val defaults = SettingsConfig.fromDefaults()
         applyDeskColumns(defaults)
+        spawnPermanentManagers()
     }
 
     /**
@@ -532,23 +540,8 @@ class Office(private val config: Config) {
             }
         }
 
-        // Spawn PM
-        if (settingsConfig.spawnPM) {
-            if (settingsConfig.pmDeskId != null) {
-                assignPMToDesk(settingsConfig.pmDeskId!!)
-            } else {
-                spawnProjectManager()
-            }
-        }
-
-        // Spawn PO
-        if (settingsConfig.spawnPO) {
-            if (settingsConfig.poDeskId != null) {
-                assignPOToDesk(settingsConfig.poDeskId!!)
-            } else {
-                spawnProductOwnerPatrol()
-            }
-        }
+        // Always spawn permanent managers at their assigned east-side desks
+        spawnPermanentManagers()
     }
 
     // Named location registry
@@ -683,6 +676,20 @@ class Office(private val config: Config) {
         }
         productOwner?.startPatrol()
         return productOwner
+    }
+
+    /**
+     * Spawn PM and PO as permanent fixtures at their assigned east-side desks.
+     * Called from setupDefaultDeskColumns() and applyDeskColumns().
+     */
+    fun spawnPermanentManagers() {
+        // Only spawn if the desks exist (columns have been set up)
+        if (desks.containsKey(PM_DESK_ID)) {
+            assignPMToDesk(PM_DESK_ID)
+        }
+        if (desks.containsKey(PO_DESK_ID)) {
+            assignPOToDesk(PO_DESK_ID)
+        }
     }
 
     /**
