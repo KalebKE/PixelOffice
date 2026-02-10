@@ -86,23 +86,33 @@ class ThinkingState(private val timeout: Float = 4.0f) : State<Developer>(Develo
  * Developer is walking to the whiteboard.
  */
 class WalkingToWhiteboardState : State<Developer>(DeveloperStateNames.WALKING_TO_WHITEBOARD) {
+    private var pathSet = false
+
     override fun enter(entity: Developer, prevState: State<Developer>?) {
-        entity.setAnimation("walking")
-        // Claim the whiteboard before walking
         entity.claimWhiteboard()
-        entity.getWhiteboardPosition()?.let { (x, y) ->
-            entity.walkFromDeskWithPathfinding(x, y)
+        val pos = entity.getWhiteboardPosition()
+        if (pos != null) {
+            entity.setAnimation("walking")
+            entity.walkFromDeskWithPathfinding(pos.first, pos.second)
+            pathSet = true
+        } else {
+            pathSet = false
         }
     }
 
     override fun update(entity: Developer, dt: Float): String? {
+        if (!pathSet) return DeveloperStateNames.IDLE
         if (entity.hasReachedTarget()) {
             return DeveloperStateNames.AT_WHITEBOARD
         }
         return null
     }
 
-    override fun exit(entity: Developer, nextState: State<Developer>?) {}
+    override fun exit(entity: Developer, nextState: State<Developer>?) {
+        if (!pathSet) {
+            entity.releaseWhiteboard()
+        }
+    }
 
     override fun onEvent(entity: Developer, event: String, data: Any?): String? {
         return when (event) {
@@ -155,14 +165,21 @@ class AtWhiteboardState : State<Developer>(DeveloperStateNames.AT_WHITEBOARD) {
  * Developer is walking back to their desk.
  */
 class WalkingToDeskState : State<Developer>(DeveloperStateNames.WALKING_TO_DESK) {
+    private var pathSet = false
+
     override fun enter(entity: Developer, prevState: State<Developer>?) {
-        entity.setAnimation("walking")
-        entity.getDeskPosition()?.let { (x, y) ->
-            entity.walkToWithPathfinding(x, y)
+        val pos = entity.getDeskPosition()
+        if (pos != null) {
+            entity.setAnimation("walking")
+            entity.walkToWithPathfinding(pos.first, pos.second)
+            pathSet = true
+        } else {
+            pathSet = false
         }
     }
 
     override fun update(entity: Developer, dt: Float): String? {
+        if (!pathSet) return DeveloperStateNames.IDLE
         if (entity.hasReachedTarget()) {
             return DeveloperStateNames.WRITING_CODE
         }

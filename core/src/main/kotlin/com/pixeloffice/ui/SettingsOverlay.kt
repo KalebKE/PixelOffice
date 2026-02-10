@@ -285,7 +285,7 @@ class SettingsOverlay(
 
             val variantBox = SelectBox<String>(skin)
             val variantItems = GdxArray<String>()
-            variantItems.addAll("0", "1", "2", "3")
+            variantItems.addAll("0", "1", "2")
             variantBox.items = variantItems
             variantBox.selected = dev.colorVariant.toString()
             variantBox.addListener(object : ChangeListener() {
@@ -339,7 +339,7 @@ class SettingsOverlay(
         addBtn.addListener(object : ChangeListener() {
             override fun changed(event: ChangeEvent, actor: Actor) {
                 val nextId = config.developers.size + 1
-                config.developers.add(DeveloperSettings("demo_agent_$nextId", config.developers.size % 4))
+                config.developers.add(DeveloperSettings("demo_agent_$nextId", config.developers.size % 3))
                 rebuildDeveloperTable(devTable)
             }
         })
