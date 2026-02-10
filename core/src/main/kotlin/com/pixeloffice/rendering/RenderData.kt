@@ -28,7 +28,8 @@ data class BubbleRenderInfo(
     val x: Float,
     val y: Float,
     val frame: Int,
-    val bubbleType: String
+    val bubbleType: String,
+    val facingLeft: Boolean = false
 )
 
 /**

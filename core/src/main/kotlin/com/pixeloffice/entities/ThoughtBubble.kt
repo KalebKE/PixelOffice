@@ -19,6 +19,8 @@ class ThoughtBubble(
     var bubbleType: String = "thinking"  // thinking, blah, question, annoyed
 ) : BaseEntity(x, y, entityId) {
 
+    var facingLeft: Boolean = false
+
     private var baseY = y
     private var currentFrame = 0
     private var frameTimer = 0f
@@ -66,7 +68,7 @@ class ThoughtBubble(
     }
 
     override fun toEffectRenderInfo(): EffectRenderInfo =
-        EffectRenderInfo.Bubble(BubbleRenderInfo(x, y, currentFrame, bubbleType))
+        EffectRenderInfo.Bubble(BubbleRenderInfo(x, y, currentFrame, bubbleType, facingLeft))
 
     /**
      * Show the thought bubble.

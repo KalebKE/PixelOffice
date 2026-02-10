@@ -101,7 +101,9 @@ class Developer(
 
         // Update thought bubble position if visible
         if (thoughtBubble != null && showBubble) {
-            thoughtBubble?.attachTo(x + 8, y - 26)
+            val isLeft = deskFacingDirection == "left"
+            thoughtBubble?.facingLeft = isLeft
+            thoughtBubble?.attachTo(x + if (isLeft) -8f else 8f, y - 26)
             thoughtBubble?.update(dt)
         }
 

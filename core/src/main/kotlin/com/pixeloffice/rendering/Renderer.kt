@@ -1059,17 +1059,17 @@ class Renderer(
      * Draw a thought bubble effect (procedural).
      * @param bubbleType Type of bubble: "thinking", "blah", "question", "annoyed"
      */
-    fun drawThoughtBubble(worldX: Float, worldY: Float, frameIndex: Int, bubbleType: String = "thinking") {
+    fun drawThoughtBubble(worldX: Float, worldY: Float, frameIndex: Int, bubbleType: String = "thinking", facingLeft: Boolean = false) {
         Gdx.gl.glEnable(GL20.GL_BLEND)
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
 
         when (bubbleType) {
-            "thinking" -> drawThinkingBubble(worldX, worldY, frameIndex)
-            "blah" -> drawBlahBubble(worldX, worldY, frameIndex)
-            "question" -> drawQuestionBubble(worldX, worldY, frameIndex)
-            "annoyed" -> drawAnnoyedBubble(worldX, worldY, frameIndex)
-            "coding" -> drawCodingBubble(worldX, worldY, frameIndex)
-            else -> drawThinkingBubble(worldX, worldY, frameIndex)
+            "thinking" -> drawThinkingBubble(worldX, worldY, frameIndex, facingLeft)
+            "blah" -> drawBlahBubble(worldX, worldY, frameIndex, facingLeft)
+            "question" -> drawQuestionBubble(worldX, worldY, frameIndex, facingLeft)
+            "annoyed" -> drawAnnoyedBubble(worldX, worldY, frameIndex, facingLeft)
+            "coding" -> drawCodingBubble(worldX, worldY, frameIndex, facingLeft)
+            else -> drawThinkingBubble(worldX, worldY, frameIndex, facingLeft)
         }
 
         Gdx.gl.glDisable(GL20.GL_BLEND)
@@ -1078,7 +1078,7 @@ class Renderer(
     /**
      * Draw thinking bubble with animated dots.
      */
-    private fun drawThinkingBubble(worldX: Float, worldY: Float, frameIndex: Int) {
+    private fun drawThinkingBubble(worldX: Float, worldY: Float, frameIndex: Int, facingLeft: Boolean = false) {
         endBatch()
 
         // Convert to screen coordinates (bubble is ~20px tall)
@@ -1116,8 +1116,10 @@ class Renderer(
         beginShapes()
         // Small connecting bubbles (below main bubble in screen coords)
         shapeRenderer.color = bubbleColor(Colors.WHITE)
-        shapeRenderer.circle(worldX - 2, screenY + 6, 2f)
-        shapeRenderer.circle(worldX - 4, screenY + 2, 1f)
+        val tailX1 = if (facingLeft) worldX + 18 else worldX - 2
+        val tailX2 = if (facingLeft) worldX + 20 else worldX - 4
+        shapeRenderer.circle(tailX1, screenY + 6, 2f)
+        shapeRenderer.circle(tailX2, screenY + 2, 1f)
         endShapes()
 
         beginBatch()
@@ -1126,7 +1128,7 @@ class Renderer(
     /**
      * Draw speech bubble with "blah" lines (PM talking).
      */
-    private fun drawBlahBubble(worldX: Float, worldY: Float, frameIndex: Int) {
+    private fun drawBlahBubble(worldX: Float, worldY: Float, frameIndex: Int, facingLeft: Boolean = false) {
         endBatch()
 
         val screenY = flipY(worldY, 20)
@@ -1152,21 +1154,40 @@ class Renderer(
         shapeRenderer.rectLine(worldX + 3, lineY - 4, worldX + 13, lineY - 4, 1f)
         endShapes()
 
-        // Speech bubble tail (pointing down-left)
-        beginShapes()
-        shapeRenderer.color = bubbleColor(Colors.WHITE)
-        shapeRenderer.triangle(
-            worldX, screenY + 6,
-            worldX + 4, screenY + 6,
-            worldX - 2, screenY + 2
-        )
-        endShapes()
+        // Speech bubble tail
+        if (facingLeft) {
+            // Tail pointing down-right
+            beginShapes()
+            shapeRenderer.color = bubbleColor(Colors.WHITE)
+            shapeRenderer.triangle(
+                worldX + 16, screenY + 6,
+                worldX + 12, screenY + 6,
+                worldX + 18, screenY + 2
+            )
+            endShapes()
 
-        beginShapes(ShapeRenderer.ShapeType.Line)
-        shapeRenderer.color = bubbleColor(Colors.DARK_GRAY)
-        shapeRenderer.line(worldX, screenY + 6, worldX - 2, screenY + 2)
-        shapeRenderer.line(worldX - 2, screenY + 2, worldX + 4, screenY + 6)
-        endShapes()
+            beginShapes(ShapeRenderer.ShapeType.Line)
+            shapeRenderer.color = bubbleColor(Colors.DARK_GRAY)
+            shapeRenderer.line(worldX + 16, screenY + 6, worldX + 18, screenY + 2)
+            shapeRenderer.line(worldX + 18, screenY + 2, worldX + 12, screenY + 6)
+            endShapes()
+        } else {
+            // Tail pointing down-left (original)
+            beginShapes()
+            shapeRenderer.color = bubbleColor(Colors.WHITE)
+            shapeRenderer.triangle(
+                worldX, screenY + 6,
+                worldX + 4, screenY + 6,
+                worldX - 2, screenY + 2
+            )
+            endShapes()
+
+            beginShapes(ShapeRenderer.ShapeType.Line)
+            shapeRenderer.color = bubbleColor(Colors.DARK_GRAY)
+            shapeRenderer.line(worldX, screenY + 6, worldX - 2, screenY + 2)
+            shapeRenderer.line(worldX - 2, screenY + 2, worldX + 4, screenY + 6)
+            endShapes()
+        }
 
         beginBatch()
     }
@@ -1174,7 +1195,7 @@ class Renderer(
     /**
      * Draw question bubble with "?" symbol.
      */
-    private fun drawQuestionBubble(worldX: Float, worldY: Float, frameIndex: Int) {
+    private fun drawQuestionBubble(worldX: Float, worldY: Float, frameIndex: Int, facingLeft: Boolean = false) {
         endBatch()
 
         val screenY = flipY(worldY, 20)
@@ -1215,8 +1236,10 @@ class Renderer(
         // Small connecting bubbles
         beginShapes()
         shapeRenderer.color = bubbleColor(Colors.WHITE)
-        shapeRenderer.circle(worldX - 2, screenY + 6, 2f)
-        shapeRenderer.circle(worldX - 4, screenY + 2, 1f)
+        val tailX1 = if (facingLeft) worldX + 18 else worldX - 2
+        val tailX2 = if (facingLeft) worldX + 20 else worldX - 4
+        shapeRenderer.circle(tailX1, screenY + 6, 2f)
+        shapeRenderer.circle(tailX2, screenY + 2, 1f)
         endShapes()
 
         beginBatch()
@@ -1225,7 +1248,7 @@ class Renderer(
     /**
      * Draw annoyed bubble with "!" symbol.
      */
-    private fun drawAnnoyedBubble(worldX: Float, worldY: Float, frameIndex: Int) {
+    private fun drawAnnoyedBubble(worldX: Float, worldY: Float, frameIndex: Int, facingLeft: Boolean = false) {
         endBatch()
 
         val screenY = flipY(worldY, 20)
@@ -1254,8 +1277,10 @@ class Renderer(
         // Small connecting bubbles
         beginShapes()
         shapeRenderer.color = bubbleColor(Colors.WHITE)
-        shapeRenderer.circle(worldX - 2, screenY + 6, 2f)
-        shapeRenderer.circle(worldX - 4, screenY + 2, 1f)
+        val tailX1 = if (facingLeft) worldX + 18 else worldX - 2
+        val tailX2 = if (facingLeft) worldX + 20 else worldX - 4
+        shapeRenderer.circle(tailX1, screenY + 6, 2f)
+        shapeRenderer.circle(tailX2, screenY + 2, 1f)
         endShapes()
 
         beginBatch()
@@ -1264,7 +1289,7 @@ class Renderer(
     /**
      * Draw Matrix-style coding bubble with cascading green binary digits.
      */
-    private fun drawCodingBubble(worldX: Float, worldY: Float, frameIndex: Int) {
+    private fun drawCodingBubble(worldX: Float, worldY: Float, frameIndex: Int, facingLeft: Boolean = false) {
         endBatch()
 
         val screenY = flipY(worldY, 20)
@@ -1325,8 +1350,10 @@ class Renderer(
         // Small connecting thought-bubbles below
         beginShapes()
         shapeRenderer.color = bubbleColor(Colors.MATRIX_BG)
-        shapeRenderer.circle(worldX - 2, screenY + 4, 2f)
-        shapeRenderer.circle(worldX - 4, screenY + 1, 1f)
+        val tailX1 = if (facingLeft) worldX + 18 else worldX - 2
+        val tailX2 = if (facingLeft) worldX + 20 else worldX - 4
+        shapeRenderer.circle(tailX1, screenY + 4, 2f)
+        shapeRenderer.circle(tailX2, screenY + 1, 1f)
         endShapes()
 
         beginBatch()
@@ -1696,7 +1723,7 @@ class Renderer(
         when (effect) {
             is EffectRenderInfo.Bubble -> {
                 val b = effect.info
-                drawThoughtBubble(b.x, b.y, b.frame, b.bubbleType)
+                drawThoughtBubble(b.x, b.y, b.frame, b.bubbleType, b.facingLeft)
             }
             is EffectRenderInfo.Ghost -> {
                 val g = effect.info
