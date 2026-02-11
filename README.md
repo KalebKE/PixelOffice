@@ -43,7 +43,10 @@
 ### Build & Run
 
 ```bash
-# Run the application
+# One command to build, launch, and connect (recommended)
+./start.sh
+
+# Or run manually with Gradle
 ./gradlew desktop:run
 
 # Build a fat JAR for distribution
@@ -53,13 +56,13 @@
 ./gradlew compileKotlin
 ```
 
-> **Jared:** On macOS, the desktop:run task automatically adds `-XstartOnFirstThread` for LWJGL3. You don't need to worry about that. I've worried about it enough for both of us.
->
-> **Gilfoyle:** If your JDK isn't 21, the build will fail. And I'll know.
->
-> **Russ Hanneman:** Hold on — you're telling me I can just type ONE COMMAND and little dudes start coding on my screen? That's like... that's like having a Lamborghini that drives ITSELF. *(looks at Jared)* This guy fucks.
+> **Russ Hanneman:** Hold on — you're telling me I can just type ONE COMMAND and it builds, launches, waits for the server, AND connects tmux? That's like... that's like having a Lamborghini that drives ITSELF, parks ITSELF, and then sends you a selfie from the parking garage. *(looks at Jared)* This guy fucks.
 >
 > **Jared:** Oh! That's... thank you, Russ. That means a lot, actually. No one's ever— I'm fine. I'm fine.
+>
+> **Gilfoyle:** `start.sh` builds the project, launches it in the background, waits up to 30 seconds for the TCP server on port 9999, and auto-connects your tmux pane if you're in one. It also cleans up when you Ctrl+C. If your JDK isn't 21, the build will fail. And I'll know.
+>
+> **Jared:** On macOS, the desktop:run task automatically adds `-XstartOnFirstThread` for LWJGL3. You don't need to worry about that. I've worried about it enough for both of us.
 
 ---
 
@@ -69,41 +72,49 @@
 >
 > **Richard:** You... you set up the TCP pipe?
 >
-> **Big Head:** I think so? I just kind of typed stuff and it worked.
+> **Big Head:** I think so? I just kind of typed stuff and it worked. There's a script now. It does everything.
 
-### Step 1: Set `demo` to `false` in `config.json`
+### Option A: Use `start.sh` (recommended)
 
-```json
-{
-  "demo": {
-    "enabled": false
-  }
-}
-```
-
-> **Big Head:** Oh yeah, you gotta turn off the fake mode first. Otherwise it just does its own thing. Like me at Hooli.
-
-### Step 2: Start Pixel Office
+Make sure `demo.enabled` is `false` in `config.json`, then from a tmux pane:
 
 ```bash
-./gradlew desktop:run
+./start.sh
 ```
 
-The application starts a TCP server on port 9999 (configurable in `config.json` → `network.port`).
+This builds and launches Pixel Office in the background, waits for the server on port 9999, and auto-connects the current tmux pane. Logs go to `.game.log`. Press Ctrl+C to stop — it disconnects the pipe and kills the game process automatically.
 
-### Step 3: Pipe Claude Code's output
+> **Big Head:** Yeah, that's the one. You just run it and everything happens. It even fixes the mouse scroll thing in tmux. I don't know what that means but it's fixed now.
+>
+> **Gilfoyle:** It sets `tmux mouse on` and rebinds `WheelUpPane`/`WheelDownPane` so scroll works in alternate screen mode. Without it, scrolling in tmux sends garbage to the pane instead of scrolling the buffer.
+>
+> **Big Head:** See? Fixed.
 
-In the terminal where Claude Code is running (inside tmux):
+### Option B: Connect additional panes with `connect.sh`
+
+If Pixel Office is already running (via `start.sh` or `./gradlew desktop:run`), you can connect more tmux panes:
 
 ```bash
-tmux pipe-pane -o -t $TMUX_PANE 'nc localhost 9999'
+./connect.sh
 ```
 
-> **Big Head:** That command sends everything Claude types to the little office. The `nc` part is netcat — it's like... a net. For cats. No wait, it's a network thing.
+Run this from any tmux pane you want to pipe into Pixel Office. It checks that the game server is up, applies the mouse scroll fix, and connects via `tmux pipe-pane`. To disconnect a pane later: `tmux pipe-pane`.
+
+> **Big Head:** Oh cool, so if you have like, multiple Claude things going, each one can be its own little office dude?
 >
-> **Gilfoyle:** It opens a TCP connection to localhost on port 9999 and pipes the tmux pane's output stream through it. The `TmuxReceiver` class listens on a `ServerSocket`, accepts the connection, and enqueues raw data into a `ConcurrentLinkedQueue` for the GL thread to poll.
+> **Gilfoyle:** Each connected pane's output stream gets parsed independently by the `StreamParser`. Multiple panes means multiple data sources feeding the same office. Agent spawns from different panes create separate developers.
+
+### Option C: Manual connection
+
+If you prefer doing it yourself, or you're not using the scripts:
+
+1. Set `demo.enabled` to `false` in `config.json`
+2. Start Pixel Office: `./gradlew desktop:run`
+3. In your tmux pane: `tmux pipe-pane -o -t $TMUX_PANE 'nc localhost 9999'`
+
+> **Gilfoyle:** `nc` opens a TCP connection to localhost on port 9999 and pipes the tmux pane's output stream through it. The `TmuxReceiver` class listens on a `ServerSocket`, accepts the connection, and enqueues raw data into a `ConcurrentLinkedQueue` for the GL thread to poll. If you need me to explain netcat, close the terminal.
 >
-> **Big Head:** Yeah. That.
+> **Big Head:** The `nc` part is netcat — it's like... a net. For cats. No wait, it's a network thing.
 
 ### Network Configuration
 
