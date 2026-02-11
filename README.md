@@ -3,7 +3,7 @@
 **A real-time pixel art visualization of Claude Code at work — watch AI agents think, code, debug, and despair in a tiny virtual office.**
 
 <p align="center">
-  <img src="assets/sprites/PixelOfficeAssets.png" alt="Pixel Office Sprites" />
+  <img src="images/pixel_office.gif" alt="Pixel Office" />
 </p>
 
 ---
