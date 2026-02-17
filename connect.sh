@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PORT=9999
+DEFAULT_PORT=9999
+MULTICAST_GROUP="239.255.80.79"
+MULTICAST_PORT=9998
+DISCOVERY_TIMEOUT=5
 
 # --- Check prerequisites ---
 if [ -z "${TMUX:-}" ]; then
@@ -10,8 +13,40 @@ if [ -z "${TMUX:-}" ]; then
     exit 1
 fi
 
-if ! nc -z localhost "$PORT" 2>/dev/null; then
-    echo "Error: Pixel Office is not running on port $PORT."
+# --- Discover server via UDP multicast ---
+echo "Discovering Pixel Office server on LAN..."
+DISCOVERY=$(python3 -c "
+import socket, struct, sys
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+sock.bind(('', $MULTICAST_PORT))
+mreq = struct.pack('4sL', socket.inet_aton('$MULTICAST_GROUP'), socket.INADDR_ANY)
+sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+sock.settimeout($DISCOVERY_TIMEOUT)
+try:
+    data, addr = sock.recvfrom(256)
+    msg = data.decode()
+    if msg.startswith('PIXELOFFICE:'):
+        print(addr[0] + ':' + msg.split(':',1)[1])
+except socket.timeout:
+    pass
+finally:
+    sock.close()
+" 2>/dev/null || true)
+
+if [ -n "$DISCOVERY" ]; then
+    HOST="${DISCOVERY%%:*}"
+    PORT="${DISCOVERY##*:}"
+    echo "Found server at $HOST:$PORT"
+else
+    echo "No server found via discovery, falling back to localhost"
+    HOST="localhost"
+    PORT="$DEFAULT_PORT"
+fi
+
+# --- Check server is reachable ---
+if ! nc -z "$HOST" "$PORT" 2>/dev/null; then
+    echo "Error: Pixel Office is not running on $HOST:$PORT."
     echo "Start the game first with: ./start.sh"
     exit 1
 fi
@@ -24,6 +59,6 @@ tmux bind-key -T root WheelDownPane \
     if-shell -F '#{alternate_on}' 'send-keys -M' 'send-keys -M'
 
 # --- Connect ---
-tmux pipe-pane -o "nc localhost $PORT"
-echo "Connected this tmux pane to Pixel Office on port $PORT"
+tmux pipe-pane -o "nc $HOST $PORT"
+echo "Connected this tmux pane to Pixel Office on $HOST:$PORT"
 echo "To disconnect: tmux pipe-pane"
