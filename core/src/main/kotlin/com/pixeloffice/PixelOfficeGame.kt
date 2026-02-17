@@ -10,6 +10,7 @@ import com.pixeloffice.animation.SpriteSheet
 import com.pixeloffice.core.Config
 import com.pixeloffice.core.EventBus
 import com.pixeloffice.network.DiscoveryBroadcaster
+import com.pixeloffice.network.HeartbeatReceiver
 import com.pixeloffice.network.TmuxReceiver
 import com.pixeloffice.parsing.ActivityType
 import com.pixeloffice.parsing.DetectedActivity
@@ -61,6 +62,11 @@ class PixelOfficeGame : ApplicationAdapter() {
     // Network
     private lateinit var receiver: TmuxReceiver
     private lateinit var discoveryBroadcaster: DiscoveryBroadcaster
+    private lateinit var heartbeatReceiver: HeartbeatReceiver
+
+    // Terminal → Agent ID mapping (from heartbeat system)
+    private val terminalToAgent = mutableMapOf<String, String>()
+    private var staleCheckTimer = 0f
 
     // Sprites and animation
     private lateinit var spriteSheet: SpriteSheet
@@ -150,14 +156,26 @@ class PixelOfficeGame : ApplicationAdapter() {
         // Discovery broadcaster (for LAN auto-discovery)
         discoveryBroadcaster = DiscoveryBroadcaster(tcpPort = config.network.port)
 
+        // Heartbeat receiver for terminal detection
+        heartbeatReceiver = HeartbeatReceiver(
+            port = config.heartbeat.port,
+            onNewTerminal = { terminalId ->
+                // Post to GL thread since this callback runs on heartbeat thread
+                Gdx.app.postRunnable {
+                    handleNewTerminal(terminalId)
+                }
+            }
+        )
+
         // Demo mode
         demoMode = config.demo.enabled
         if (demoMode) {
             renderer.setDemoMode(true)
         } else {
-            // Start network receiver and discovery broadcaster
+            // Start network receiver, discovery broadcaster, and heartbeat receiver
             receiver.start()
             discoveryBroadcaster.start()
+            heartbeatReceiver.start()
         }
 
         // Set up touch input for mobile
@@ -255,6 +273,38 @@ class PixelOfficeGame : ApplicationAdapter() {
             Gdx.app.log("PixelOffice", "Probe disconnected (no developer spawned): $connectionId")
         } else {
             Gdx.app.log("PixelOffice", "Disconnected: $connectionId (agent $agentId)")
+        }
+    }
+
+    /**
+     * Handle a new terminal detected via heartbeat.
+     * Spawns a developer immediately for instant visual feedback.
+     */
+    private fun handleNewTerminal(terminalId: String) {
+        val agentId = "terminal_$terminalId"
+        val developer = office.spawnDeveloper(agentId)
+        if (developer != null) {
+            terminalToAgent[terminalId] = agentId
+            Gdx.app.log("PixelOffice", "Developer spawned for terminal heartbeat: $terminalId → $agentId")
+        } else {
+            Gdx.app.log("PixelOffice", "Failed to spawn developer for terminal: $terminalId (no desk available)")
+        }
+    }
+
+    /**
+     * Check for stale terminals (no heartbeat for timeout period) and remove their developers.
+     */
+    private fun checkStaleTerminals() {
+        val timeoutMs = config.heartbeat.timeoutMinutes * 60 * 1000L
+        val staleTerminals = heartbeatReceiver.getStaleTerminals(timeoutMs)
+
+        for (terminalId in staleTerminals) {
+            val agentId = terminalToAgent.remove(terminalId)
+            if (agentId != null) {
+                office.removeDeveloper(agentId)
+                Gdx.app.log("PixelOffice", "Removed stale developer: $agentId (terminal: $terminalId, no heartbeat for ${config.heartbeat.timeoutMinutes} minutes)")
+            }
+            heartbeatReceiver.removeTerminal(terminalId)
         }
     }
 
@@ -431,6 +481,15 @@ class PixelOfficeGame : ApplicationAdapter() {
             }
         } else {
             runDemo(dt)
+        }
+
+        // Check for stale terminals periodically (if not demo mode)
+        if (!demoMode) {
+            staleCheckTimer += dt
+            if (staleCheckTimer >= config.heartbeat.checkIntervalSeconds) {
+                staleCheckTimer = 0f
+                checkStaleTerminals()
+            }
         }
 
         // Update systems
@@ -670,9 +729,10 @@ class PixelOfficeGame : ApplicationAdapter() {
     }
 
     override fun dispose() {
-        // Stop network receiver and discovery broadcaster
+        // Stop network receiver, discovery broadcaster, and heartbeat receiver
         receiver.stop()
         discoveryBroadcaster.stop()
+        heartbeatReceiver.stop()
 
         settingsOverlay.dispose()
         renderer.dispose()

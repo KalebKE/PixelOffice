@@ -5,6 +5,13 @@ DEFAULT_PORT=9999
 MULTICAST_GROUP="239.255.80.79"
 MULTICAST_PORT=9998
 DISCOVERY_TIMEOUT=5
+HEARTBEAT_PORT=9997
+HEARTBEAT_INTERVAL=30
+
+# Generate unique terminal ID from tmux pane or PID
+TERMINAL_ID="${TMUX_PANE:-$$}"
+# Clean up tmux pane ID (remove % prefix)
+TERMINAL_ID="${TERMINAL_ID#%}"
 
 # --- Check prerequisites ---
 if [ -z "${TMUX:-}" ]; then
@@ -58,7 +65,30 @@ tmux bind-key -T root WheelUpPane \
 tmux bind-key -T root WheelDownPane \
     if-shell -F '#{alternate_on}' 'send-keys -M' 'send-keys -M'
 
+# --- Start heartbeat sender in background ---
+(
+    while true; do
+        echo "HEARTBEAT:$TERMINAL_ID" | nc -u -w1 "$HOST" $HEARTBEAT_PORT 2>/dev/null || true
+        sleep $HEARTBEAT_INTERVAL
+    done
+) &
+HEARTBEAT_PID=$!
+
+# --- Cleanup on exit ---
+cleanup() {
+    kill $HEARTBEAT_PID 2>/dev/null || true
+    tmux pipe-pane 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+# Send first heartbeat immediately (developer spawns before any data)
+echo "HEARTBEAT:$TERMINAL_ID" | nc -u -w1 "$HOST" $HEARTBEAT_PORT 2>/dev/null || true
+
 # --- Connect ---
 tmux pipe-pane -o "nc $HOST $PORT"
-echo "Connected this tmux pane to Pixel Office on $HOST:$PORT"
-echo "To disconnect: tmux pipe-pane"
+echo "Connected this tmux pane to Pixel Office on $HOST:$PORT (terminal: $TERMINAL_ID)"
+echo "To disconnect: tmux pipe-pane (or Ctrl+C)"
+
+# Keep script running to maintain heartbeat
+echo "Heartbeat active. Press Ctrl+C to disconnect."
+wait $HEARTBEAT_PID

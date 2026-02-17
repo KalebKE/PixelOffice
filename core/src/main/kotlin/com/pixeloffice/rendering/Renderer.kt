@@ -103,6 +103,12 @@ class Renderer(
     // Animated lava lamp on SE corner table
     private lateinit var lavaLamp: LavaLamp
 
+    // Pet thought bubble state (bone for dog, fish for cat)
+    private var petBubbleTimer = 0f
+    private val petBubbleInterval = 60f  // Check every 60 seconds
+    private var dogBubbleTimer = 0f      // Countdown for dog bubble
+    private var catBubbleTimer = 0f      // Countdown for cat bubble
+
     // Procedural sky
     private lateinit var skyRenderer: SkyRenderer
 
@@ -497,7 +503,7 @@ class Renderer(
         skyRenderer = SkyRenderer(width, height, skyTrafficInterval, skyTrafficEnabled, skyTrafficSprite, skyTrafficFrameCount)
 
         // Initialize lava lamp on SE corner table
-        lavaLamp = LavaLamp(195f, 211f)
+        lavaLamp = LavaLamp(195f, 225f)
     }
 
     fun setCamera(camera: GameCamera) {
@@ -510,6 +516,16 @@ class Renderer(
         time += dt
         skyRenderer.update(dt)
         lavaLamp.update(dt)
+
+        // Pet bubble spawning (50% chance every 60s, random duration up to 10s)
+        petBubbleTimer += dt
+        if (petBubbleTimer >= petBubbleInterval) {
+            petBubbleTimer = 0f
+            if (kotlin.random.Random.nextFloat() < 0.5f) dogBubbleTimer = kotlin.random.Random.nextFloat() * 10f
+            if (kotlin.random.Random.nextFloat() < 0.5f) catBubbleTimer = kotlin.random.Random.nextFloat() * 10f
+        }
+        if (dogBubbleTimer > 0) dogBubbleTimer -= dt
+        if (catBubbleTimer > 0) catBubbleTimer -= dt
     }
 
     fun clear() {
@@ -890,6 +906,9 @@ class Renderer(
         val frame = anim?.getFrameAtTime(time) ?: spriteSheet.getAnimalFrame("dog") ?: return
         val screenY = flipY(worldY, frame.height)
         batch.draw(frame.region, worldX, screenY)
+        if (dogBubbleTimer > 0) {
+            drawThoughtBubble(worldX + 8f, worldY - 10f, 0, "bone", false)
+        }
     }
 
     fun drawCat(worldX: Float, worldY: Float) {
@@ -897,6 +916,9 @@ class Renderer(
         val frame = anim?.getFrameAtTime(time) ?: spriteSheet.getAnimalFrame("cat") ?: return
         val screenY = flipY(worldY, frame.height)
         batch.draw(frame.region, worldX, screenY)
+        if (catBubbleTimer > 0) {
+            drawThoughtBubble(worldX + 8f, worldY - 10f, 0, "fish", false)
+        }
     }
 
     /**
@@ -1069,6 +1091,8 @@ class Renderer(
             "question" -> drawQuestionBubble(worldX, worldY, frameIndex, facingLeft)
             "annoyed" -> drawAnnoyedBubble(worldX, worldY, frameIndex, facingLeft)
             "coding" -> drawCodingBubble(worldX, worldY, frameIndex, facingLeft)
+            "bone" -> drawBoneBubble(worldX, worldY, frameIndex, facingLeft)
+            "fish" -> drawFishBubble(worldX, worldY, frameIndex, facingLeft)
             else -> drawThinkingBubble(worldX, worldY, frameIndex, facingLeft)
         }
 
@@ -1300,16 +1324,16 @@ class Renderer(
         val bx = worldX
         val by = screenY + 6f
 
-        // Dark background rectangle
+        // Dark background ellipse
         beginShapes()
         shapeRenderer.color = bubbleColor(Colors.MATRIX_BG)
-        shapeRenderer.rect(bx, by, bw, bh)
+        shapeRenderer.ellipse(bx, by, bw, bh)
         endShapes()
 
         // Dark green border
         beginShapes(ShapeRenderer.ShapeType.Line)
         shapeRenderer.color = bubbleColor(Colors.DARK_GREEN)
-        shapeRenderer.rect(bx, by, bw, bh)
+        shapeRenderer.ellipse(bx, by, bw, bh)
         endShapes()
 
         // Cascading binary digits using font
@@ -1354,6 +1378,97 @@ class Renderer(
         val tailX2 = if (facingLeft) worldX + 20 else worldX - 4
         shapeRenderer.circle(tailX1, screenY + 4, 2f)
         shapeRenderer.circle(tailX2, screenY + 1, 1f)
+        endShapes()
+
+        beginBatch()
+    }
+
+    /**
+     * Draw bone thought bubble (for dog).
+     */
+    private fun drawBoneBubble(worldX: Float, worldY: Float, frameIndex: Int, facingLeft: Boolean = false) {
+        endBatch()
+
+        val screenY = flipY(worldY, 20)
+
+        beginShapes()
+
+        // Main bubble
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
+        shapeRenderer.circle(worldX + 8, screenY + 12, 8f)
+        endShapes()
+
+        beginShapes(ShapeRenderer.ShapeType.Line)
+        shapeRenderer.color = bubbleColor(Colors.DARK_GRAY)
+        shapeRenderer.circle(worldX + 8, screenY + 12, 8f)
+        endShapes()
+
+        // Draw bone shape inside (brown color)
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Colors.PEACH)
+        // Bone shaft
+        shapeRenderer.rect(worldX + 4, screenY + 11, 8f, 2f)
+        // Bone ends (circles)
+        shapeRenderer.circle(worldX + 4, screenY + 11, 2f)
+        shapeRenderer.circle(worldX + 4, screenY + 13, 2f)
+        shapeRenderer.circle(worldX + 12, screenY + 11, 2f)
+        shapeRenderer.circle(worldX + 12, screenY + 13, 2f)
+        endShapes()
+
+        // Small connecting bubbles
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
+        val tailX1 = if (facingLeft) worldX + 18 else worldX - 2
+        val tailX2 = if (facingLeft) worldX + 20 else worldX - 4
+        shapeRenderer.circle(tailX1, screenY + 6, 2f)
+        shapeRenderer.circle(tailX2, screenY + 2, 1f)
+        endShapes()
+
+        beginBatch()
+    }
+
+    /**
+     * Draw fish thought bubble (for cat).
+     */
+    private fun drawFishBubble(worldX: Float, worldY: Float, frameIndex: Int, facingLeft: Boolean = false) {
+        endBatch()
+
+        val screenY = flipY(worldY, 20)
+
+        beginShapes()
+
+        // Main bubble
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
+        shapeRenderer.circle(worldX + 8, screenY + 12, 8f)
+        endShapes()
+
+        beginShapes(ShapeRenderer.ShapeType.Line)
+        shapeRenderer.color = bubbleColor(Colors.DARK_GRAY)
+        shapeRenderer.circle(worldX + 8, screenY + 12, 8f)
+        endShapes()
+
+        // Draw fish shape inside (blue/orange color)
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Colors.ORANGE)
+        // Fish body (ellipse)
+        shapeRenderer.ellipse(worldX + 4, screenY + 10, 7f, 4f)
+        // Fish tail (triangle made of small rect)
+        shapeRenderer.rect(worldX + 10, screenY + 11, 3f, 2f)
+        endShapes()
+
+        // Fish eye
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Colors.BLACK)
+        shapeRenderer.circle(worldX + 6, screenY + 12, 0.5f)
+        endShapes()
+
+        // Small connecting bubbles
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
+        val tailX1 = if (facingLeft) worldX + 18 else worldX - 2
+        val tailX2 = if (facingLeft) worldX + 20 else worldX - 4
+        shapeRenderer.circle(tailX1, screenY + 6, 2f)
+        shapeRenderer.circle(tailX2, screenY + 2, 1f)
         endShapes()
 
         beginBatch()

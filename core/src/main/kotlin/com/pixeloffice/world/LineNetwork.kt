@@ -171,8 +171,8 @@ class LineNetwork(private val config: Config) {
         addPoint(NavPoint(centerAisleX, bottomY, "center_aisle_bottom"))
         addPoint(NavPoint(rightAisleX, bottomY, "right_aisle_bottom"))
 
-        // Bottom corridor intersection points (y=210, between green couch and large table)
-        val bottomCorridorY = 210f
+        // Bottom corridor intersection points (y=200, between green couch and large table)
+        val bottomCorridorY = 200f
         addPoint(NavPoint(centerAisleX, bottomCorridorY, "bottom_corridor_center"))
         addPoint(NavPoint(rightAisleX, bottomCorridorY, "bottom_corridor_right"))
     }

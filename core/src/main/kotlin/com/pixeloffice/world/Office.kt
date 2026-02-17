@@ -191,6 +191,12 @@ class Office(private val config: Config) {
     fun removeDeveloper(agentId: String) {
         val developer = developers.remove(agentId) ?: return
         activityTracker.removeAgent(agentId)
+
+        // Release whiteboard
+        developer.getAssignedWhiteboardId()?.let { whiteboardId ->
+            releaseWhiteboard(whiteboardId)
+        }
+
         // Free up the desk
         for (desk in desks.values) {
             if (desk.occupiedBy == developer.entityId) {
