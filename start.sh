@@ -44,7 +44,7 @@ if [ -n "${TMUX:-}" ]; then
     echo "Connected current tmux pane to Pixel Office"
     apply_tmux_mouse_fix
 else
-    echo "Not in tmux — connect manually: tmux pipe-pane -o 'nc localhost $PORT'"
+    echo "Not in tmux — connect manually with: pixel-office-connect (from a tmux pane)"
 fi
 
 # --- Wait for game; clean up on exit ---

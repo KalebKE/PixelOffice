@@ -9,6 +9,7 @@ import com.badlogic.gdx.input.GestureDetector.GestureAdapter
 import com.pixeloffice.animation.SpriteSheet
 import com.pixeloffice.core.Config
 import com.pixeloffice.core.EventBus
+import com.pixeloffice.network.DiscoveryBroadcaster
 import com.pixeloffice.network.TmuxReceiver
 import com.pixeloffice.parsing.ActivityType
 import com.pixeloffice.parsing.DetectedActivity
@@ -59,6 +60,7 @@ class PixelOfficeGame : ApplicationAdapter() {
 
     // Network
     private lateinit var receiver: TmuxReceiver
+    private lateinit var discoveryBroadcaster: DiscoveryBroadcaster
 
     // Sprites and animation
     private lateinit var spriteSheet: SpriteSheet
@@ -145,13 +147,17 @@ class PixelOfficeGame : ApplicationAdapter() {
             onClose = { toggleSettings() }
         )
 
+        // Discovery broadcaster (for LAN auto-discovery)
+        discoveryBroadcaster = DiscoveryBroadcaster(tcpPort = config.network.port)
+
         // Demo mode
         demoMode = config.demo.enabled
         if (demoMode) {
             renderer.setDemoMode(true)
         } else {
-            // Start network receiver
+            // Start network receiver and discovery broadcaster
             receiver.start()
+            discoveryBroadcaster.start()
         }
 
         // Set up touch input for mobile
@@ -664,8 +670,9 @@ class PixelOfficeGame : ApplicationAdapter() {
     }
 
     override fun dispose() {
-        // Stop network receiver
+        // Stop network receiver and discovery broadcaster
         receiver.stop()
+        discoveryBroadcaster.stop()
 
         settingsOverlay.dispose()
         renderer.dispose()
