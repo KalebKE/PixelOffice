@@ -99,11 +99,10 @@ class Developer(
             }
         }
 
-        // Update thought bubble position if visible
+        // Update thought bubble position if visible (always east side to avoid overlap)
         if (thoughtBubble != null && showBubble) {
-            val isLeft = deskFacingDirection == "left"
-            thoughtBubble?.facingLeft = isLeft
-            thoughtBubble?.attachTo(x + if (isLeft) -8f else 8f, y - 26)
+            thoughtBubble?.facingLeft = false
+            thoughtBubble?.attachTo(x + 8f, y - 26)
             thoughtBubble?.update(dt)
         }
 

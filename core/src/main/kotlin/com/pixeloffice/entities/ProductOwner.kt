@@ -289,6 +289,7 @@ class ProductOwner(
         if (developer != null) {
             showThoughtBubble("question")  // PO asks questions
             developer.showAnnoyedBubble()
+            developer.handleEvent("interrupted")
         } else {
             showThoughtBubble("thinking")
         }
@@ -301,6 +302,8 @@ class ProductOwner(
         waitTimer += dt
         if (waitTimer >= patrolWaitDuration) {
             hideThoughtBubble()
+            val developer = findDeveloperAtCurrentDesk()
+            developer?.handleEvent("interrupt_ended")
             pickNextDesk()
         }
     }

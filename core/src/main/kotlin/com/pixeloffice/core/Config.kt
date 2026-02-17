@@ -232,6 +232,15 @@ data class DemoConfig(
 )
 
 @Serializable
+data class HeartbeatConfig(
+    val port: Int = 9997,
+    @SerialName("timeout_minutes")
+    val timeoutMinutes: Int = 5,
+    @SerialName("check_interval_seconds")
+    val checkIntervalSeconds: Int = 60
+)
+
+@Serializable
 data class Config(
     val network: NetworkConfig = NetworkConfig(),
     val display: DisplayConfig = DisplayConfig(),
@@ -247,7 +256,8 @@ data class Config(
     val productOwner: POConfig = POConfig(),
     val demo: DemoConfig = DemoConfig(),
     @SerialName("sky_traffic")
-    val skyTraffic: SkyTrafficConfig = SkyTrafficConfig()
+    val skyTraffic: SkyTrafficConfig = SkyTrafficConfig(),
+    val heartbeat: HeartbeatConfig = HeartbeatConfig()
 ) {
     companion object {
         private val json = Json {
