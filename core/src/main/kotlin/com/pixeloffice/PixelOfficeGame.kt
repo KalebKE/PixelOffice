@@ -132,7 +132,8 @@ class PixelOfficeGame : ApplicationAdapter() {
             skyTrafficInterval = config.skyTraffic.spawnInterval,
             skyTrafficEnabled = config.skyTraffic.enabled,
             skyTrafficSprite = config.skyTraffic.sprite,
-            skyTrafficFrameCount = config.skyTraffic.frameCount
+            skyTrafficFrameCount = config.skyTraffic.frameCount,
+            ufoConfig = config.skyTraffic.ufo
         )
         renderer.initialize()
         renderer.setWalkableZones(config.office.walkableZones)
@@ -552,6 +553,15 @@ class PixelOfficeGame : ApplicationAdapter() {
         if (Gdx.input.isKeyJustPressed(Input.Keys.F5)) {
             renderer.nightMode = !renderer.nightMode
             nightModeAutomatic = false
+            renderer.setSkyHourOverride(null)
+        }
+
+        // Spawn UFO (F6) — also force day so colors are visible
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F6)) {
+            renderer.nightMode = false
+            nightModeAutomatic = false
+            renderer.setSkyHourOverride(12f)
+            renderer.forceSpawnUfo()
         }
 
         // Camera controls

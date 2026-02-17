@@ -217,13 +217,25 @@ data class POConfig(
 )
 
 @Serializable
+data class UfoConfig(
+    val enabled: Boolean = true,
+    @SerialName("spawn_chance")
+    val spawnChance: Float = 0.3f,
+    @SerialName("hover_duration")
+    val hoverDuration: Float = 3f,
+    @SerialName("beam_duration")
+    val beamDuration: Float = 4f
+)
+
+@Serializable
 data class SkyTrafficConfig(
     val enabled: Boolean = true,
     @SerialName("spawn_interval")
     val spawnInterval: Float = 30f,
     val sprite: String = "sprites/32bit-PaperAirplane",
     @SerialName("frame_count")
-    val frameCount: Int = 4
+    val frameCount: Int = 4,
+    val ufo: UfoConfig = UfoConfig()
 )
 
 @Serializable

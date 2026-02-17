@@ -213,6 +213,12 @@
   },
   "sky_traffic": {
     "enabled": true,
-    "spawn_interval": 30.0
+    "spawn_interval": 30.0,
+    "ufo": {
+      "enabled": true,
+      "spawn_chance": 0.3,
+      "hover_duration": 3.0,
+      "beam_duration": 4.0
+    }
   }
 }

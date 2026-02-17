@@ -12,6 +12,7 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.pixeloffice.PixelOfficeGame
 import com.pixeloffice.animation.SpriteFrame
 import com.pixeloffice.animation.SpriteSheet
+import com.pixeloffice.core.UfoConfig
 import com.pixeloffice.core.WalkableZone
 import com.pixeloffice.world.*
 import java.util.Calendar
@@ -56,7 +57,8 @@ class Renderer(
     private val skyTrafficInterval: Float = 30f,
     private val skyTrafficEnabled: Boolean = true,
     private val skyTrafficSprite: String = "sprites/32bit-PaperAirplane",
-    private val skyTrafficFrameCount: Int = 4
+    private val skyTrafficFrameCount: Int = 4,
+    private val ufoConfig: UfoConfig = UfoConfig()
 ) {
     // libGDX rendering objects
     lateinit var batch: SpriteBatch
@@ -500,7 +502,7 @@ class Renderer(
         glowPixmap.dispose()
 
         // Initialize procedural sky
-        skyRenderer = SkyRenderer(width, height, skyTrafficInterval, skyTrafficEnabled, skyTrafficSprite, skyTrafficFrameCount)
+        skyRenderer = SkyRenderer(width, height, skyTrafficInterval, skyTrafficEnabled, skyTrafficSprite, skyTrafficFrameCount, ufoConfig)
 
         // Initialize lava lamp on SE corner table
         lavaLamp = LavaLamp(195f, 225f)
@@ -1741,6 +1743,12 @@ class Renderer(
     }
 
     fun isSkyNightTime(): Boolean = skyRenderer.isNightTime()
+
+    fun forceSpawnUfo() = skyRenderer.forceSpawnUfo()
+
+    fun setSkyHourOverride(hour: Float?) {
+        skyRenderer.overrideHourFraction = hour
+    }
 
     fun cycleLabels() {
         val modes = LabelMode.entries
