@@ -4,6 +4,7 @@ import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g2d.TextureRegion
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
+import com.pixeloffice.core.UfoConfig
 import java.util.Calendar
 import kotlin.math.sin
 import kotlin.random.Random
@@ -22,7 +23,8 @@ class SkyRenderer(
     skyTrafficInterval: Float = 30f,
     skyTrafficEnabled: Boolean = true,
     skyTrafficSprite: String = "sprites/32bit-PaperAirplane",
-    skyTrafficFrameCount: Int = 4
+    skyTrafficFrameCount: Int = 4,
+    ufoConfig: UfoConfig = UfoConfig()
 ) {
     // Sky strip height in pixels
     private val skyHeight = 38
@@ -64,8 +66,11 @@ class SkyRenderer(
 
     private val stars: List<Star>
 
+    // When set, overrides wall-clock time for sky colors/stars/nightness
+    var overrideHourFraction: Float? = null
+
     // Flying objects
-    private val skyTraffic = SkyTraffic(screenWidth, skyHeight, skyTrafficSprite, skyTrafficFrameCount).apply {
+    private val skyTraffic = SkyTraffic(screenWidth, skyHeight, skyTrafficSprite, skyTrafficFrameCount, ufoConfig).apply {
         spawnInterval = skyTrafficInterval
         enabled = skyTrafficEnabled
     }
@@ -114,7 +119,7 @@ class SkyRenderer(
 
         // Update hour fraction from wall clock
         val cal = Calendar.getInstance()
-        hourFraction = cal.get(Calendar.HOUR_OF_DAY) + cal.get(Calendar.MINUTE) / 60f
+        hourFraction = overrideHourFraction ?: (cal.get(Calendar.HOUR_OF_DAY) + cal.get(Calendar.MINUTE) / 60f)
 
         // Interpolate sky colors
         interpolateSkyColors()
@@ -263,6 +268,10 @@ class SkyRenderer(
      */
     fun drawFlyingObjects(batch: SpriteBatch) {
         skyTraffic.draw(batch, getNightness(), screenHeight)
+    }
+
+    fun forceSpawnUfo() {
+        skyTraffic.forceSpawnUfo()
     }
 
     /**
