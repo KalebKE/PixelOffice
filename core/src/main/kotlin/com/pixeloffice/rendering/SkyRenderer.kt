@@ -18,7 +18,7 @@ import kotlin.random.Random
  * - Twinkling stars at night (SpriteBatch 1×1 pixel)
  */
 class SkyRenderer(
-    private val screenWidth: Int,
+    private var screenWidth: Int,
     private val screenHeight: Int,
     skyTrafficInterval: Float = 30f,
     skyTrafficEnabled: Boolean = true,
@@ -183,7 +183,7 @@ class SkyRenderer(
      * Must be called between beginShapes() / endShapes() or manages its own.
      */
     fun drawGradient(shapeRenderer: ShapeRenderer) {
-        shapeRenderer.projectionMatrix.setToOrtho2D(0f, 0f, screenWidth.toFloat(), screenHeight.toFloat())
+        // Use the caller's projection matrix (supports camera-based rendering)
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
 
         val baseY = screenHeight - skyHeight // bottom of sky strip in screen coords (Y-up)
@@ -213,7 +213,7 @@ class SkyRenderer(
 
         val baseY = screenHeight - skyHeight
 
-        shapeRenderer.projectionMatrix.setToOrtho2D(0f, 0f, screenWidth.toFloat(), screenHeight.toFloat())
+        // Use the caller's projection matrix (supports camera-based rendering)
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
         shapeRenderer.color = cloudColor
 
@@ -311,6 +311,14 @@ class SkyRenderer(
         // Use ShapeRenderer's built-in circle with enough segments for pixel art
         val segments = (radius * 4).toInt().coerceIn(6, 16)
         sr.circle(cx, cy, radius, segments)
+    }
+
+    /**
+     * Update the sky rendering width (for multi-office grids).
+     * Clouds and stars generated at init may not cover the full width — they wrap naturally.
+     */
+    fun setRenderWidth(width: Int) {
+        screenWidth = width
     }
 
     fun dispose() {

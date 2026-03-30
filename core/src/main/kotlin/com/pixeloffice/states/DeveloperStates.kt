@@ -14,7 +14,10 @@ object DeveloperStateNames {
     const val WALKING_TO_DESK = "walking_to_desk"
     const val WRITING_CODE = "writing_code"
     const val RUNNING_COMMAND = "running_command"
+    const val BUILDING = "building"
     const val CELEBRATING = "celebrating"
+    const val MERGING = "merging"
+    const val CI_FAILED = "ci_failed"
     const val TESTS_FAILING = "tests_failing"
     const val BEING_INTERRUPTED = "being_interrupted"
 }
@@ -37,7 +40,9 @@ class IdleState : State<Developer>(DeveloperStateNames.IDLE) {
             "researching_started" -> DeveloperStateNames.RESEARCHING
             "code_writing_started" -> DeveloperStateNames.WRITING_CODE
             "command_started" -> DeveloperStateNames.RUNNING_COMMAND
+            "building_started" -> DeveloperStateNames.BUILDING
             "planning_started" -> DeveloperStateNames.WALKING_TO_WHITEBOARD
+            "merging" -> DeveloperStateNames.MERGING
             "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
             else -> null
         }
@@ -75,7 +80,9 @@ class ThinkingState(private val timeout: Float = 4.0f) : State<Developer>(Develo
             "researching_started" -> DeveloperStateNames.RESEARCHING
             "code_writing_started" -> DeveloperStateNames.WRITING_CODE
             "command_started" -> DeveloperStateNames.RUNNING_COMMAND
+            "building_started" -> DeveloperStateNames.BUILDING
             "planning_started" -> DeveloperStateNames.WALKING_TO_WHITEBOARD
+            "merging" -> DeveloperStateNames.MERGING
             "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
             else -> null
         }
@@ -243,10 +250,13 @@ class WritingCodeState : State<Developer>(DeveloperStateNames.WRITING_CODE) {
         return when (event) {
             "code_writing_ended" -> DeveloperStateNames.IDLE
             "tests_failed" -> DeveloperStateNames.TESTS_FAILING
+            "ci_failed" -> DeveloperStateNames.CI_FAILED
             "thinking_started" -> DeveloperStateNames.THINKING
             "researching_started" -> DeveloperStateNames.RESEARCHING
             "command_started" -> DeveloperStateNames.RUNNING_COMMAND
+            "building_started" -> DeveloperStateNames.BUILDING
             "planning_started" -> DeveloperStateNames.WALKING_TO_WHITEBOARD
+            "merging" -> DeveloperStateNames.MERGING
             "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
             else -> null
         }
@@ -274,7 +284,9 @@ class ResearchingState : State<Developer>(DeveloperStateNames.RESEARCHING) {
         return when (event) {
             "code_writing_started" -> DeveloperStateNames.WRITING_CODE
             "command_started" -> DeveloperStateNames.RUNNING_COMMAND
+            "building_started" -> DeveloperStateNames.BUILDING
             "planning_started" -> DeveloperStateNames.WALKING_TO_WHITEBOARD
+            "merging" -> DeveloperStateNames.MERGING
             "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
             else -> null
         }
@@ -298,10 +310,43 @@ class RunningCommandState : State<Developer>(DeveloperStateNames.RUNNING_COMMAND
     override fun onEvent(entity: Developer, event: String, data: Any?): String? {
         return when (event) {
             "command_succeeded" -> DeveloperStateNames.CELEBRATING
+            "merging" -> DeveloperStateNames.MERGING
             "tests_failed" -> DeveloperStateNames.TESTS_FAILING
+            "ci_failed" -> DeveloperStateNames.CI_FAILED
             "code_writing_started" -> DeveloperStateNames.WRITING_CODE
             "researching_started" -> DeveloperStateNames.RESEARCHING
             "command_ended" -> DeveloperStateNames.IDLE
+            "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
+            else -> null
+        }
+    }
+}
+
+/**
+ * Committed code, waiting for CI build. Shows gear bubble.
+ * Stays until build succeeds, fails, or another event arrives.
+ */
+class BuildingState : State<Developer>(DeveloperStateNames.BUILDING) {
+    override fun enter(entity: Developer, prevState: State<Developer>?) {
+        entity.setAnimation("idle")
+        entity.showBubbleOfType("gear")
+    }
+
+    override fun update(entity: Developer, dt: Float): String? = null
+
+    override fun exit(entity: Developer, nextState: State<Developer>?) {
+        entity.showThoughtBubble(false)
+    }
+
+    override fun onEvent(entity: Developer, event: String, data: Any?): String? {
+        return when (event) {
+            "command_succeeded" -> DeveloperStateNames.CELEBRATING
+            "merging" -> DeveloperStateNames.MERGING
+            "tests_failed" -> DeveloperStateNames.TESTS_FAILING
+            "ci_failed" -> DeveloperStateNames.CI_FAILED
+            "code_writing_started" -> DeveloperStateNames.WRITING_CODE
+            "researching_started" -> DeveloperStateNames.RESEARCHING
+            "thinking_started" -> DeveloperStateNames.THINKING
             "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
             else -> null
         }
@@ -339,6 +384,69 @@ class CelebratingState(private val duration: Float = 1.5f) : State<Developer>(De
             "researching_started" -> DeveloperStateNames.RESEARCHING
             "code_writing_started" -> DeveloperStateNames.WRITING_CODE
             "command_started" -> DeveloperStateNames.RUNNING_COMMAND
+            "building_started" -> DeveloperStateNames.BUILDING
+            else -> null
+        }
+    }
+}
+
+/**
+ * PR is mergeable — thumbs up bubble. Stays until state changes.
+ */
+class MergingState : State<Developer>(DeveloperStateNames.MERGING) {
+    override fun enter(entity: Developer, prevState: State<Developer>?) {
+        entity.setAnimation("idle")
+        entity.showBubbleOfType("thumbsup")
+    }
+
+    override fun update(entity: Developer, dt: Float): String? = null
+
+    override fun exit(entity: Developer, nextState: State<Developer>?) {
+        entity.showThoughtBubble(false)
+    }
+
+    override fun onEvent(entity: Developer, event: String, data: Any?): String? {
+        return when (event) {
+            "thinking_started" -> DeveloperStateNames.THINKING
+            "researching_started" -> DeveloperStateNames.RESEARCHING
+            "code_writing_started" -> DeveloperStateNames.WRITING_CODE
+            "command_started" -> DeveloperStateNames.RUNNING_COMMAND
+            "building_started" -> DeveloperStateNames.BUILDING
+            "command_succeeded" -> DeveloperStateNames.CELEBRATING
+            "tests_failed" -> DeveloperStateNames.TESTS_FAILING
+            "ci_failed" -> DeveloperStateNames.CI_FAILED
+            "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
+            else -> null
+        }
+    }
+}
+
+/**
+ * CI failed — developer sits at desk with ghost thought bubble.
+ * Persistent state until a new event arrives.
+ */
+class CiFailedState : State<Developer>(DeveloperStateNames.CI_FAILED) {
+    override fun enter(entity: Developer, prevState: State<Developer>?) {
+        entity.setAnimation("idle")
+        entity.showBubbleOfType("ghost")
+    }
+
+    override fun update(entity: Developer, dt: Float): String? = null
+
+    override fun exit(entity: Developer, nextState: State<Developer>?) {
+        entity.showThoughtBubble(false)
+    }
+
+    override fun onEvent(entity: Developer, event: String, data: Any?): String? {
+        return when (event) {
+            "thinking_started" -> DeveloperStateNames.THINKING
+            "researching_started" -> DeveloperStateNames.RESEARCHING
+            "code_writing_started" -> DeveloperStateNames.WRITING_CODE
+            "command_started" -> DeveloperStateNames.RUNNING_COMMAND
+            "building_started" -> DeveloperStateNames.BUILDING
+            "merging" -> DeveloperStateNames.MERGING
+            "command_succeeded" -> DeveloperStateNames.CELEBRATING
+            "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
             else -> null
         }
     }
@@ -428,7 +536,10 @@ class DeveloperStateMachine(
         addState(WalkingToDeskState())
         addState(WritingCodeState())
         addState(RunningCommandState())
+        addState(BuildingState())
         addState(CelebratingState(celebrateDuration))
+        addState(MergingState())
+        addState(CiFailedState())
         addState(TestsFailingState(despairDuration))
         addState(BeingInterruptedState(interruptDuration))
     }

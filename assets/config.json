@@ -211,6 +211,11 @@
     "enabled": false,
     "sample_events_file": "tests/fixtures/sample_events.json"
   },
+  "ao": {
+    "enabled": true,
+    "url": "http://localhost:3003",
+    "grid_columns": 2
+  },
   "sky_traffic": {
     "enabled": true,
     "spawn_interval": 30.0,

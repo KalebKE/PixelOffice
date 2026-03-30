@@ -99,10 +99,14 @@ class Developer(
             }
         }
 
-        // Update thought bubble position if visible (always east side to avoid overlap)
+        // Update thought bubble position if visible, relative to chair when sitting
+        // Tail points toward desk center: west (face right) → tail right, east (face left) → tail left
         if (thoughtBubble != null && showBubble) {
-            thoughtBubble?.facingLeft = false
-            thoughtBubble?.attachTo(x + 8f, y - 26)
+            val isWestSide = deskFacingDirection == "right"
+            thoughtBubble?.facingLeft = isWestSide
+            val renderX = chairPosition?.first ?: x
+            val bubbleX = if (isWestSide) renderX - 16f else renderX + 16f
+            thoughtBubble?.attachTo(bubbleX, y - 26)
             thoughtBubble?.update(dt)
         }
 

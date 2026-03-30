@@ -194,6 +194,11 @@ class GameCamera(
         return max(0f, min(maxY, y))
     }
 
+    fun setWorldBounds(width: Float, height: Float) {
+        worldWidth = width.toInt()
+        worldHeight = height.toInt()
+    }
+
     fun reset() {
         posX = 0f
         posY = 0f

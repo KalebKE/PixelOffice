@@ -253,6 +253,14 @@ data class HeartbeatConfig(
 )
 
 @Serializable
+data class AoConfig(
+    val enabled: Boolean = false,
+    val url: String = "http://localhost:3001",
+    @SerialName("grid_columns")
+    val gridColumns: Int = 2
+)
+
+@Serializable
 data class Config(
     val network: NetworkConfig = NetworkConfig(),
     val display: DisplayConfig = DisplayConfig(),
@@ -269,7 +277,8 @@ data class Config(
     val demo: DemoConfig = DemoConfig(),
     @SerialName("sky_traffic")
     val skyTraffic: SkyTrafficConfig = SkyTrafficConfig(),
-    val heartbeat: HeartbeatConfig = HeartbeatConfig()
+    val heartbeat: HeartbeatConfig = HeartbeatConfig(),
+    val ao: AoConfig = AoConfig()
 ) {
     companion object {
         private val json = Json {
