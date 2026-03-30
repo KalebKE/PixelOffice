@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g2d.TextureRegion
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
+import com.badlogic.gdx.math.Matrix4
 import com.pixeloffice.PixelOfficeGame
 import com.pixeloffice.animation.SpriteFrame
 import com.pixeloffice.animation.SpriteSheet
@@ -17,6 +18,7 @@ import com.pixeloffice.core.WalkableZone
 import com.pixeloffice.world.*
 import java.util.Calendar
 import kotlin.math.max
+import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -75,6 +77,13 @@ class Renderer(
     // Camera
     private var camera = GameCamera(width, height)
 
+    // Camera projection matrix (set per-frame for grid mode, null for single-office)
+    private var cameraMatrix: Matrix4? = null
+
+    fun setCameraMatrix(combined: Matrix4?) {
+        cameraMatrix = combined
+    }
+
     // Animation time tracking
     private var time = 0f
 
@@ -82,9 +91,10 @@ class Renderer(
     var showDebug = false
     var nightMode = false
 
-    private enum class LabelMode { OFF, CHARACTERS, DESKS, ROUTES, FURNITURE }
+    private enum class LabelMode { OFF, CHARACTERS, DESKS, ROUTES, FURNITURE, POSITIONS }
     private var labelMode = LabelMode.OFF
     private var connectedCount = 0
+    private var developerCount = 0
     private var isDemoMode = false
     private var fps = 0
     private var walkableZones: List<WalkableZone> = emptyList()
@@ -545,8 +555,12 @@ class Renderer(
     }
 
     fun beginBatch() {
-        // Use simple ortho projection - camera scrolling handled by coordinate offsets
-        batch.projectionMatrix.setToOrtho2D(0f, 0f, width.toFloat(), height.toFloat())
+        val cam = cameraMatrix
+        if (cam != null) {
+            batch.projectionMatrix = cam
+        } else {
+            batch.projectionMatrix.setToOrtho2D(0f, 0f, width.toFloat(), height.toFloat())
+        }
         batch.begin()
     }
 
@@ -555,8 +569,12 @@ class Renderer(
     }
 
     fun beginShapes(type: ShapeRenderer.ShapeType = ShapeRenderer.ShapeType.Filled) {
-        // Use simple ortho projection - camera scrolling handled by coordinate offsets
-        shapeRenderer.projectionMatrix.setToOrtho2D(0f, 0f, width.toFloat(), height.toFloat())
+        val cam = cameraMatrix
+        if (cam != null) {
+            shapeRenderer.projectionMatrix = cam
+        } else {
+            shapeRenderer.projectionMatrix.setToOrtho2D(0f, 0f, width.toFloat(), height.toFloat())
+        }
         shapeRenderer.begin(type)
     }
 
@@ -598,11 +616,22 @@ class Renderer(
     }
 
     /**
-     * Draw the background: procedural sky, gray bar, wall tiles.
+     * Draw the sky layer (gradient, clouds, flying objects, stars).
+     * Called once before the office loop. Sky spans the given width.
+     * Manages its own batch/shape state — safe to call without an open batch.
+     *
+     * @param skyWidth Width in pixels for the sky to span. Defaults to single office width.
      */
-    fun drawBackground() {
-        // End the batch opened by drawScene so we can use ShapeRenderer
-        endBatch()
+    fun drawSky(skyWidth: Int = width) {
+        skyRenderer.setRenderWidth(skyWidth)
+
+        // Set projection for SkyRenderer's shape calls (it manages its own begin/end)
+        val cam = cameraMatrix
+        if (cam != null) {
+            shapeRenderer.projectionMatrix = cam
+        } else {
+            shapeRenderer.projectionMatrix.setToOrtho2D(0f, 0f, width.toFloat(), height.toFloat())
+        }
 
         // Procedural sky gradient (ShapeRenderer)
         skyRenderer.drawGradient(shapeRenderer)
@@ -610,7 +639,7 @@ class Renderer(
         // Procedural clouds (ShapeRenderer)
         skyRenderer.drawClouds(shapeRenderer)
 
-        // Flying objects (SpriteBatch) — behind stars, in front of clouds
+        // Flying objects (SpriteBatch)
         beginBatch()
         skyRenderer.drawFlyingObjects(batch)
         endBatch()
@@ -620,6 +649,15 @@ class Renderer(
         skyRenderer.drawStars(batch, ledPixelRegion)
         endBatch()
 
+        // Restore default width
+        skyRenderer.setRenderWidth(width)
+    }
+
+    /**
+     * Draw the office wall and fixtures (gray bar, wall tiles, windows, doors, clock, sign).
+     * Called per-office inside drawOfficeScene().
+     */
+    private fun drawOfficeWall() {
         // Draw gray wall strip below clouds (6px high)
         // In Y-down: starts at y=38. In Y-up: starts at height-38-6
         val grayBarY = flipY(38f, 6)
@@ -644,6 +682,14 @@ class Renderer(
         drawCompanySign()
 
         drawFurniture("window", 250f, 70f)
+    }
+
+    /**
+     * Draw the full background: sky + wall. Used in single-office mode.
+     */
+    fun drawBackground() {
+        drawSky()
+        drawOfficeWall()
     }
 
     /**
@@ -873,8 +919,8 @@ class Renderer(
     }
 
     /**
-     * Draw LED light bar above the company sign showing connection count.
-     * 8 LED slots: lit green for connected panes, yellow in demo mode, dark gray for unlit.
+     * Draw LED light bar above the company sign showing developer count.
+     * 8 LED slots: lit green per developer, yellow in demo mode, dark gray for unlit.
      */
     private fun drawLedBar() {
         val ledCount = 8
@@ -888,13 +934,13 @@ class Renderer(
 
         val prevColor = Color(batch.color)
         val unlitColor = Color(0.15f, 0.15f, 0.15f, 1f)
+        val litCount = if (isDemoMode) ledCount else developerCount.coerceAtMost(ledCount)
 
         for (i in 0 until ledCount) {
             val x = barX + i * (ledW + gap)
-            val lit = if (isDemoMode) true else i < connectedCount
             batch.color = when {
-                isDemoMode && lit -> Colors.YELLOW
-                lit -> ledGreen
+                isDemoMode && i < litCount -> Colors.YELLOW
+                i < litCount -> ledGreen
                 else -> unlitColor
             }
             batch.draw(ledPixelRegion, x, screenY, ledW, ledH)
@@ -909,7 +955,7 @@ class Renderer(
         val screenY = flipY(worldY, frame.height)
         batch.draw(frame.region, worldX, screenY)
         if (dogBubbleTimer > 0) {
-            drawThoughtBubble(worldX + 8f, worldY - 10f, 0, "bone", false)
+            drawThoughtBubble(worldX + 8f, worldY - 18f, 0, "bone", false)
         }
     }
 
@@ -919,7 +965,7 @@ class Renderer(
         val screenY = flipY(worldY, frame.height)
         batch.draw(frame.region, worldX, screenY)
         if (catBubbleTimer > 0) {
-            drawThoughtBubble(worldX + 8f, worldY - 10f, 0, "fish", false)
+            drawThoughtBubble(worldX + 8f, worldY - 18f, 0, "fish", false)
         }
     }
 
@@ -1095,6 +1141,9 @@ class Renderer(
             "coding" -> drawCodingBubble(worldX, worldY, frameIndex, facingLeft)
             "bone" -> drawBoneBubble(worldX, worldY, frameIndex, facingLeft)
             "fish" -> drawFishBubble(worldX, worldY, frameIndex, facingLeft)
+            "thumbsup", "success" -> drawThumbsUpBubble(worldX, worldY, frameIndex, facingLeft)
+            "gear" -> drawGearBubble(worldX, worldY, frameIndex, facingLeft)
+            "ghost" -> drawGhostBubble(worldX, worldY, frameIndex, facingLeft)
             else -> drawThinkingBubble(worldX, worldY, frameIndex, facingLeft)
         }
 
@@ -1462,6 +1511,158 @@ class Renderer(
         beginShapes()
         shapeRenderer.color = bubbleColor(Colors.BLACK)
         shapeRenderer.circle(worldX + 6, screenY + 12, 0.5f)
+        endShapes()
+
+        // Small connecting bubbles
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
+        val tailX1 = if (facingLeft) worldX + 18 else worldX - 2
+        val tailX2 = if (facingLeft) worldX + 20 else worldX - 4
+        shapeRenderer.circle(tailX1, screenY + 6, 2f)
+        shapeRenderer.circle(tailX2, screenY + 2, 1f)
+        endShapes()
+
+        beginBatch()
+    }
+
+    /**
+     * Draw gear thought bubble (building/CI).
+     */
+    private fun drawGearBubble(worldX: Float, worldY: Float, frameIndex: Int, facingLeft: Boolean = false) {
+        endBatch()
+
+        val screenY = flipY(worldY, 20)
+        val angle = time * 2f  // slow rotation
+
+        beginShapes()
+
+        // Main bubble
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
+        shapeRenderer.circle(worldX + 8, screenY + 12, 8f)
+        endShapes()
+
+        beginShapes(ShapeRenderer.ShapeType.Line)
+        shapeRenderer.color = bubbleColor(Colors.DARK_GRAY)
+        shapeRenderer.circle(worldX + 8, screenY + 12, 8f)
+        endShapes()
+
+        // Draw gear inside (gray)
+        val cx = worldX + 8
+        val cy = screenY + 12
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Color(0.45f, 0.45f, 0.5f, 1f))
+        // Gear body
+        shapeRenderer.circle(cx, cy, 4f)
+        // Gear teeth (6 teeth rotating)
+        for (i in 0 until 6) {
+            val a = angle + i * (Math.PI.toFloat() / 3f)
+            val tx = cx + cos(a) * 5f
+            val ty = cy + sin(a) * 5f
+            shapeRenderer.rect(tx - 1f, ty - 1f, 2f, 2f)
+        }
+        endShapes()
+
+        // Gear center hole
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
+        shapeRenderer.circle(cx, cy, 1.5f)
+        endShapes()
+
+        // Small connecting bubbles
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
+        val tailX1 = if (facingLeft) worldX + 18 else worldX - 2
+        val tailX2 = if (facingLeft) worldX + 20 else worldX - 4
+        shapeRenderer.circle(tailX1, screenY + 6, 2f)
+        shapeRenderer.circle(tailX2, screenY + 2, 1f)
+        endShapes()
+
+        beginBatch()
+    }
+
+    /**
+     * Draw thumbs-up thought bubble.
+     */
+    private fun drawThumbsUpBubble(worldX: Float, worldY: Float, frameIndex: Int, facingLeft: Boolean = false) {
+        endBatch()
+
+        val screenY = flipY(worldY, 20)
+        val pulse = (sin(time * 3) * 0.5f).toFloat()
+
+        beginShapes()
+
+        // Main bubble
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
+        shapeRenderer.circle(worldX + 8, screenY + 12 + pulse, 8f)
+        endShapes()
+
+        beginShapes(ShapeRenderer.ShapeType.Line)
+        shapeRenderer.color = bubbleColor(Colors.DARK_GRAY)
+        shapeRenderer.circle(worldX + 8, screenY + 12 + pulse, 8f)
+        endShapes()
+
+        // Draw thumbs-up inside (yellow/gold)
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Color(0.95f, 0.75f, 0.1f, 1f))
+        // Thumb (vertical bar)
+        shapeRenderer.rect(worldX + 7, screenY + 12 + pulse, 2f, 5f)
+        // Fist (horizontal bar)
+        shapeRenderer.rect(worldX + 5, screenY + 10 + pulse, 6f, 3f)
+        endShapes()
+
+        // Small connecting bubbles
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
+        val tailX1 = if (facingLeft) worldX + 18 else worldX - 2
+        val tailX2 = if (facingLeft) worldX + 20 else worldX - 4
+        shapeRenderer.circle(tailX1, screenY + 6, 2f)
+        shapeRenderer.circle(tailX2, screenY + 2, 1f)
+        endShapes()
+
+        beginBatch()
+    }
+
+    /**
+     * Draw ghost thought bubble (CI failed).
+     */
+    private fun drawGhostBubble(worldX: Float, worldY: Float, frameIndex: Int, facingLeft: Boolean = false) {
+        endBatch()
+
+        val screenY = flipY(worldY, 20)
+
+        beginShapes()
+
+        // Main bubble
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
+        shapeRenderer.circle(worldX + 8, screenY + 12, 8f)
+        endShapes()
+
+        beginShapes(ShapeRenderer.ShapeType.Line)
+        shapeRenderer.color = bubbleColor(Colors.DARK_GRAY)
+        shapeRenderer.circle(worldX + 8, screenY + 12, 8f)
+        endShapes()
+
+        // Mini ghost body (dark)
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Color(0.2f, 0.2f, 0.25f, 1f))
+        shapeRenderer.circle(worldX + 8, screenY + 14, 3.5f)
+        endShapes()
+
+        // Wavy ghost bottom
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Color(0.2f, 0.2f, 0.25f, 1f))
+        val waveTime = (time * 6).toInt()
+        for (i in 0 until 3) {
+            val offset = (waveTime + i) % 2
+            shapeRenderer.circle(worldX + 5.5f + i * 2.5f, screenY + 10 - offset, 1f)
+        }
+        endShapes()
+
+        // Ghost eyes (white)
+        beginShapes()
+        shapeRenderer.color = bubbleColor(Colors.WHITE)
+        shapeRenderer.circle(worldX + 7, screenY + 15, 0.8f)
+        shapeRenderer.circle(worldX + 10, screenY + 15, 0.8f)
         endShapes()
 
         // Small connecting bubbles
@@ -2201,6 +2402,73 @@ class Renderer(
      * but on top of other furniture.
      */
     fun drawScene(renderData: RenderData) {
+        developerCount = renderData.developers.size
+        drawSky()
+        drawOfficeScene(renderData)
+
+        // Draw debug overlays
+        drawWalkableZones()
+        drawLineNetwork()
+        drawDebugLabels()
+
+        // Draw UI overlay
+        drawUIOverlay()
+    }
+
+    /**
+     * Draw a scene with an offset applied to all coordinates.
+     * Used by OfficeGrid to render multiple offices side by side in a grid.
+     *
+     * Applies a camera translation per office so each office's local (0,0) coordinates
+     * render at the correct grid position. The projection matrix is temporarily widened
+     * to cover the full grid, and a translation is applied to the batch and shape
+     * renderer transform matrices.
+     *
+     * @param renderData The render data from a single office.
+     * @param offsetX Horizontal offset in world coordinates (Y-down grid space).
+     * @param offsetY Vertical offset in world coordinates (Y-down grid space).
+     * @param projectLabel Optional project ID label to draw above the office.
+     */
+    fun drawScene(renderData: RenderData, offsetX: Float, offsetY: Float, projectLabel: String?) {
+        // Apply translation: offsetX shifts right; offsetY is Y-down but screen is Y-up,
+        // so we negate it. The projection is set per-beginBatch call, so we inject the
+        // offset via the transform matrix which persists across begin/end cycles.
+        val savedBatchTransform = batch.transformMatrix.cpy()
+        val savedShapeTransform = shapeRenderer.transformMatrix.cpy()
+
+        val translation = Matrix4().idt().translate(offsetX, -offsetY, 0f)
+        batch.transformMatrix = translation
+        shapeRenderer.transformMatrix = translation
+
+        val savedName = companyName
+        val savedDevCount = developerCount
+        if (projectLabel != null) companyName = projectLabel
+        developerCount = renderData.developers.size
+        drawOfficeScene(renderData)
+        companyName = savedName
+        developerCount = savedDevCount
+
+        // Restore transform matrices
+        batch.transformMatrix = savedBatchTransform
+        shapeRenderer.transformMatrix = savedShapeTransform
+    }
+
+    /**
+     * Draw debug and UI overlays. Call once per frame after all offices are rendered.
+     * Separated from drawScene so it is not repeated per-office in grid mode.
+     */
+    fun drawOverlays() {
+        drawWalkableZones()
+        drawLineNetwork()
+        drawDebugLabels()
+        drawUIOverlay()
+    }
+
+    /**
+     * Core per-office rendering: background, furniture, characters, effects, night overlay.
+     * Does NOT include debug overlays or UI — those are drawn once per frame by the caller.
+     */
+    private fun drawOfficeScene(renderData: RenderData) {
         furnitureLabels.clear()
 
         // Store character data for debug overlay / labels
@@ -2214,13 +2482,10 @@ class Renderer(
         // Extract desk columns for data-driven rendering
         deskColumns = renderData.deskColumns
 
-        // Start batch for background and tiles
-        beginBatch()
+        // Draw wall (sky is drawn separately before the office loop)
+        drawOfficeWall()
 
-        // Draw background (sky + clouds + wall)
-        drawBackground()
-
-        // Draw floor tiles
+        // Draw floor tiles (batch is open from drawOfficeWall)
         drawFloor()
 
         // Draw top area furniture (above all desk rows)
@@ -2297,14 +2562,6 @@ class Renderer(
         }
         deferredEffects.clear()
         endBatch()
-
-        // Draw debug overlays
-        drawWalkableZones()
-        drawLineNetwork()
-        drawDebugLabels()
-
-        // Draw UI overlay
-        drawUIOverlay()
     }
 
     // ==================== Debug Labels ====================
@@ -2426,6 +2683,57 @@ class Renderer(
             LabelMode.FURNITURE -> {
                 for ((name, wx, wy) in furnitureLabels) {
                     drawLabel(name, wx, wy, Colors.PEACH)
+                }
+            }
+            LabelMode.POSITIONS -> {
+                val allChars = mutableListOf<CharacterRenderInfo>()
+                allChars.addAll(debugDevelopers.filter { it.visible })
+                debugPM?.let { if (it.visible) allChars.add(it) }
+                debugPO?.let { if (it.visible) allChars.add(it) }
+
+                endBatch()
+
+                for (char in allChars) {
+                    val charScreenY = flipY(char.y, 0)
+
+                    // Character position crosshair (green)
+                    beginShapes(ShapeRenderer.ShapeType.Line)
+                    shapeRenderer.color = Colors.GREEN
+                    shapeRenderer.line(char.x - 4, charScreenY, char.x + 20, charScreenY)
+                    shapeRenderer.line(char.x + 8, charScreenY - 4, char.x + 8, charScreenY + 4)
+                    endShapes()
+
+                    // Bubble positions and connecting lines
+                    for (child in char.children) {
+                        if (child is EffectRenderInfo.Bubble) {
+                            val b = child.info
+                            val bubScreenY = flipY(b.y, 0)
+
+                            // Bubble position crosshair (yellow)
+                            beginShapes(ShapeRenderer.ShapeType.Line)
+                            shapeRenderer.color = Colors.YELLOW
+                            shapeRenderer.line(b.x - 4, bubScreenY, b.x + 4, bubScreenY)
+                            shapeRenderer.line(b.x, bubScreenY - 4, b.x, bubScreenY + 4)
+                            endShapes()
+
+                            // Connecting line (red)
+                            beginShapes(ShapeRenderer.ShapeType.Line)
+                            shapeRenderer.color = Colors.RED
+                            shapeRenderer.line(char.x + 8, charScreenY, b.x, bubScreenY)
+                            endShapes()
+                        }
+                    }
+                }
+
+                beginBatch()
+                for (char in allChars) {
+                    drawLabel("${char.entityId} (${char.x.toInt()},${char.y.toInt()})", char.x, char.y - 6f, Colors.GREEN)
+                    for (child in char.children) {
+                        if (child is EffectRenderInfo.Bubble) {
+                            val b = child.info
+                            drawLabel("bub (${b.x.toInt()},${b.y.toInt()})", b.x, b.y - 6f, Colors.YELLOW)
+                        }
+                    }
                 }
             }
             LabelMode.OFF -> { /* unreachable */ }

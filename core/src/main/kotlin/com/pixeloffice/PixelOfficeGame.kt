@@ -6,18 +6,23 @@ import com.badlogic.gdx.Input
 import com.badlogic.gdx.InputMultiplexer
 import com.badlogic.gdx.input.GestureDetector
 import com.badlogic.gdx.input.GestureDetector.GestureAdapter
+import com.badlogic.gdx.math.Matrix4
 import com.pixeloffice.animation.SpriteSheet
 import com.pixeloffice.core.Config
 import com.pixeloffice.core.EventBus
+import com.pixeloffice.network.AoClient
 import com.pixeloffice.network.DiscoveryBroadcaster
 import com.pixeloffice.network.HeartbeatReceiver
 import com.pixeloffice.network.TmuxReceiver
+import com.pixeloffice.world.OfficeGrid
 import com.pixeloffice.parsing.ActivityType
 import com.pixeloffice.parsing.DetectedActivity
 import com.pixeloffice.parsing.Patterns
 import com.pixeloffice.parsing.StreamParser
+import com.pixeloffice.rendering.ConveyorRenderer
 import com.pixeloffice.rendering.GameCamera
 import com.pixeloffice.rendering.Renderer
+import com.pixeloffice.world.ConveyorPipeline
 import com.pixeloffice.ui.SettingsConfig
 import com.pixeloffice.ui.SettingsOverlay
 import com.pixeloffice.world.Office
@@ -76,6 +81,8 @@ class PixelOfficeGame : ApplicationAdapter() {
 
     // Rendering
     private lateinit var renderer: Renderer
+    private lateinit var conveyorRenderer: ConveyorRenderer
+    private val conveyorPipelines = mutableMapOf<String, ConveyorPipeline>()
     private lateinit var camera: GameCamera
 
     // Timing
@@ -92,6 +99,10 @@ class PixelOfficeGame : ApplicationAdapter() {
     private lateinit var settingsOverlay: SettingsOverlay
     private var settingsOpen = false
     private var settingsConfig = SettingsConfig.fromDefaults()
+
+    // AO integration (optional, config-driven)
+    private var aoClient: AoClient? = null
+    private var officeGrid: OfficeGrid? = null
 
     // Night mode
     private var nightModeAutomatic = true
@@ -136,6 +147,8 @@ class PixelOfficeGame : ApplicationAdapter() {
             ufoConfig = config.skyTraffic.ufo
         )
         renderer.initialize()
+        conveyorRenderer = ConveyorRenderer(config.display.width, 80)
+        conveyorRenderer.initialize()
         renderer.setWalkableZones(config.office.walkableZones)
         renderer.setLineNetwork(office.getLineNetwork().getAllLines())
 
@@ -167,6 +180,14 @@ class PixelOfficeGame : ApplicationAdapter() {
                 }
             }
         )
+
+        // Agent Orchestrator integration (if configured)
+        if (config.ao.enabled) {
+            aoClient = AoClient(config.ao.url).also { it.start() }
+            officeGrid = OfficeGrid(config, columns = config.ao.gridColumns)
+            Gdx.app.log("PixelOffice", "AO integration enabled, listening at: ${config.ao.url}")
+            // Camera bounds will be updated dynamically when offices are created
+        }
 
         // Demo mode
         demoMode = config.demo.enabled
@@ -441,6 +462,23 @@ class PixelOfficeGame : ApplicationAdapter() {
 
         // Process network data (if not demo mode)
         if (!demoMode) {
+            // AO mode: drain SSE snapshots and sync offices
+            val aoSnapshots = aoClient?.drainSnapshots()
+            if (aoSnapshots != null) {
+                val prevOfficeCount = officeGrid?.getAllOffices()?.size ?: 0
+                officeGrid?.syncWithSnapshots(aoSnapshots)
+                // Only resize window when the number of offices changes
+                officeGrid?.let { grid ->
+                    val newOfficeCount = grid.getAllOffices().size
+                    if (newOfficeCount != prevOfficeCount) {
+                        val newWidth = grid.worldWidth.toInt().coerceAtLeast(config.display.width)
+                        val newHeight = grid.worldHeight.toInt().coerceAtLeast(config.display.height)
+                        Gdx.graphics.setWindowedMode(newWidth, newHeight)
+                    }
+                    camera.setWorldBounds(grid.worldWidth, grid.worldHeight)
+                }
+            }
+
             val drained = receiver.drainData()
             for ((connectionId, data) in drained) {
                 val parser = streamParsers[connectionId] ?: continue
@@ -497,6 +535,7 @@ class PixelOfficeGame : ApplicationAdapter() {
         camera.update(dt)
         renderer.update(dt)
         office.update(dt)
+        officeGrid?.update(dt)
 
         // Night mode auto-detection (synced with procedural sky)
         if (nightModeAutomatic) {
@@ -506,9 +545,57 @@ class PixelOfficeGame : ApplicationAdapter() {
         // Clear and draw
         renderer.clear()
 
-        // Get render data from office
-        val renderData = office.getRenderData()
-        renderer.drawScene(renderData)
+        // Render scene
+        val grid = officeGrid
+        if (grid != null && config.ao.enabled) {
+            // Multi-office grid rendering: draw each office at its grid offset
+            val entries = grid.getOfficeRenderData()
+            if (entries.isNotEmpty()) {
+                // Projection: office at top, factory strip at bottom
+                // Y-up: bottom = -factoryHeight, top = officeHeight
+                val factoryHeight = 40f
+                val gridMatrix = Matrix4().setToOrtho2D(
+                    0f, -factoryHeight,
+                    grid.worldWidth,
+                    grid.worldHeight
+                )
+                renderer.setCameraMatrix(gridMatrix)
+                // Draw sky once spanning all offices
+                renderer.drawSky(grid.worldWidth.toInt())
+                for (entry in entries) {
+                    renderer.drawScene(entry.renderData, entry.offsetX, entry.offsetY, entry.projectId)
+                }
+
+                // Render 3D conveyor factories below each office
+                val windowWidth = Gdx.graphics.width
+                val windowHeight = Gdx.graphics.height
+                val officePixelWidth = (config.display.width.toFloat() / grid.worldWidth * windowWidth).toInt()
+                for ((index, entry) in entries.withIndex()) {
+                    val pipeline = conveyorPipelines.getOrPut(entry.projectId) { ConveyorPipeline() }
+                    pipeline.update(Gdx.graphics.deltaTime)
+                    val factoryScreenX = (entry.offsetX / grid.worldWidth * windowWidth).toInt()
+                    val factoryScreenY = 0 // bottom of window
+                    val factoryScreenHeight = (factoryHeight.toFloat() / grid.worldHeight.coerceAtLeast(config.display.height.toFloat()) * windowHeight).toInt()
+                    // Restore full viewport after 3D render
+                    conveyorRenderer.render(pipeline, factoryScreenX, factoryScreenY, officePixelWidth, factoryScreenHeight)
+                }
+                // Restore full viewport for overlays
+                Gdx.gl.glViewport(0, 0, windowWidth, windowHeight)
+
+                // Clear camera for overlays (render in screen space)
+                renderer.setCameraMatrix(null)
+                // Draw debug/UI overlays once after all offices
+                renderer.drawOverlays()
+            } else {
+                // No AO offices yet, fall back to local office
+                val renderData = office.getRenderData()
+                renderer.drawScene(renderData)
+            }
+        } else {
+            // Single office mode (original)
+            val renderData = office.getRenderData()
+            renderer.drawScene(renderData)
+        }
 
         // Draw settings overlay on top
         if (settingsOpen) {
@@ -739,6 +826,9 @@ class PixelOfficeGame : ApplicationAdapter() {
     }
 
     override fun dispose() {
+        // Stop AO client
+        aoClient?.stop()
+
         // Stop network receiver, discovery broadcaster, and heartbeat receiver
         receiver.stop()
         discoveryBroadcaster.stop()
@@ -746,6 +836,7 @@ class PixelOfficeGame : ApplicationAdapter() {
 
         settingsOverlay.dispose()
         renderer.dispose()
+        conveyorRenderer.dispose()
         eventBus.clear()
         Gdx.app.log("PixelOffice", "Game disposed")
     }

@@ -135,9 +135,13 @@ class ProjectManager(
             }
         }
 
-        // Update thought bubble position if visible
+        // Update thought bubble position if visible, relative to chair when sitting
         if (thoughtBubble != null && showBubble) {
-            thoughtBubble?.attachTo(x + 8, y - 16)
+            val isWestSide = deskFacingDirection == "right"
+            thoughtBubble?.facingLeft = isWestSide
+            val renderX = chairPosition?.first ?: x
+            val bubbleX = if (isWestSide) renderX - 16f else renderX + 16f
+            thoughtBubble?.attachTo(bubbleX, y - 16)
             thoughtBubble?.update(dt)
         }
     }
