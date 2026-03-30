@@ -147,7 +147,7 @@ class PixelOfficeGame : ApplicationAdapter() {
             ufoConfig = config.skyTraffic.ufo
         )
         renderer.initialize()
-        conveyorRenderer = ConveyorRenderer(config.display.width, 80)
+        conveyorRenderer = ConveyorRenderer(config.display.width, 140)
         conveyorRenderer.initialize()
         renderer.setWalkableZones(config.office.walkableZones)
         renderer.setLineNetwork(office.getLineNetwork().getAllLines())
@@ -553,7 +553,7 @@ class PixelOfficeGame : ApplicationAdapter() {
             if (entries.isNotEmpty()) {
                 // Projection: office at top, factory strip at bottom
                 // Y-up: bottom = -factoryHeight, top = officeHeight
-                val factoryHeight = 40f
+                val factoryHeight = 140f
                 val gridMatrix = Matrix4().setToOrtho2D(
                     0f, -factoryHeight,
                     grid.worldWidth,
@@ -577,8 +577,10 @@ class PixelOfficeGame : ApplicationAdapter() {
                     val factoryScreenY = 0 // bottom of window
                     val factoryScreenHeight = (factoryHeight.toFloat() / grid.worldHeight.coerceAtLeast(config.display.height.toFloat()) * windowHeight).toInt()
                     // Restore full viewport after 3D render
-                    conveyorRenderer.render(pipeline, factoryScreenX, factoryScreenY, officePixelWidth, factoryScreenHeight)
+                    conveyorRenderer.render(entry.projectId, pipeline, factoryScreenX, factoryScreenY, officePixelWidth, factoryScreenHeight)
                 }
+                // Clean up factories for removed projects
+                conveyorRenderer.retainFactories(entries.map { it.projectId }.toSet())
                 // Restore full viewport for overlays
                 Gdx.gl.glViewport(0, 0, windowWidth, windowHeight)
 
