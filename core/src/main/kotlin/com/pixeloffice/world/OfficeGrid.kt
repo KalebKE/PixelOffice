@@ -55,7 +55,7 @@ class OfficeGrid(
 
     /** Office height + conveyor strip below */
     val worldHeight: Float
-        get() = officeHeight + 40f
+        get() = officeHeight + 140f
 
     fun syncWithSnapshots(snapshots: List<AoSessionSnapshot>) {
         Gdx.app?.log("OfficeGrid", "syncWithSnapshots: ${snapshots.size} snapshots")
