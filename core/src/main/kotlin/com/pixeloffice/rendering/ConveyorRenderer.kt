@@ -249,26 +249,15 @@ class ConveyorRenderer(
             "door-wide-closed", "door-wide-half", "door-wide-open",
             "arrow", "arrow-basic"
         )
-        // Map each OBJ model to its Kenney palette color
-        val objColors = mapOf(
-            "conveyor" to beltGray, "conveyor-long" to beltGray,
-            "conveyor-stripe" to beltGray, "conveyor-bars-stripe" to beltGray,
-            "scanner-high" to wallLight, "scanner-low" to wallLight,
-            "robot-arm-a" to wallLight, "robot-arm-b" to wallLight,
-            "box-small" to orange, "box-large" to orange,
-            "floor-large" to floorGray,
-            "cover-window" to wallMid, "cover-stripe-window" to wallMid,
-            "structure-wall" to wallMid, "structure-window" to wallMid,
-            "door-wide-closed" to orange, "door-wide-half" to orange, "door-wide-open" to orange,
-            "arrow" to yellow, "arrow-basic" to yellow
-        )
         for (name in objNames) {
             try {
-                val model = objLoader.loadModel(Gdx.files.internal("${objBasePath}${name}.obj"))
-                val color = objColors[name] ?: wallLight
+                // flipV=true: OBJ UV V=0 is bottom, but LibGDX textures have Y=0 at top
+                val model = objLoader.loadModel(Gdx.files.internal("${objBasePath}${name}.obj"), true)
                 for (material in model.materials) {
+                    // clear() removes ALL old OBJ loader attributes that interfere with the shader
                     material.clear()
-                    material.set(ColorAttribute.createDiffuse(color))
+                    material.set(TextureAttribute.createDiffuse(colormapTexture))
+                    material.set(ColorAttribute.createDiffuse(Color.WHITE))
                 }
                 models["obj-$name"] = model
                 Gdx.app?.log("ConveyorRenderer", "Loaded OBJ: $name")
