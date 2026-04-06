@@ -16,12 +16,12 @@ import com.badlogic.gdx.graphics.g3d.ModelInstance
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute
 import com.badlogic.gdx.graphics.g3d.environment.DirectionalLight
 import com.badlogic.gdx.graphics.g3d.environment.DirectionalShadowLight
+import com.badlogic.gdx.graphics.g3d.shaders.DefaultShader
+import com.badlogic.gdx.graphics.g3d.utils.DefaultShaderProvider
 import com.badlogic.gdx.graphics.g3d.utils.DepthShaderProvider
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder
 import com.badlogic.gdx.math.Vector3
 import com.badlogic.gdx.utils.Disposable
-import net.mgsx.gltf.scene3d.attributes.PBRColorAttribute
-import net.mgsx.gltf.scene3d.attributes.PBRFloatAttribute
 
 /**
  * Renders the 3D voxel office with two-pass shadow mapping.
@@ -46,7 +46,8 @@ class VoxelOfficeRenderer : Disposable {
     private val layout = VoxelOfficeLayout(catalog)
 
     private val proceduralModels = mutableListOf<Model>()
-    private val roomInstances = mutableListOf<ModelInstance>()
+    private val floorInstances = mutableListOf<ModelInstance>()
+    private val wallInstances = mutableListOf<ModelInstance>()
     private val debugInstances = mutableListOf<ModelInstance>()
     private var shadowCasterInstances: List<ModelInstance> = emptyList()
     private var nonShadowInstances: List<ModelInstance> = emptyList()
@@ -69,7 +70,11 @@ class VoxelOfficeRenderer : Disposable {
         if (initialized) return
         initialized = true
 
-        modelBatch = ModelBatch()
+        // Custom per-pixel lighting shader (eliminates Gouraud banding, adds 9-tap PCF shadows)
+        val vertShader = Gdx.files.internal("shaders/voxel.vert").readString()
+        val fragShader = Gdx.files.internal("shaders/voxel.frag").readString()
+        val shaderConfig = DefaultShader.Config(vertShader, fragShader)
+        modelBatch = ModelBatch(DefaultShaderProvider(shaderConfig))
         shadowBatch = ModelBatch(DepthShaderProvider())
 
         // Camera
@@ -81,26 +86,24 @@ class VoxelOfficeRenderer : Disposable {
         camera.far = 100f
         camera.update()
 
-        // Shadow light: slight angle for contact shadows with subtle directional spread
+        // Office ceiling lighting: high ambient (diffuse fluorescent bounce) + subtle downward directional
+        // Shadow light: nearly straight down for contact shadows
         shadowLight = DirectionalShadowLight(4096, 4096, 40f, 40f, 1f, 60f)
-        shadowLight.set(0.35f, 0.34f, 0.33f, -0.2f, -1f, -0.15f)
+        shadowLight.set(0.25f, 0.25f, 0.24f, -0.05f, -1f, -0.05f)
 
         // Environment with shadow map
         environment = Environment()
-        environment.set(ColorAttribute(ColorAttribute.AmbientLight, 0.55f, 0.55f, 0.57f, 1f))
+        environment.set(ColorAttribute(ColorAttribute.AmbientLight, 0.75f, 0.75f, 0.77f, 1f))
         environment.add(shadowLight)
         environment.shadowMap = shadowLight
-        // Fill light from front-left
-        environment.add(DirectionalLight().set(0.35f, 0.34f, 0.33f, 0.2f, -0.6f, -0.8f))
-        // Subtle top light for ceiling bounce
-        environment.add(DirectionalLight().set(0.12f, 0.12f, 0.13f, 0f, -1f, 0f))
+        // Subtle ceiling fill
+        environment.add(DirectionalLight().set(0.15f, 0.15f, 0.15f, 0f, -1f, 0f))
 
-        // Same lighting without shadow map for cubicles (prevents shadow acne on thin geometry)
+        // Same lighting without shadow map for walls/cubicles
         noShadowEnv = Environment()
-        noShadowEnv.set(ColorAttribute(ColorAttribute.AmbientLight, 0.55f, 0.55f, 0.57f, 1f))
-        noShadowEnv.add(DirectionalLight().set(0.35f, 0.34f, 0.33f, -0.2f, -1f, -0.15f))
-        noShadowEnv.add(DirectionalLight().set(0.35f, 0.34f, 0.33f, 0.2f, -0.6f, -0.8f))
-        noShadowEnv.add(DirectionalLight().set(0.12f, 0.12f, 0.13f, 0f, -1f, 0f))
+        noShadowEnv.set(ColorAttribute(ColorAttribute.AmbientLight, 0.75f, 0.75f, 0.77f, 1f))
+        noShadowEnv.add(DirectionalLight().set(0.25f, 0.25f, 0.24f, -0.05f, -1f, -0.05f))
+        noShadowEnv.add(DirectionalLight().set(0.15f, 0.15f, 0.15f, 0f, -1f, 0f))
 
         val mb = ModelBuilder()
         val w = VoxelOfficeLayout.OFFICE_WIDTH
@@ -108,35 +111,36 @@ class VoxelOfficeRenderer : Disposable {
         val wallH = 3.0f
         val wallThick = 0.2f
 
-        // Floor
+        // Floor (receives shadows)
         val floorMat = Material(ColorAttribute.createDiffuse(FLOOR_COLOR))
         val floorModel = mb.createBox(w, 0.05f, d, floorMat, attrs)
         proceduralModels.add(floorModel)
-        roomInstances.add(ModelInstance(floorModel).also {
+        floorInstances.add(ModelInstance(floorModel).also {
             it.transform.setToTranslation(w / 2f, -0.025f, -d / 2f)
         })
 
         val wallMat = Material(ColorAttribute.createDiffuse(WALL_COLOR))
 
-        // Back wall
+        // Back wall (no shadow receive — prevents shadow map edge artifacts)
         val backWall = mb.createBox(w, wallH, wallThick, wallMat, attrs)
         proceduralModels.add(backWall)
-        roomInstances.add(ModelInstance(backWall).also {
+        wallInstances.add(ModelInstance(backWall).also {
             it.transform.setToTranslation(w / 2f, wallH / 2f, -d)
         })
 
-        // Left wall
-        val leftWall = mb.createBox(wallThick, wallH, d, wallMat, attrs)
+        // Left wall — extend 4 units past Z=0 so south end face is behind camera
+        val sideWallLen = d + 4f
+        val leftWall = mb.createBox(wallThick, wallH, sideWallLen, wallMat, attrs)
         proceduralModels.add(leftWall)
-        roomInstances.add(ModelInstance(leftWall).also {
-            it.transform.setToTranslation(0f, wallH / 2f, -d / 2f)
+        wallInstances.add(ModelInstance(leftWall).also {
+            it.transform.setToTranslation(0f, wallH / 2f, -(sideWallLen / 2f) + 2f)
         })
 
         // Right wall
-        val rightWall = mb.createBox(wallThick, wallH, d, wallMat, attrs)
+        val rightWall = mb.createBox(wallThick, wallH, sideWallLen, wallMat, attrs)
         proceduralModels.add(rightWall)
-        roomInstances.add(ModelInstance(rightWall).also {
-            it.transform.setToTranslation(w, wallH / 2f, -d / 2f)
+        wallInstances.add(ModelInstance(rightWall).also {
+            it.transform.setToTranslation(w, wallH / 2f, -(sideWallLen / 2f) + 2f)
         })
 
         Gdx.app?.log(TAG, "Room built with shadow mapping (4096x4096 shadow map)")
@@ -179,18 +183,20 @@ class VoxelOfficeRenderer : Disposable {
     }
 
     private fun renderMainPass(batch: ModelBatch) {
-        // Room + debug with shadows
-        for (instance in roomInstances) batch.render(instance, environment)
+        // Floor receives shadows
+        for (instance in floorInstances) batch.render(instance, environment)
         for (instance in debugInstances) batch.render(instance, environment)
-        // Cubicles: no shadow map (prevents shadow acne on thin voxel geometry)
+        // Walls + cubicles: no shadow map (prevents edge artifacts and acne)
+        for (instance in wallInstances) batch.render(instance, noShadowEnv)
         for (instance in nonShadowInstances) batch.render(instance, noShadowEnv)
         // All other furniture: with shadow map
         for (instance in shadowCasterInstances) batch.render(instance, environment)
     }
 
-    /** All geometry casts shadows (including cubicles for contact shadows on floor) */
+    /** All geometry casts shadows (including cubicles/walls for contact shadows on floor) */
     private fun renderShadowCasters(batch: ModelBatch) {
-        for (instance in roomInstances) batch.render(instance)
+        for (instance in floorInstances) batch.render(instance)
+        for (instance in wallInstances) batch.render(instance)
         for (instance in shadowCasterInstances) batch.render(instance)
         for (instance in nonShadowInstances) batch.render(instance)
     }
