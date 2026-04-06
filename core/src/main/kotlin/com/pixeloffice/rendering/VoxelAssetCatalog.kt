@@ -158,13 +158,10 @@ class VoxelAssetCatalog : Disposable {
                 }
             } else null
 
-            // Override materials
-            val isCubicle = relativePath.startsWith("Cubicles/")
+            // Override materials — all models get their texture (cubicles need it for dark trim)
             for (material in model.materials) {
                 material.clear()
-                // Skip texture on cubicle models -- use pure white to avoid
-                // palette-induced gray banding on partition walls
-                if (texture != null && !isCubicle) {
+                if (texture != null) {
                     material.set(TextureAttribute.createDiffuse(texture))
                 }
                 material.set(ColorAttribute.createDiffuse(Color.WHITE))
