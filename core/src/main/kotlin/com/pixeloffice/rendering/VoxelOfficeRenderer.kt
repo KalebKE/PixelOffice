@@ -238,26 +238,27 @@ class VoxelOfficeRenderer : Disposable {
 
         val wallMat = Material(ColorAttribute.createDiffuse(WALL_COLOR))
 
-        // Back wall inner face — AO at bottom edge where it meets floor
-        val backWallModel = buildWallWithAO(mb, wallMat,
-            0f, 0f, -d,   w, wallH, -d,
-            Vector3(0f, 0f, 1f))  // normal facing into room
-        proceduralModels.add(backWallModel)
-        wallInstances.add(ModelInstance(backWallModel))
+        // Back wall
+        val backWall = mb.createBox(w, wallH, wallThick, wallMat, attrs)
+        proceduralModels.add(backWall)
+        wallInstances.add(ModelInstance(backWall).also {
+            it.transform.setToTranslation(w / 2f, wallH / 2f, -d)
+        })
 
-        // Left wall inner face — extends past Z=0 to hide south end
-        val leftWallModel = buildWallWithAO(mb, wallMat,
-            0f, 0f, -(d + 2f),   0f, wallH, 2f,
-            Vector3(1f, 0f, 0f))  // normal facing right into room
-        proceduralModels.add(leftWallModel)
-        wallInstances.add(ModelInstance(leftWallModel))
+        // Left wall — extend 4 units past Z=0 so south end face is behind camera
+        val sideWallLen = d + 4f
+        val leftWall = mb.createBox(wallThick, wallH, sideWallLen, wallMat, attrs)
+        proceduralModels.add(leftWall)
+        wallInstances.add(ModelInstance(leftWall).also {
+            it.transform.setToTranslation(0f, wallH / 2f, -(sideWallLen / 2f) + 2f)
+        })
 
-        // Right wall inner face
-        val rightWallModel = buildWallWithAO(mb, wallMat,
-            w, 0f, -(d + 2f),   w, wallH, 2f,
-            Vector3(-1f, 0f, 0f))  // normal facing left into room
-        proceduralModels.add(rightWallModel)
-        wallInstances.add(ModelInstance(rightWallModel))
+        // Right wall
+        val rightWall = mb.createBox(wallThick, wallH, sideWallLen, wallMat, attrs)
+        proceduralModels.add(rightWall)
+        wallInstances.add(ModelInstance(rightWall).also {
+            it.transform.setToTranslation(w, wallH / 2f, -(sideWallLen / 2f) + 2f)
+        })
 
         Gdx.app?.log(TAG, "Room built with shadow mapping (4096x4096 shadow map)")
 
@@ -308,11 +309,8 @@ class VoxelOfficeRenderer : Disposable {
         val width = Gdx.graphics.width
         val height = Gdx.graphics.height
 
-        // === Pass 1: Shadow depth map (centered on office for full coverage) ===
-        shadowLight.begin(
-            Vector3(VoxelOfficeLayout.OFFICE_WIDTH / 2f, 0f, -VoxelOfficeLayout.OFFICE_DEPTH / 2f),
-            camera.direction
-        )
+        // === Pass 1: Shadow depth map ===
+        shadowLight.begin(Vector3.Zero, camera.direction)
         Gdx.gl.glEnable(GL20.GL_CULL_FACE)
         Gdx.gl.glCullFace(GL20.GL_FRONT)
         Gdx.gl.glEnable(GL20.GL_POLYGON_OFFSET_FILL)
