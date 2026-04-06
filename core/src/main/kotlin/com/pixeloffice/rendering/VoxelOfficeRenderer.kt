@@ -48,7 +48,6 @@ class VoxelOfficeRenderer : Disposable {
     private val proceduralModels = mutableListOf<Model>()
     private val floorInstances = mutableListOf<ModelInstance>()
     private val wallInstances = mutableListOf<ModelInstance>()
-    private val debugInstances = mutableListOf<ModelInstance>()
     private var shadowCasterInstances: List<ModelInstance> = emptyList()
     private var nonShadowInstances: List<ModelInstance> = emptyList()
     private var characterBillboard: CharacterBillboard? = null
@@ -123,6 +122,67 @@ class VoxelOfficeRenderer : Disposable {
             }
             return mb.end()
         }
+
+        /** Build a wall quad (single face) with AO darkening at the bottom edge.
+         *  The quad faces along the given normal direction. */
+        fun buildWallWithAO(
+            mb: ModelBuilder, mat: Material,
+            x0: Float, y0: Float, z0: Float,  // bottom-left corner
+            x1: Float, y1: Float, z1: Float,  // top-right corner
+            normal: Vector3, segs: Int = 4
+        ): Model {
+            mb.begin()
+            val mpb = mb.part("wall", GL20.GL_TRIANGLES, attrs, mat)
+
+            // Determine which axis varies for width vs height
+            val isXWall = (x1 - x0).let { kotlin.math.abs(it) } > 0.5f  // wall extends along X
+            val wallLen = if (isXWall) x1 - x0 else z1 - z0
+            val wallH = y1 - y0
+
+            for (ih in 0 until segs) {
+                for (iw in 0 until segs) {
+                    val t0h = ih.toFloat() / segs
+                    val t1h = (ih + 1).toFloat() / segs
+                    val t0w = iw.toFloat() / segs
+                    val t1w = (iw + 1).toFloat() / segs
+
+                    val yA = y0 + t0h * wallH
+                    val yB = y0 + t1h * wallH
+
+                    // AO: darken at bottom (y near y0), full brightness at top
+                    fun aoAtY(y: Float): Color {
+                        val distFromFloor = y - y0
+                        val ao = if (distFromFloor >= AO_FADE) AO_NONE
+                        else AO_EDGE + (AO_NONE - AO_EDGE) * (distFromFloor / AO_FADE)
+                        return Color(ao, ao, ao, 1f)
+                    }
+
+                    val cBottom = aoAtY(yA)
+                    val cTop = aoAtY(yB)
+
+                    if (isXWall) {
+                        val xA = x0 + t0w * (x1 - x0)
+                        val xB = x0 + t1w * (x1 - x0)
+                        val v0 = mpb.vertex(Vector3(xA, yA, z0), normal, cBottom, null)
+                        val v1 = mpb.vertex(Vector3(xB, yA, z0), normal, cBottom, null)
+                        val v2 = mpb.vertex(Vector3(xB, yB, z0), normal, cTop, null)
+                        val v3 = mpb.vertex(Vector3(xA, yB, z0), normal, cTop, null)
+                        mpb.index(v0, v1, v2)
+                        mpb.index(v0, v2, v3)
+                    } else {
+                        val zA = z0 + t0w * (z1 - z0)
+                        val zB = z0 + t1w * (z1 - z0)
+                        val v0 = mpb.vertex(Vector3(x0, yA, zA), normal, cBottom, null)
+                        val v1 = mpb.vertex(Vector3(x0, yA, zB), normal, cBottom, null)
+                        val v2 = mpb.vertex(Vector3(x0, yB, zB), normal, cTop, null)
+                        val v3 = mpb.vertex(Vector3(x0, yB, zA), normal, cTop, null)
+                        mpb.index(v0, v1, v2)
+                        mpb.index(v0, v2, v3)
+                    }
+                }
+            }
+            return mb.end()
+        }
     }
 
     fun initialize() {
@@ -178,43 +238,28 @@ class VoxelOfficeRenderer : Disposable {
 
         val wallMat = Material(ColorAttribute.createDiffuse(WALL_COLOR))
 
-        // Back wall (no shadow receive — prevents shadow map edge artifacts)
-        val backWall = mb.createBox(w, wallH, wallThick, wallMat, attrs)
-        proceduralModels.add(backWall)
-        wallInstances.add(ModelInstance(backWall).also {
-            it.transform.setToTranslation(w / 2f, wallH / 2f, -d)
-        })
+        // Back wall inner face — AO at bottom edge where it meets floor
+        val backWallModel = buildWallWithAO(mb, wallMat,
+            0f, 0f, -d,   w, wallH, -d,
+            Vector3(0f, 0f, 1f))  // normal facing into room
+        proceduralModels.add(backWallModel)
+        wallInstances.add(ModelInstance(backWallModel))
 
-        // Left wall — extend 4 units past Z=0 so south end face is behind camera
-        val sideWallLen = d + 4f
-        val leftWall = mb.createBox(wallThick, wallH, sideWallLen, wallMat, attrs)
-        proceduralModels.add(leftWall)
-        wallInstances.add(ModelInstance(leftWall).also {
-            it.transform.setToTranslation(0f, wallH / 2f, -(sideWallLen / 2f) + 2f)
-        })
+        // Left wall inner face — extends past Z=0 to hide south end
+        val leftWallModel = buildWallWithAO(mb, wallMat,
+            0f, 0f, -(d + 2f),   0f, wallH, 2f,
+            Vector3(1f, 0f, 0f))  // normal facing right into room
+        proceduralModels.add(leftWallModel)
+        wallInstances.add(ModelInstance(leftWallModel))
 
-        // Right wall
-        val rightWall = mb.createBox(wallThick, wallH, sideWallLen, wallMat, attrs)
-        proceduralModels.add(rightWall)
-        wallInstances.add(ModelInstance(rightWall).also {
-            it.transform.setToTranslation(w, wallH / 2f, -(sideWallLen / 2f) + 2f)
-        })
+        // Right wall inner face
+        val rightWallModel = buildWallWithAO(mb, wallMat,
+            w, 0f, -(d + 2f),   w, wallH, 2f,
+            Vector3(-1f, 0f, 0f))  // normal facing left into room
+        proceduralModels.add(rightWallModel)
+        wallInstances.add(ModelInstance(rightWallModel))
 
         Gdx.app?.log(TAG, "Room built with shadow mapping (4096x4096 shadow map)")
-
-        // Debug markers
-        fun debugBox(color: Color, x: Float, y: Float, z: Float, label: String) {
-            val model = mb.createBox(0.4f, 0.4f, 0.4f, Material(ColorAttribute.createDiffuse(color)), attrs)
-            proceduralModels.add(model)
-            debugInstances.add(ModelInstance(model).also { it.transform.setToTranslation(x, y, z) })
-            Gdx.app?.log(TAG, "DEBUG MARKER [$label] at ($x, $y, $z)")
-        }
-        debugBox(Color.RED, 0f, 0.2f, 0f, "FRONT-LEFT corner")
-        debugBox(Color.GREEN, w / 2f, 0.2f, -d / 2f, "CENTER")
-        debugBox(Color.BLUE, w, 0.2f, -d, "BACK-RIGHT corner")
-        debugBox(Color.YELLOW, w / 2f, 0.2f, -d, "BACK WALL CENTER")
-        debugBox(Color.CYAN, 0f, 0.2f, -d, "BACK-LEFT corner")
-        debugBox(Color.MAGENTA, w, 0.2f, 0f, "FRONT-RIGHT corner")
 
         // Load models and build layout
         catalog.loadAll()
@@ -242,7 +287,6 @@ class VoxelOfficeRenderer : Disposable {
     private fun renderMainPass(batch: ModelBatch) {
         // Floor receives shadows
         for (instance in floorInstances) batch.render(instance, environment)
-        for (instance in debugInstances) batch.render(instance, environment)
         // Walls + cubicles: no shadow map (prevents edge artifacts and acne)
         for (instance in wallInstances) batch.render(instance, noShadowEnv)
         for (instance in nonShadowInstances) batch.render(instance, noShadowEnv)
@@ -264,8 +308,11 @@ class VoxelOfficeRenderer : Disposable {
         val width = Gdx.graphics.width
         val height = Gdx.graphics.height
 
-        // === Pass 1: Shadow depth map ===
-        shadowLight.begin(Vector3.Zero, camera.direction)
+        // === Pass 1: Shadow depth map (centered on office for full coverage) ===
+        shadowLight.begin(
+            Vector3(VoxelOfficeLayout.OFFICE_WIDTH / 2f, 0f, -VoxelOfficeLayout.OFFICE_DEPTH / 2f),
+            camera.direction
+        )
         Gdx.gl.glEnable(GL20.GL_CULL_FACE)
         Gdx.gl.glCullFace(GL20.GL_FRONT)
         Gdx.gl.glEnable(GL20.GL_POLYGON_OFFSET_FILL)

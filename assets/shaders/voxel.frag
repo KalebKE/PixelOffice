@@ -128,19 +128,26 @@ float getShadowness(vec2 offset)
 
 float getShadow()
 {
-    // 9-tap 3x3 PCF for softer shadow edges (vs default 4-tap 2x2)
+    // 16-tap Poisson disk PCF for smooth, organic shadow edges
+    float pcf = u_shadowPCFOffset * 2.5;
     float shadow = 0.0;
-    float pcf = u_shadowPCFOffset;
-    shadow += getShadowness(vec2(-pcf, -pcf));
-    shadow += getShadowness(vec2( 0.0, -pcf));
-    shadow += getShadowness(vec2( pcf, -pcf));
-    shadow += getShadowness(vec2(-pcf,  0.0));
-    shadow += getShadowness(vec2( 0.0,  0.0));
-    shadow += getShadowness(vec2( pcf,  0.0));
-    shadow += getShadowness(vec2(-pcf,  pcf));
-    shadow += getShadowness(vec2( 0.0,  pcf));
-    shadow += getShadowness(vec2( pcf,  pcf));
-    return shadow / 9.0;
+    shadow += getShadowness(vec2(-0.94201, -0.39906) * pcf);
+    shadow += getShadowness(vec2( 0.94558, -0.76890) * pcf);
+    shadow += getShadowness(vec2(-0.09418, -0.92938) * pcf);
+    shadow += getShadowness(vec2( 0.34495,  0.29387) * pcf);
+    shadow += getShadowness(vec2(-0.91588,  0.45771) * pcf);
+    shadow += getShadowness(vec2(-0.81544, -0.87912) * pcf);
+    shadow += getShadowness(vec2( 0.19984,  0.78641) * pcf);
+    shadow += getShadowness(vec2(-0.17332,  0.36542) * pcf);
+    shadow += getShadowness(vec2( 0.44323, -0.40068) * pcf);
+    shadow += getShadowness(vec2( 0.82344,  0.36072) * pcf);
+    shadow += getShadowness(vec2(-0.44444, -0.14523) * pcf);
+    shadow += getShadowness(vec2( 0.14323, -0.13690) * pcf);
+    shadow += getShadowness(vec2(-0.30052,  0.78271) * pcf);
+    shadow += getShadowness(vec2( 0.70168, -0.15477) * pcf);
+    shadow += getShadowness(vec2(-0.55698,  0.61492) * pcf);
+    shadow += getShadowness(vec2( 0.63280,  0.75649) * pcf);
+    return shadow / 16.0;
 }
 #endif //shadowMapFlag
 
