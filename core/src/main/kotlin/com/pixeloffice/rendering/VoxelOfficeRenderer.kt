@@ -205,24 +205,29 @@ class VoxelOfficeRenderer : Disposable {
         camera.far = 100f
         camera.update()
 
-        // Office ceiling lighting: high ambient (diffuse fluorescent bounce) + subtle downward directional
-        // Shadow light: nearly straight down for contact shadows
+        // Office ceiling lighting:
+        // - High ambient for diffuse fluorescent bounce
+        // - Shadow light straight down for contact shadows
+        // - Subtle front-fill (x=0 symmetric) for voxel face definition
         shadowLight = DirectionalShadowLight(4096, 4096, 40f, 40f, 1f, 60f)
         shadowLight.set(0.25f, 0.25f, 0.24f, -0.05f, -1f, -0.05f)
 
         // Environment with shadow map
         environment = Environment()
-        environment.set(ColorAttribute(ColorAttribute.AmbientLight, 0.75f, 0.75f, 0.77f, 1f))
+        environment.set(ColorAttribute(ColorAttribute.AmbientLight, 0.65f, 0.65f, 0.67f, 1f))
         environment.add(shadowLight)
         environment.shadowMap = shadowLight
-        // Subtle ceiling fill
+        // Ceiling fill — straight down
         environment.add(DirectionalLight().set(0.15f, 0.15f, 0.15f, 0f, -1f, 0f))
+        // Front fill — symmetric (x=0), gives depth to vertical voxel faces
+        environment.add(DirectionalLight().set(0.12f, 0.12f, 0.12f, 0f, -0.5f, -0.87f))
 
         // Same lighting without shadow map for walls/cubicles
         noShadowEnv = Environment()
-        noShadowEnv.set(ColorAttribute(ColorAttribute.AmbientLight, 0.75f, 0.75f, 0.77f, 1f))
+        noShadowEnv.set(ColorAttribute(ColorAttribute.AmbientLight, 0.65f, 0.65f, 0.67f, 1f))
         noShadowEnv.add(DirectionalLight().set(0.25f, 0.25f, 0.24f, -0.05f, -1f, -0.05f))
         noShadowEnv.add(DirectionalLight().set(0.15f, 0.15f, 0.15f, 0f, -1f, 0f))
+        noShadowEnv.add(DirectionalLight().set(0.12f, 0.12f, 0.12f, 0f, -0.5f, -0.87f))
 
         val mb = ModelBuilder()
         val w = VoxelOfficeLayout.OFFICE_WIDTH
