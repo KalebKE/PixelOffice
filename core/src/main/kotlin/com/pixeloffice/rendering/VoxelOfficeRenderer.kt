@@ -59,11 +59,70 @@ class VoxelOfficeRenderer : Disposable {
 
     companion object {
         private const val TAG = "VoxelOfficeRenderer"
-        private val attrs = (VertexAttributes.Usage.Position or VertexAttributes.Usage.Normal).toLong()
+        private val attrs = (VertexAttributes.Usage.Position or VertexAttributes.Usage.Normal or VertexAttributes.Usage.ColorUnpacked).toLong()
+
+        // AO darkening values
+        private const val AO_EDGE = 0.82f     // where one surface meets another
+        private const val AO_CORNER = 0.65f   // where two+ surfaces meet
+        private const val AO_NONE = 1.0f      // no occlusion
+        private const val AO_FADE = 3.0f      // units from wall edge where AO fades
 
         private val FLOOR_COLOR = Color(0.93f, 0.93f, 0.94f, 1f)
         private val WALL_COLOR = Color(0.85f, 0.86f, 0.87f, 1f)
         private val BG_COLOR = Color(0.78f, 0.80f, 0.82f, 1f)
+
+        /** Build a subdivided floor with AO darkening at edges (near walls) */
+        fun buildFloorWithAO(mb: ModelBuilder, w: Float, d: Float, mat: Material): Model {
+            val segsX = 8
+            val segsZ = 8
+            mb.begin()
+            val mpb = mb.part("floor", GL20.GL_TRIANGLES, attrs, mat)
+            val normal = Vector3(0f, 1f, 0f)
+
+            for (iz in 0 until segsZ) {
+                for (ix in 0 until segsX) {
+                    val x0 = (ix.toFloat() / segsX) * w
+                    val x1 = ((ix + 1).toFloat() / segsX) * w
+                    val z0 = -(iz.toFloat() / segsZ) * d
+                    val z1 = -((iz + 1).toFloat() / segsZ) * d
+
+                    fun aoAt(x: Float, z: Float): Color {
+                        val distLeft = x
+                        val distRight = w - x
+                        val distBackWall = d + z    // z goes from 0 to -d, so d+z = distance from back wall
+                        val minDistX = minOf(distLeft, distRight)
+                        val minDistZ = distBackWall  // only back wall matters (no front wall)
+                        val minDist = minOf(minDistX, minDistZ)
+
+                        val ao = if (minDist >= AO_FADE) AO_NONE
+                        else {
+                            val t = minDist / AO_FADE
+                            // Check if in corner (near two walls)
+                            val nearX = minDistX < AO_FADE
+                            val nearZ = minDistZ < AO_FADE
+                            val target = if (nearX && nearZ) AO_CORNER else AO_EDGE
+                            target + (AO_NONE - target) * t
+                        }
+                        return Color(ao, ao, ao, 1f)
+                    }
+
+                    val c00 = aoAt(x0, z0)
+                    val c10 = aoAt(x1, z0)
+                    val c01 = aoAt(x0, z1)
+                    val c11 = aoAt(x1, z1)
+                    val y = -0.025f
+
+                    // Two triangles per quad
+                    val v0 = mpb.vertex(Vector3(x0, y, z0), normal, c00, null)
+                    val v1 = mpb.vertex(Vector3(x1, y, z0), normal, c10, null)
+                    val v2 = mpb.vertex(Vector3(x1, y, z1), normal, c11, null)
+                    val v3 = mpb.vertex(Vector3(x0, y, z1), normal, c01, null)
+                    mpb.index(v0, v1, v2)
+                    mpb.index(v0, v2, v3)
+                }
+            }
+            return mb.end()
+        }
     }
 
     fun initialize() {
@@ -111,13 +170,11 @@ class VoxelOfficeRenderer : Disposable {
         val wallH = 3.0f
         val wallThick = 0.2f
 
-        // Floor (receives shadows)
+        // Floor with vertex color AO (darkening at wall edges and corners)
         val floorMat = Material(ColorAttribute.createDiffuse(FLOOR_COLOR))
-        val floorModel = mb.createBox(w, 0.05f, d, floorMat, attrs)
+        val floorModel = buildFloorWithAO(mb, w, d, floorMat)
         proceduralModels.add(floorModel)
-        floorInstances.add(ModelInstance(floorModel).also {
-            it.transform.setToTranslation(w / 2f, -0.025f, -d / 2f)
-        })
+        floorInstances.add(ModelInstance(floorModel))
 
         val wallMat = Material(ColorAttribute.createDiffuse(WALL_COLOR))
 
