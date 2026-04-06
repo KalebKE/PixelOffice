@@ -4,9 +4,14 @@ import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.GL20
+import com.badlogic.gdx.graphics.Mesh
 import com.badlogic.gdx.graphics.PerspectiveCamera
+import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.PixmapIO
+import com.badlogic.gdx.graphics.VertexAttribute
 import com.badlogic.gdx.graphics.VertexAttributes
+import com.badlogic.gdx.graphics.glutils.FrameBuffer
+import com.badlogic.gdx.graphics.glutils.ShaderProgram
 import com.badlogic.gdx.utils.ScreenUtils
 import com.badlogic.gdx.graphics.g3d.Environment
 import com.badlogic.gdx.graphics.g3d.Material
@@ -37,10 +42,16 @@ class VoxelOfficeRenderer : Disposable {
 
     private lateinit var modelBatch: ModelBatch
     private lateinit var shadowBatch: ModelBatch
+    private lateinit var depthBatch: ModelBatch       // camera-view depth for SSAO
     private lateinit var camera: PerspectiveCamera
     private lateinit var environment: Environment
     private lateinit var noShadowEnv: Environment
     private lateinit var shadowLight: DirectionalShadowLight
+
+    // SSAO
+    private var depthFbo: FrameBuffer? = null
+    private lateinit var ssaoShader: ShaderProgram
+    private lateinit var ssaoQuad: Mesh
 
     private val catalog = VoxelAssetCatalog()
     private val layout = VoxelOfficeLayout(catalog)
@@ -288,6 +299,29 @@ class VoxelOfficeRenderer : Disposable {
         Gdx.app?.log(TAG, "Office built: ${shadowCasterInstances.size} shadow casters, ${nonShadowInstances.size} cubicles (no shadow receive)")
 
         characterBillboard = CharacterBillboard(camera)
+
+        // SSAO setup
+        depthBatch = ModelBatch(DepthShaderProvider())
+        val ssaoVert = Gdx.files.internal("shaders/ssao.vert").readString()
+        val ssaoFrag = Gdx.files.internal("shaders/ssao.frag").readString()
+        ssaoShader = ShaderProgram(ssaoVert, ssaoFrag)
+        if (!ssaoShader.isCompiled) {
+            Gdx.app?.error(TAG, "SSAO shader failed: ${ssaoShader.log}")
+        }
+
+        // Full-screen quad mesh
+        val quadVerts = floatArrayOf(
+            -1f, -1f, 0f, 0f,
+             1f, -1f, 1f, 0f,
+             1f,  1f, 1f, 1f,
+            -1f,  1f, 0f, 1f
+        )
+        ssaoQuad = Mesh(true, 4, 6,
+            VertexAttribute(VertexAttributes.Usage.Position, 2, "a_position"),
+            VertexAttribute(VertexAttributes.Usage.TextureCoordinates, 2, "a_texCoord")
+        )
+        ssaoQuad.setVertices(quadVerts)
+        ssaoQuad.setIndices(shortArrayOf(0, 1, 2, 0, 2, 3))
     }
 
     private fun renderMainPass(batch: ModelBatch) {
@@ -298,6 +332,14 @@ class VoxelOfficeRenderer : Disposable {
         for (instance in nonShadowInstances) batch.render(instance, noShadowEnv)
         // All other furniture: with shadow map
         for (instance in shadowCasterInstances) batch.render(instance, environment)
+    }
+
+    /** Render all geometry depth from camera's perspective for SSAO */
+    private fun renderCameraDepth(batch: ModelBatch) {
+        for (instance in floorInstances) batch.render(instance)
+        for (instance in wallInstances) batch.render(instance)
+        for (instance in shadowCasterInstances) batch.render(instance)
+        for (instance in nonShadowInstances) batch.render(instance)
     }
 
     /** All geometry casts shadows (including cubicles/walls for contact shadows on floor) */
@@ -340,6 +382,41 @@ class VoxelOfficeRenderer : Disposable {
         modelBatch.begin(camera)
         renderMainPass(modelBatch)
         modelBatch.end()
+
+        // === Pass 3: SSAO ===
+        // 3a: Render camera-view depth to FBO
+        if (depthFbo == null || depthFbo!!.width != width || depthFbo!!.height != height) {
+            depthFbo?.dispose()
+            depthFbo = FrameBuffer(Pixmap.Format.RGBA8888, width, height, true)
+        }
+        depthFbo!!.begin()
+        Gdx.gl.glClearColor(1f, 1f, 1f, 1f)
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT or GL20.GL_DEPTH_BUFFER_BIT)
+        depthBatch.begin(camera)
+        renderCameraDepth(depthBatch)
+        depthBatch.end()
+        depthFbo!!.end()
+
+        // Restore viewport after FBO
+        Gdx.gl.glViewport(0, 0, width, height)
+
+        // 3b: Apply SSAO as multiplicative overlay
+        Gdx.gl.glDisable(GL20.GL_DEPTH_TEST)
+        Gdx.gl.glEnable(GL20.GL_BLEND)
+        Gdx.gl.glBlendFunc(GL20.GL_DST_COLOR, GL20.GL_ZERO)
+
+        ssaoShader.bind()
+        depthFbo!!.colorBufferTexture.bind(0)
+        ssaoShader.setUniformi("u_depthTexture", 0)
+        ssaoShader.setUniformf("u_screenSize", width.toFloat(), height.toFloat())
+        ssaoShader.setUniformf("u_radius", 0.4f)
+        ssaoShader.setUniformf("u_intensity", 0.25f)
+        ssaoShader.setUniformf("u_near", camera.near)
+        ssaoShader.setUniformf("u_far", camera.far)
+        ssaoQuad.render(ssaoShader, GL20.GL_TRIANGLES)
+
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
+        Gdx.gl.glEnable(GL20.GL_DEPTH_TEST)
 
         // Auto-screenshot
         renderFrameCount++
@@ -396,6 +473,10 @@ class VoxelOfficeRenderer : Disposable {
 
     override fun dispose() {
         if (!initialized) return
+        depthFbo?.dispose()
+        ssaoShader.dispose()
+        ssaoQuad.dispose()
+        depthBatch.dispose()
         modelBatch.dispose()
         shadowBatch.dispose()
         shadowLight.dispose()
