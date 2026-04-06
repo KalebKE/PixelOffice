@@ -23,6 +23,9 @@ import com.badlogic.gdx.graphics.g3d.environment.DirectionalLight
 import com.badlogic.gdx.graphics.g3d.environment.DirectionalShadowLight
 import com.badlogic.gdx.graphics.g3d.shaders.DefaultShader
 import com.badlogic.gdx.graphics.g3d.utils.DefaultShaderProvider
+import com.badlogic.gdx.graphics.g2d.BitmapFont
+import com.badlogic.gdx.graphics.g2d.GlyphLayout
+import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g3d.utils.DepthShaderProvider
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder
 import com.badlogic.gdx.math.Vector3
@@ -62,6 +65,12 @@ class VoxelOfficeRenderer : Disposable {
     private var shadowCasterInstances: List<ModelInstance> = emptyList()
     private var nonShadowInstances: List<ModelInstance> = emptyList()
     private var characterBillboard: CharacterBillboard? = null
+
+    // Compass HUD
+    private lateinit var compassBatch: SpriteBatch
+    private lateinit var compassFont: BitmapFont
+    private val compassLayout = GlyphLayout()
+    private val compassVec = Vector3()
 
     private var initialized = false
     private var renderFrameCount = 0
@@ -206,6 +215,11 @@ class VoxelOfficeRenderer : Disposable {
         val shaderConfig = DefaultShader.Config(vertShader, fragShader)
         modelBatch = ModelBatch(DefaultShaderProvider(shaderConfig))
         shadowBatch = ModelBatch(DepthShaderProvider())
+
+        // Compass HUD
+        compassBatch = SpriteBatch()
+        compassFont = BitmapFont()
+        compassFont.color = Color.BLACK
 
         // Camera
         camera = PerspectiveCamera(40f, Gdx.graphics.width.toFloat(), Gdx.graphics.height.toFloat())
@@ -418,6 +432,9 @@ class VoxelOfficeRenderer : Disposable {
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
         Gdx.gl.glEnable(GL20.GL_DEPTH_TEST)
 
+        // Compass HUD overlay
+        drawCompass()
+
         // Auto-screenshot
         renderFrameCount++
         if (renderFrameCount == 10 && !screenshotTaken) {
@@ -439,6 +456,63 @@ class VoxelOfficeRenderer : Disposable {
         // Restore 2D GL state
         Gdx.gl.glDisable(GL20.GL_DEPTH_TEST)
         Gdx.gl.glEnable(GL20.GL_BLEND)
+    }
+
+    /**
+     * Draws a compass rose in the bottom-left showing N/S/E/W mapped to world axes,
+     * so directions can be communicated relative to the camera view.
+     *
+     * Projects 4 world offsets from scene center to screen, then labels them.
+     * Camera: (-13,28,-10) looking toward (+X,-Y,0)
+     *   Screen-north (top)  = +X world
+     *   Screen-south (bot)  = -X world
+     *   Screen-east  (right)= +Z world
+     *   Screen-west  (left) = -Z world
+     */
+    private fun drawCompass() {
+        Gdx.gl.glDisable(GL20.GL_DEPTH_TEST)
+        compassBatch.begin()
+
+        val cx = 70f  // compass center on screen
+        val cy = 70f
+        val r = 45f   // radius
+
+        // Project world-axis directions to screen to derive on-screen compass angles
+        val origin = Vector3(13f, 0f, -10f)  // scene center (lookAt target)
+        val dirs = arrayOf(
+            "+X" to Vector3(1f, 0f, 0f),
+            "-X" to Vector3(-1f, 0f, 0f),
+            "+Z" to Vector3(0f, 0f, 1f),
+            "-Z" to Vector3(0f, 0f, -1f)
+        )
+
+        for ((axisLabel, dir) in dirs) {
+            compassVec.set(origin).add(dir.scl(5f))
+            camera.project(compassVec)
+            val originScreen = Vector3(origin)
+            camera.project(originScreen)
+
+            // Normalized screen direction
+            val dx = compassVec.x - originScreen.x
+            val dy = compassVec.y - originScreen.y
+            val len = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat().coerceAtLeast(0.001f)
+
+            val sx = cx + (dx / len) * r
+            val sy = cy + (dy / len) * r
+
+            val label = axisLabel
+            compassLayout.setText(compassFont, label)
+            val textX = sx - compassLayout.width / 2f
+            val textY = sy + compassLayout.height / 2f
+
+            compassFont.draw(compassBatch, label, textX, textY)
+        }
+
+        // Draw center dot label
+        compassFont.draw(compassBatch, "o", cx - 3f, cy + 5f)
+
+        compassBatch.end()
+        Gdx.gl.glEnable(GL20.GL_DEPTH_TEST)
     }
 
     fun handleCameraInput() {
@@ -483,5 +557,7 @@ class VoxelOfficeRenderer : Disposable {
         for (model in proceduralModels) model.dispose()
         catalog.dispose()
         characterBillboard?.dispose()
+        compassBatch.dispose()
+        compassFont.dispose()
     }
 }
