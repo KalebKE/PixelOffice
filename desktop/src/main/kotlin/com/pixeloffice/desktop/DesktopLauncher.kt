@@ -7,7 +7,7 @@ import com.pixeloffice.PixelOfficeGame
 fun main() {
     val config = Lwjgl3ApplicationConfiguration().apply {
         setTitle("Pixel Office - Claude Code Visualization")
-        setWindowedMode(320 * 2, 240 * 2) // 2x scale for better visibility
+        setWindowedMode(320 * 4, 240 * 4) // 4x scale
         useVsync(true)
         setForegroundFPS(30)
 
