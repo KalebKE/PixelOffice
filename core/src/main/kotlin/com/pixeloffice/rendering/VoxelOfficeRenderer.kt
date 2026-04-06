@@ -209,7 +209,7 @@ class VoxelOfficeRenderer : Disposable {
 
         // Camera
         camera = PerspectiveCamera(40f, Gdx.graphics.width.toFloat(), Gdx.graphics.height.toFloat())
-        camera.position.set(13f, 18f, 24f)
+        camera.position.set(-13f, 28f, -10f)
         camera.lookAt(13f, 0f, -10f)
         camera.up.set(0f, 1f, 0f)
         camera.near = 0.1f
