@@ -136,14 +136,14 @@ class VoxelOfficeLayout(private val catalog: VoxelAssetCatalog) {
         out: MutableList<Placement>, x: Float, z: Float,
         chairModel: String, pcModel: String
     ) {
-        // Cubicle partition behind desk (to the left/west)
-        out.add(Placement("Cubicles/Office_Cubicle_White_04", x - 1.0f, 0f, z))
-        // Desk
-        out.add(Placement("Tables/Office_Table_White_1x1_01", x, 0f, z))
-        // Chair (in front of desk, facing desk = rotated 180)
-        out.add(Placement("Chairs/$chairModel", x, 0f, z + CHAIR_FORWARD, 180f))
+        // Cubicle partition behind desk (to the left/west), rotated to face correct direction
+        out.add(Placement("Cubicles/Office_Cubicle_White_04", x - 1.0f, 0f, z, -90f))
+        // Desk — inside cubicle, slightly north of center
+        out.add(Placement("Tables/Office_Table_White_1x1_01", x - 0.8f, 0f, z - 0.7f))
+        // Chair — south of desk
+        out.add(Placement("Chairs/$chairModel", x - 0.8f, 0f, z + 0.4f, 180f))
         // PC on desk
-        out.add(Placement("Misc/Electronics/$pcModel", x + 0.3f, DESK_HEIGHT, z - 0.1f))
+        out.add(Placement("Misc/Electronics/$pcModel", x - 0.5f, DESK_HEIGHT, z - 0.8f))
     }
 
     private fun addEastDesk(
@@ -168,20 +168,20 @@ class VoxelOfficeLayout(private val catalog: VoxelAssetCatalog) {
         addWestDesk(out, COL1_WEST_X, ROW1_Z, "Office_Chair_Black_01", "Office_Misc_PC_01")
         addEastDesk(out, COL1_EAST_X, ROW1_Z, "Office_Chair_White_01", "Office_Misc_PC_02")
         // Wall art
-        out.add(Placement("Misc/Office_Misc_PictureFrame_01", COL1_WEST_X - 1.5f, 1.6f, ROW1_Z))
+        out.add(Placement("Misc/Office_Misc_PictureFrame_01", COL1_WEST_X - 2.1f, 2.8f, ROW1_Z))
 
         // Row 2 (wallY=155)
         addWestDesk(out, COL1_WEST_X, ROW2_Z, "Office_Chair_Black_01", "Office_Misc_PC_02")
         addEastDesk(out, COL1_EAST_X, ROW2_Z, "Office_Chair_Black_02", "Office_Misc_PC_01")
         // Wall art
-        out.add(Placement("Misc/Office_Misc_Wall_Corkboard_01", COL1_WEST_X - 1.5f, 1.4f, ROW2_Z))
+        out.add(Placement("Misc/Office_Misc_Wall_Corkboard_01", COL1_WEST_X - 2.1f, 1.6f, ROW2_Z))
 
         // Row 3 (wallY=185) - west desk + east desk (east is disabled in defaults but has cubicle)
         addWestDesk(out, COL1_WEST_X, ROW3_Z, "Office_Chair_Black_01", "Office_Misc_PC_01")
         // East side row 3: just partition wall, no desk (decorative, matches pixel office)
         out.add(Placement("Cubicles/Office_Cubicle_White_01", COL1_EAST_X + 1.0f, 0f, ROW3_Z, 180f))
         // Wall art
-        out.add(Placement("Misc/Office_Misc_PictureFrame_02", COL1_WEST_X - 1.5f, 1.6f, ROW3_Z))
+        out.add(Placement("Misc/Office_Misc_PictureFrame_02", COL1_WEST_X - 2.1f, 2.8f, ROW3_Z))
 
         // Desk items
         out.add(Placement("Misc/Office_Misc_Notebook", COL1_EAST_X - 0.3f, DESK_HEIGHT, ROW1_Z + 0.2f))
@@ -193,19 +193,19 @@ class VoxelOfficeLayout(private val catalog: VoxelAssetCatalog) {
         // Row 1 (wallY=125) — east = PM reserved
         addWestDesk(out, COL2_WEST_X, ROW1_Z, "Office_Chair_Black_01", "Office_Misc_PC_01")
         addEastDesk(out, COL2_EAST_X, ROW1_Z, "Office_Chair_White_01", "Office_Misc_PC_02")
-        out.add(Placement("Misc/Office_Misc_PictureFrame_01", COL2_WEST_X - 1.5f, 1.6f, ROW1_Z))
+        out.add(Placement("Misc/Office_Misc_PictureFrame_01", COL2_WEST_X - 2.1f, 2.8f, ROW1_Z))
 
         // Row 2 (wallY=155) — east = PO reserved
         addWestDesk(out, COL2_WEST_X, ROW2_Z, "Office_Chair_Black_01", "Office_Misc_PC_02")
         addEastDesk(out, COL2_EAST_X, ROW2_Z, "Office_Chair_Black_02", "Office_Misc_PC_01")
-        out.add(Placement("Misc/Office_Misc_Wall_Corkboard_02", COL2_EAST_X + 2.0f, 1.4f, ROW2_Z))
+        out.add(Placement("Misc/Office_Misc_Wall_Corkboard_02", COL2_EAST_X + 2.0f, 1.6f, ROW2_Z))
 
         // Row 3 (wallY=185) — LOUNGE AREA (matches pixel office: green couch, red trash, tree)
         out.add(Placement("Chairs/Office_Couch_Black_01", COL2_WEST_X, 0f, ROW3_Z, 0f))
         out.add(Placement("Misc/Trashcans/Office_Misc_Traschcan_Recycle_Red", COL2_EAST_X + 0.5f, 0f, ROW3_Z + 0.5f))
         out.add(Placement("Misc/Office_Misc_Plant_03", COL2_EAST_X + 2.0f, 0f, ROW3_Z))
         // Wall decor for lounge
-        out.add(Placement("Misc/Office_Misc_PictureFrame_02", COL2_WEST_X - 1.5f, 1.6f, ROW3_Z))
+        out.add(Placement("Misc/Office_Misc_PictureFrame_02", COL2_WEST_X - 2.1f, 2.8f, ROW3_Z))
 
         // Desk items
         out.add(Placement("Misc/Electronics/Office_Misc_Tablet", COL2_EAST_X + 0.3f, DESK_HEIGHT, ROW1_Z + 0.2f))
