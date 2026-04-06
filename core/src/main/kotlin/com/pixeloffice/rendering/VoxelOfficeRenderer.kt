@@ -77,7 +77,7 @@ class VoxelOfficeRenderer : Disposable {
         private const val AO_NONE = 1.0f      // no occlusion
         private const val AO_FADE = 3.0f      // units from wall edge where AO fades
 
-        private val FLOOR_COLOR = Color(0.93f, 0.93f, 0.94f, 1f)
+        private val FLOOR_COLOR = Color(0.90f, 0.90f, 0.91f, 1f)
         private val WALL_COLOR = Color(0.85f, 0.86f, 0.87f, 1f)
         private val BG_COLOR = Color(0.78f, 0.80f, 0.82f, 1f)
 
@@ -221,7 +221,7 @@ class VoxelOfficeRenderer : Disposable {
         // - Shadow light straight down for contact shadows
         // - Subtle front-fill (x=0 symmetric) for voxel face definition
         shadowLight = DirectionalShadowLight(4096, 4096, 40f, 40f, 1f, 60f)
-        shadowLight.set(0.25f, 0.25f, 0.24f, -0.05f, -1f, -0.05f)
+        shadowLight.set(0.25f, 0.25f, 0.24f, -0.1f, -1f, -0.08f)
 
         // Environment with shadow map
         environment = Environment()
@@ -236,7 +236,7 @@ class VoxelOfficeRenderer : Disposable {
         // Same lighting without shadow map for walls/cubicles
         noShadowEnv = Environment()
         noShadowEnv.set(ColorAttribute(ColorAttribute.AmbientLight, 0.65f, 0.65f, 0.67f, 1f))
-        noShadowEnv.add(DirectionalLight().set(0.25f, 0.25f, 0.24f, -0.05f, -1f, -0.05f))
+        noShadowEnv.add(DirectionalLight().set(0.25f, 0.25f, 0.24f, -0.1f, -1f, -0.08f))
         noShadowEnv.add(DirectionalLight().set(0.15f, 0.15f, 0.15f, 0f, -1f, 0f))
         noShadowEnv.add(DirectionalLight().set(0.12f, 0.12f, 0.12f, 0f, -0.5f, -0.87f))
 
@@ -409,8 +409,8 @@ class VoxelOfficeRenderer : Disposable {
         depthFbo!!.colorBufferTexture.bind(0)
         ssaoShader.setUniformi("u_depthTexture", 0)
         ssaoShader.setUniformf("u_screenSize", width.toFloat(), height.toFloat())
-        ssaoShader.setUniformf("u_radius", 0.4f)
-        ssaoShader.setUniformf("u_intensity", 0.25f)
+        ssaoShader.setUniformf("u_radius", 0.45f)
+        ssaoShader.setUniformf("u_intensity", 0.30f)
         ssaoShader.setUniformf("u_near", camera.near)
         ssaoShader.setUniformf("u_far", camera.far)
         ssaoQuad.render(ssaoShader, GL20.GL_TRIANGLES)
