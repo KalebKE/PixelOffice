@@ -19,10 +19,8 @@ import com.pixeloffice.parsing.ActivityType
 import com.pixeloffice.parsing.DetectedActivity
 import com.pixeloffice.parsing.Patterns
 import com.pixeloffice.parsing.StreamParser
-import com.pixeloffice.rendering.ConveyorRenderer
 import com.pixeloffice.rendering.GameCamera
 import com.pixeloffice.rendering.Renderer
-import com.pixeloffice.world.ConveyorPipeline
 import com.pixeloffice.ui.SettingsConfig
 import com.pixeloffice.ui.SettingsOverlay
 import com.pixeloffice.world.Office
@@ -81,8 +79,6 @@ class PixelOfficeGame : ApplicationAdapter() {
 
     // Rendering
     private lateinit var renderer: Renderer
-    private lateinit var conveyorRenderer: ConveyorRenderer
-    private val conveyorPipelines = mutableMapOf<String, ConveyorPipeline>()
     private lateinit var camera: GameCamera
 
     // Timing
@@ -147,8 +143,6 @@ class PixelOfficeGame : ApplicationAdapter() {
             ufoConfig = config.skyTraffic.ufo
         )
         renderer.initialize()
-        conveyorRenderer = ConveyorRenderer(config.display.width, 140)
-        conveyorRenderer.initialize()
         renderer.setWalkableZones(config.office.walkableZones)
         renderer.setLineNetwork(office.getLineNetwork().getAllLines())
 
@@ -551,11 +545,8 @@ class PixelOfficeGame : ApplicationAdapter() {
             // Multi-office grid rendering: draw each office at its grid offset
             val entries = grid.getOfficeRenderData()
             if (entries.isNotEmpty()) {
-                // Projection: office at top, factory strip at bottom
-                // Y-up: bottom = -factoryHeight, top = officeHeight
-                val factoryHeight = 140f
                 val gridMatrix = Matrix4().setToOrtho2D(
-                    0f, -factoryHeight,
+                    0f, 0f,
                     grid.worldWidth,
                     grid.worldHeight
                 )
@@ -565,24 +556,6 @@ class PixelOfficeGame : ApplicationAdapter() {
                 for (entry in entries) {
                     renderer.drawScene(entry.renderData, entry.offsetX, entry.offsetY, entry.projectId)
                 }
-
-                // Render 3D conveyor factories below each office
-                val windowWidth = Gdx.graphics.width
-                val windowHeight = Gdx.graphics.height
-                val officePixelWidth = (config.display.width.toFloat() / grid.worldWidth * windowWidth).toInt()
-                for ((index, entry) in entries.withIndex()) {
-                    val pipeline = conveyorPipelines.getOrPut(entry.projectId) { ConveyorPipeline() }
-                    pipeline.update(Gdx.graphics.deltaTime)
-                    val factoryScreenX = (entry.offsetX / grid.worldWidth * windowWidth).toInt()
-                    val factoryScreenY = 0 // bottom of window
-                    val factoryScreenHeight = (factoryHeight.toFloat() / grid.worldHeight.coerceAtLeast(config.display.height.toFloat()) * windowHeight).toInt()
-                    // Restore full viewport after 3D render
-                    conveyorRenderer.render(entry.projectId, pipeline, factoryScreenX, factoryScreenY, officePixelWidth, factoryScreenHeight)
-                }
-                // Clean up factories for removed projects
-                conveyorRenderer.retainFactories(entries.map { it.projectId }.toSet())
-                // Restore full viewport for overlays
-                Gdx.gl.glViewport(0, 0, windowWidth, windowHeight)
 
                 // Clear camera for overlays (render in screen space)
                 renderer.setCameraMatrix(null)
@@ -838,7 +811,6 @@ class PixelOfficeGame : ApplicationAdapter() {
 
         settingsOverlay.dispose()
         renderer.dispose()
-        conveyorRenderer.dispose()
         eventBus.clear()
         Gdx.app.log("PixelOffice", "Game disposed")
     }
