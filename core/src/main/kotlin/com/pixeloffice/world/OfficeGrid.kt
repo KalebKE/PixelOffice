@@ -53,9 +53,9 @@ class OfficeGrid(
             return count * officeWidth + (count - 1) * gutterX
         }
 
-    /** Office height + conveyor strip below */
+    /** Height of the 2D office row. */
     val worldHeight: Float
-        get() = officeHeight + 140f
+        get() = officeHeight
 
     fun syncWithSnapshots(snapshots: List<AoSessionSnapshot>) {
         Gdx.app?.log("OfficeGrid", "syncWithSnapshots: ${snapshots.size} snapshots")

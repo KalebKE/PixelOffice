@@ -870,15 +870,11 @@
     "enabled": true,
     "sample_events_file": "tests/fixtures/sample_events.json"
   },
-  "factory": {
-    "enabled": true
-  },
   "ao": {
     "enabled": false,
     "url": "http://localhost:3003",
     "grid_columns": 2
   },
-  "render_mode": "3d",
   "sky_traffic": {
     "enabled": true,
     "spawn_interval": 30.0,
