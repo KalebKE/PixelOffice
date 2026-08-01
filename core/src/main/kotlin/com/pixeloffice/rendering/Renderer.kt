@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g2d.TextureRegion
+import com.badlogic.gdx.graphics.glutils.HdpiUtils
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.math.Matrix4
 import com.pixeloffice.PixelOfficeGame
@@ -19,6 +20,7 @@ import com.pixeloffice.world.*
 import java.util.Calendar
 import kotlin.math.max
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -62,6 +64,16 @@ class Renderer(
     private val skyTrafficFrameCount: Int = 4,
     private val ufoConfig: UfoConfig = UfoConfig()
 ) {
+    private var screenWidth = width
+    private var screenHeight = height
+    private var viewportBounds = AspectFit.calculate(
+        screenWidth,
+        screenHeight,
+        width.toFloat(),
+        height.toFloat()
+    )
+    private var fixedSkyViewportBounds: FixedSkyViewportBounds? = null
+
     // libGDX rendering objects
     lateinit var batch: SpriteBatch
         private set
@@ -84,6 +96,68 @@ class Renderer(
         cameraMatrix = combined
     }
 
+    /**
+     * Fit the logical world inside the current window without stretching it.
+     * Any unused area becomes centered letterboxing or pillarboxing.
+     */
+    fun resize(screenWidth: Int, screenHeight: Int, worldWidth: Float, worldHeight: Float) {
+        this.screenWidth = screenWidth
+        this.screenHeight = screenHeight
+        fixedSkyViewportBounds = null
+        viewportBounds = AspectFit.calculate(screenWidth, screenHeight, worldWidth, worldHeight)
+    }
+
+    /** Fit the office grid beneath a sky that remains at its preferred pixel height. */
+    fun resizeGrid(
+        screenWidth: Int,
+        screenHeight: Int,
+        worldWidth: Float,
+        officeWorldHeight: Float
+    ) {
+        this.screenWidth = screenWidth
+        this.screenHeight = screenHeight
+        fixedSkyViewportBounds = FixedSkyViewport.calculate(
+            screenWidth,
+            screenHeight,
+            worldWidth,
+            officeWorldHeight
+        )
+        viewportBounds = fixedSkyViewportBounds?.composite
+            ?: AspectFit.calculate(screenWidth, screenHeight, worldWidth, officeWorldHeight)
+    }
+
+    /** Convert top-left-origin input coordinates into the fixed 320x240 UI space. */
+    fun screenToUi(screenX: Float, screenY: Float): Pair<Float, Float>? {
+        val viewport = viewportBounds
+        if (viewport.width <= 0 || viewport.height <= 0) return null
+
+        val viewportTop = screenHeight - viewport.y - viewport.height
+        if (screenX < viewport.x || screenX >= viewport.x + viewport.width ||
+            screenY < viewportTop || screenY >= viewportTop + viewport.height
+        ) {
+            return null
+        }
+
+        val uiX = (screenX - viewport.x) / viewport.width * width
+        val uiY = (screenY - viewportTop) / viewport.height * height
+        return uiX to uiY
+    }
+
+    private fun applyAspectFitViewport() {
+        val viewport = viewportBounds
+        HdpiUtils.glViewport(viewport.x, viewport.y, viewport.width, viewport.height)
+    }
+
+    fun applyOfficeViewport() {
+        val viewport = fixedSkyViewportBounds?.offices ?: viewportBounds
+        HdpiUtils.glViewport(viewport.x, viewport.y, viewport.width, viewport.height)
+    }
+
+    private fun applyCompositeViewport() {
+        val viewport = fixedSkyViewportBounds?.composite ?: viewportBounds
+        HdpiUtils.glViewport(viewport.x, viewport.y, viewport.width, viewport.height)
+    }
+
     // Animation time tracking
     private var time = 0f
 
@@ -93,15 +167,12 @@ class Renderer(
 
     private enum class LabelMode { OFF, CHARACTERS, DESKS, ROUTES, FURNITURE, POSITIONS }
     private var labelMode = LabelMode.OFF
-    private var connectedCount = 0
     private var developerCount = 0
     private var isDemoMode = false
     private var fps = 0
     private var walkableZones: List<WalkableZone> = emptyList()
     private var lineNetwork: List<NavLine> = emptyList()
     private var debugDevelopers: List<CharacterRenderInfo> = emptyList()
-    private var debugPM: CharacterRenderInfo? = null
-    private var debugPO: CharacterRenderInfo? = null
 
     // Furniture label recording for debug overlay
     private val furnitureLabels = mutableListOf<Triple<String, Float, Float>>()
@@ -114,12 +185,6 @@ class Renderer(
 
     // Animated lava lamp on SE corner table
     private lateinit var lavaLamp: LavaLamp
-
-    // Pet thought bubble state (bone for dog, fish for cat)
-    private var petBubbleTimer = 0f
-    private val petBubbleInterval = 60f  // Check every 60 seconds
-    private var dogBubbleTimer = 0f      // Countdown for dog bubble
-    private var catBubbleTimer = 0f      // Countdown for cat bubble
 
     // Procedural sky
     private lateinit var skyRenderer: SkyRenderer
@@ -426,6 +491,7 @@ class Renderer(
 
     // Data-driven desk columns
     private var deskColumns: List<DeskColumn> = emptyList()
+    private var accentPalette = OfficeAccentPalette.SUNSET
 
     // Animation constants
     companion object {
@@ -514,8 +580,8 @@ class Renderer(
         // Initialize procedural sky
         skyRenderer = SkyRenderer(width, height, skyTrafficInterval, skyTrafficEnabled, skyTrafficSprite, skyTrafficFrameCount, ufoConfig)
 
-        // Initialize lava lamp on SE corner table
-        lavaLamp = LavaLamp(195f, 225f)
+        // The lamp's horizontal position follows the per-project lounge column.
+        lavaLamp = LavaLamp(225f)
     }
 
     fun setCamera(camera: GameCamera) {
@@ -528,22 +594,16 @@ class Renderer(
         time += dt
         skyRenderer.update(dt)
         lavaLamp.update(dt)
-
-        // Pet bubble spawning (50% chance every 60s, random duration up to 10s)
-        petBubbleTimer += dt
-        if (petBubbleTimer >= petBubbleInterval) {
-            petBubbleTimer = 0f
-            if (kotlin.random.Random.nextFloat() < 0.5f) dogBubbleTimer = kotlin.random.Random.nextFloat() * 10f
-            if (kotlin.random.Random.nextFloat() < 0.5f) catBubbleTimer = kotlin.random.Random.nextFloat() * 10f
-        }
-        if (dogBubbleTimer > 0) dogBubbleTimer -= dt
-        if (catBubbleTimer > 0) catBubbleTimer -= dt
     }
 
     fun clear() {
         val c = skyRenderer.getCurrentTopColor()
+        // Clear the entire window, including any letterbox/pillarbox area, before
+        // constraining scene rendering to the aspect-fitted viewport.
+        HdpiUtils.glViewport(0, 0, screenWidth, screenHeight)
         Gdx.gl.glClearColor(c.r, c.g, c.b, c.a)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
+        applyAspectFitViewport()
     }
 
     /**
@@ -653,11 +713,45 @@ class Renderer(
         skyRenderer.setRenderWidth(width)
     }
 
+    /** Draw the shared sky in its fixed-height screen band using square pixels. */
+    fun drawFixedSky() {
+        val layout = fixedSkyViewportBounds
+        if (layout == null) {
+            drawSky()
+            return
+        }
+
+        val skyScale = layout.sky.height / OfficeLayout.SKY_HEIGHT
+        val logicalWidth = (layout.sky.width / skyScale).coerceAtLeast(1f)
+        val savedCameraMatrix = cameraMatrix
+
+        HdpiUtils.glViewport(
+            layout.sky.x,
+            layout.sky.y,
+            layout.sky.width,
+            layout.sky.height
+        )
+        cameraMatrix = Matrix4().setToOrtho2D(
+            0f,
+            height - OfficeLayout.SKY_HEIGHT,
+            logicalWidth,
+            OfficeLayout.SKY_HEIGHT
+        )
+        drawSky(logicalWidth.roundToInt())
+        cameraMatrix = savedCameraMatrix
+    }
+
     /**
      * Draw the office wall and fixtures (gray bar, wall tiles, windows, doors, clock, sign).
      * Called per-office inside drawOfficeScene().
      */
     private fun drawOfficeWall() {
+        drawOfficeWallSurface()
+        drawOfficeWallFixtures()
+    }
+
+    /** Draw the structural wall background and leave the SpriteBatch open. */
+    private fun drawOfficeWallSurface() {
         // Draw gray wall strip below clouds (6px high)
         // In Y-down: starts at y=38. In Y-up: starts at height-38-6
         val grayBarY = flipY(38f, 6)
@@ -672,7 +766,10 @@ class Renderer(
         // Draw wall tiles below the gray bar
         // In Y-down: wall starts at y=44. In Y-up we need to convert each row
         drawWall(44)
+    }
 
+    /** Draw project-specific wall fixtures; the SpriteBatch must already be open. */
+    private fun drawOfficeWallFixtures() {
         drawFurniture("window_with_note", 40f, 70f)
         drawFurniture("door", 120f, 75f, flipX = true)
         drawFurniture("door", 136f, 75f)
@@ -949,23 +1046,26 @@ class Renderer(
         batch.color = prevColor
     }
 
-    fun drawDog(worldX: Float, worldY: Float) {
-        val anim = spriteSheet.getAnimalAnimation("dog")
-        val frame = anim?.getFrameAtTime(time) ?: spriteSheet.getAnimalFrame("dog") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-        if (dogBubbleTimer > 0) {
-            drawThoughtBubble(worldX + 8f, worldY - 18f, 0, "bone", false)
-        }
-    }
-
-    fun drawCat(worldX: Float, worldY: Float) {
-        val anim = spriteSheet.getAnimalAnimation("cat")
-        val frame = anim?.getFrameAtTime(time) ?: spriteSheet.getAnimalFrame("cat") ?: return
-        val screenY = flipY(worldY, frame.height)
-        batch.draw(frame.region, worldX, screenY)
-        if (catBubbleTimer > 0) {
-            drawThoughtBubble(worldX + 8f, worldY - 18f, 0, "fish", false)
+    private fun drawPet(info: PetRenderInfo) {
+        val spriteName = info.type.name.lowercase()
+        val animation = spriteSheet.getAnimalAnimation(spriteName)
+        val frame = animation?.getFrameAtTime(time) ?: spriteSheet.getAnimalFrame(spriteName) ?: return
+        drawSprite(
+            info.x,
+            info.y,
+            frame,
+            flipX = info.facing == "left",
+            bobOffset = getBobOffset(info.entityId, info.moving)
+        )
+        if (info.showBubble) {
+            val bubbleType = if (info.type == PetType.DOG) "bone" else "fish"
+            drawThoughtBubble(
+                info.x + if (info.type == PetType.DOG) 8f else 4f,
+                info.y - 18f,
+                0,
+                bubbleType,
+                info.facing == "left"
+            )
         }
     }
 
@@ -1091,38 +1191,6 @@ class Renderer(
         drawSprite(worldX, worldY, frame, flipX, bobOffset)
     }
 
-    /**
-     * Draw PM or PO with sitting/standing posture support.
-     */
-    fun drawPMOrPO(
-        worldX: Float,
-        worldY: Float,
-        baseName: String,
-        animation: String,
-        facing: String,
-        entityId: String,
-        posture: String = "standing"
-    ) {
-        // Try to get sitting sprite first if posture is sitting
-        val spriteName = if (posture == "sitting") {
-            "${baseName}_sitting"
-        } else {
-            baseName
-        }
-
-        // Get sprite, fallback to standing if sitting not available
-        val sprite = spriteSheet.getSprite(spriteName) ?: spriteSheet.getSprite(baseName) ?: return
-
-        val anim = sprite.animations[animation] ?: sprite.animations["idle"] ?: return
-        val frame = anim.getFrameAtTime(time)
-
-        val flipX = facing == "left"
-        val isWalking = animation.startsWith("walking")
-        val bobOffset = getBobOffset(entityId, isWalking)
-
-        drawSprite(worldX, worldY, frame, flipX, bobOffset)
-    }
-
     private fun bubbleColor(base: Color) = Color(base.r, base.g, base.b, 0.25f)
 
     /**
@@ -1201,7 +1269,7 @@ class Renderer(
     }
 
     /**
-     * Draw speech bubble with "blah" lines (PM talking).
+     * Draw a speech bubble with "blah" lines for office chatter.
      */
     private fun drawBlahBubble(worldX: Float, worldY: Float, frameIndex: Int, facingLeft: Boolean = false) {
         endBatch()
@@ -1729,13 +1797,13 @@ class Renderer(
      * Draw night mode overlay with dim filter and monitor glows.
      * Called after the main scene batch ends, before UI overlay.
      */
-    private fun drawNightOverlay(renderData: RenderData) {
+    private fun drawNightOverlay(renderData: RenderData, overlayHeight: Float = height.toFloat()) {
         beginBatch()
 
         // Step 1: Dim overlay covering the full screen
         val savedColor = batch.color.cpy()
         batch.color = NIGHT_OVERLAY_COLOR
-        batch.draw(ledPixelRegion, 0f, 0f, width.toFloat(), height.toFloat())
+        batch.draw(ledPixelRegion, 0f, 0f, width.toFloat(), overlayHeight)
 
         // Step 2: Monitor glows with additive blending
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE)
@@ -1791,7 +1859,14 @@ class Renderer(
         batch.draw(glowRegion, lampHeadX - lampInnerW / 2f, lampScreenY - lampInnerH * 0.6f, lampInnerW, lampInnerH)
 
         // Lava lamp glow on SE corner table
-        lavaLamp.drawNightGlow(batch, glowRegion, ::flipY)
+        val zones = OfficeLayout.columnZones(renderData.deskColumns)
+        lavaLamp.drawNightGlow(
+            batch,
+            glowRegion,
+            ::flipY,
+            zones.loungeBaseX + 20f,
+            renderData.accentPalette
+        )
 
         // Step 3: Restore normal blending and color
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
@@ -1835,6 +1910,7 @@ class Renderer(
      */
     fun drawUIOverlay() {
         // Use a separate projection for UI (not affected by camera)
+        val savedBatchColor = batch.color.cpy()
         batch.projectionMatrix.setToOrtho2D(0f, 0f, width.toFloat(), height.toFloat())
         batch.begin()
 
@@ -1893,6 +1969,7 @@ class Renderer(
             font.draw(batch, "[F4] ${labelMode.name}", width - 120f, height - 18f)
         }
 
+        batch.color = savedBatchColor
         batch.end()
     }
 
@@ -1925,10 +2002,6 @@ class Renderer(
 
         endShapes()
         Gdx.gl.glDisable(GL20.GL_BLEND)
-    }
-
-    fun setConnectionCount(count: Int) {
-        connectedCount = count
     }
 
     fun setDemoMode(enabled: Boolean) {
@@ -2006,36 +2079,16 @@ class Renderer(
     }
 
     /**
-     * Draw a character (developer, PM, or PO) from typed render info.
+     * Draw a developer from typed render info.
      */
     fun drawCharacterInfo(info: CharacterRenderInfo) {
-        when (info.type) {
-            "developer" -> {
-                drawDeveloper(
-                    info.x, info.y,
-                    info.animation, info.facing, info.variant,
-                    info.entityId, info.posture
-                )
-                if (info.state == "writing_code" && info.posture == "sitting") {
-                    drawMonitorFaceGlow(info)
-                }
-            }
-            "project_manager" -> {
-                drawPMOrPO(
-                    info.x, info.y,
-                    "project_manager",
-                    info.animation, info.facing,
-                    info.entityId, info.posture
-                )
-            }
-            "product_owner" -> {
-                drawPMOrPO(
-                    info.x, info.y,
-                    "product_owner",
-                    info.animation, info.facing,
-                    info.entityId, info.posture
-                )
-            }
+        drawDeveloper(
+            info.x, info.y,
+            info.animation, info.facing, info.variant,
+            info.entityId, info.posture
+        )
+        if (info.state == "writing_code" && info.posture == "sitting") {
+            drawMonitorFaceGlow(info)
         }
         deferredEffects.addAll(info.children)
     }
@@ -2064,11 +2117,12 @@ class Renderer(
      */
     private fun drawChairByColor(color: ChairColor, x: Float, y: Float, facingRight: Boolean) {
         val spriteName = when (color) {
-            ChairColor.BLACK -> if (facingRight) "chair_white" else "chair_black"
-            ChairColor.WHITE -> if (facingRight) "chair_white" else "chair_black"
-            ChairColor.BLUE -> if (facingRight) "chair_blue" else "chair_black"
-            ChairColor.GREEN -> if (facingRight) "chair_blue" else "chair_green"
-            ChairColor.ORANGE -> if (facingRight) "chair_white" else "chair_orange"
+            ChairColor.BLACK -> "chair_black"
+            ChairColor.WHITE -> "chair_white"
+            ChairColor.BLUE -> "chair_blue"
+            ChairColor.GREEN -> "chair_green"
+            ChairColor.YELLOW -> "chair_yellow"
+            ChairColor.ORANGE -> "chair_orange"
         }
         drawFurniture(spriteName, x, y, flipX = facingRight)
     }
@@ -2133,26 +2187,28 @@ class Renderer(
             drawChairByColor(config.chairColor, baseX + chairOffset, wallY + 7f, facingRight = true)
 
             drawFurniture("desk_right", baseX + 40f, wallY + 11f)
-            drawEquipment(config.equipment, baseX + 41f, wallY + 7f, facingRight = true)
-
-            var itemOffsetY = 12f
-            for (item in config.deskItems) {
-                drawDeskItem(item, baseX + 42f, wallY + itemOffsetY)
-                itemOffsetY += 10f
+            if (config.equipment == Equipment.NONE) {
+                var itemOffsetY = 12f
+                for (item in config.deskItems) {
+                    drawDeskItem(item, baseX + 42f, wallY + itemOffsetY)
+                    itemOffsetY += 10f
+                }
             }
+            drawEquipment(config.equipment, baseX + 41f, wallY + 7f, facingRight = true)
         } else {
             // West desk: chair faces left (drawn before desk for layering)
             val chairOffset = if (occupiedDesks.contains(deskId)) WEST_CHAIR_PUSHED_BACK else WEST_CHAIR_PUSHED_IN
             drawChairByColor(config.chairColor, baseX + chairOffset, wallY + 7f, facingRight = false)
 
             drawFurniture("desk_left", baseX + 19f, wallY + 11f)
-            drawEquipment(config.equipment, baseX + 20f, wallY + 7f, facingRight = false)
-
-            var itemOffsetY = 12f
-            for (item in config.deskItems) {
-                drawDeskItem(item, baseX + 20f, wallY + itemOffsetY)
-                itemOffsetY += 10f
+            if (config.equipment == Equipment.NONE) {
+                var itemOffsetY = 12f
+                for (item in config.deskItems) {
+                    drawDeskItem(item, baseX + 20f, wallY + itemOffsetY)
+                    itemOffsetY += 10f
+                }
             }
+            drawEquipment(config.equipment, baseX + 20f, wallY + 7f, facingRight = false)
         }
     }
 
@@ -2166,7 +2222,10 @@ class Renderer(
 
         // Draw wall decor for west desk (positioned at standard offset)
         row.westDesk?.let {
-            drawWallDecorItem(it.wallDecor, baseX + 9f, wallY + 5f)
+            drawWallDecorItem(it.wallDecor, baseX + 7f, wallY + 5f)
+        }
+        row.eastDesk?.let {
+            drawWallDecorItem(it.wallDecor, baseX + 55f, wallY + 5f)
         }
 
         // Draw partition between desks
@@ -2197,90 +2256,13 @@ class Renderer(
     // These draw all furniture for each row EXCEPT the wall
 
     /**
-     * Draws furniture for desk row 1 (Y=125) - desks, chairs, monitors, decorations.
-     */
-    private fun drawDeskFurniture1(baseX: Float) {
-        val wallY = 125f
-        val isLeftColumn = baseX == LEFT_COLUMN_X
-        val westDesk = if (isLeftColumn) "desk_1" else "desk_3"
-        val eastDesk = if (isLeftColumn) "desk_2" else "desk_4"
-
-        // Draw notice for left column only (y=131 is between row 1 and row 2)
-        if (isLeftColumn) {
-            drawFurniture("notice", LEFT_COLUMN_X + 60f, 131f)
-        }
-        drawFurniture("small_art_orange", baseX + 9f, wallY + 5f)
-        drawFurniture("desk_partition", baseX + 36f, wallY + 3f)
-
-        // West chair BEFORE left desk (so desk covers chair)
-        val westOffset = if (occupiedDesks.contains(westDesk)) WEST_CHAIR_PUSHED_BACK else WEST_CHAIR_PUSHED_IN
-        drawFurniture("chair_black", baseX + westOffset, wallY + 7f)
-
-        drawFurniture("desk_left", baseX + 19f, wallY + 11f)
-        drawFurniture("monitor", baseX + 20f, wallY + 7f)
-
-        // East chair BEFORE right desk (so desk covers chair)
-        val eastOffset = if (occupiedDesks.contains(eastDesk)) EAST_CHAIR_PUSHED_BACK else EAST_CHAIR_PUSHED_IN
-        drawFurniture("chair_white", baseX + eastOffset, wallY + 7f, flipX = true)
-
-        drawFurniture("desk_right", baseX + 40f, wallY + 11f)
-        drawFurniture("computer", baseX + 41f, wallY + 7f, flipX = true)
-    }
-
-    /**
-     * Draws furniture for desk row 2 (Y=155) - desks, chairs, monitors, decorations.
-     */
-    private fun drawDeskFurniture2(baseX: Float, isLeftColumn: Boolean = true) {
-        val wallY = 155f
-        val westDesk = if (isLeftColumn) "desk_5" else "desk_7"
-        val eastDesk = if (isLeftColumn) "desk_6" else "desk_8"
-
-        if (!isLeftColumn) {
-            drawFurniture("post_it_notes", baseX + 70f, wallY + 5f)
-        }
-        drawFurniture("art", baseX + 7f, wallY + 5f)
-        drawFurniture("desk_partition", baseX + 36f, wallY + 3f)
-
-        val westOffset = if (occupiedDesks.contains(westDesk)) WEST_CHAIR_PUSHED_BACK else WEST_CHAIR_PUSHED_IN
-        drawFurniture("chair_green", baseX + westOffset, wallY + 7f)
-
-        drawFurniture("desk_left", baseX + 19f, wallY + 11f)
-        drawFurniture("computer", baseX + 20f, wallY + 7f)
-
-        val eastOffset = if (occupiedDesks.contains(eastDesk)) EAST_CHAIR_PUSHED_BACK else EAST_CHAIR_PUSHED_IN
-        drawFurniture("chair_blue", baseX + eastOffset, wallY + 7f, flipX = true)
-
-        drawFurniture("desk_right", baseX + 40f, wallY + 11f)
-        drawFurniture("monitor", baseX + 41f, wallY + 7f, flipX = true)
-    }
-
-    /**
-     * Draws furniture for desk row 3 (Y=185) in the LEFT column - desks, chairs, etc.
-     */
-    private fun drawDeskFurniture3Left(baseX: Float) {
-        val wallY = 185f
-        drawFurniture("small_art_blue", baseX + 9f, wallY + 5f)
-        drawFurniture("desk_partition", baseX + 36f, wallY + 3f)
-
-        val westOffset = if (occupiedDesks.contains("desk_9")) WEST_CHAIR_PUSHED_BACK else WEST_CHAIR_PUSHED_IN
-        drawFurniture("chair_orange", baseX + westOffset, wallY + 7f)
-
-        drawFurniture("desk_left", baseX + 19f, wallY + 11f)
-        drawFurniture("monitor", baseX + 20f, wallY + 7f)
-
-        drawFurniture("desk_right", baseX + 40f, wallY + 11f)
-        drawFurniture("red_book", baseX + 42f, wallY + 12f)
-        drawFurniture("notes", baseX + 42f, wallY + 22f)
-    }
-
-    /**
      * Draws furniture for desk row 3 (Y=185) in the RIGHT column - lounge area.
      */
-    private fun drawDeskFurniture3Right(baseX: Float) {
+    private fun drawLoungeFurniture(baseX: Float) {
         val wallY = 185f
         drawFurniture("small_art_blue", baseX + 9f, wallY + 5f)
-        drawFurniture("couch_green", baseX + 22f, wallY + 10f)
-        drawFurniture("red_trash_can", baseX + 56f, wallY + 10f)
+        drawFurniture(accentPalette.couchSprite, baseX + 22f, wallY + 10f)
+        drawFurniture(accentPalette.trashCanSprite, baseX + 56f, wallY + 10f)
         drawFurniture("tree", baseX + 66f, wallY + 5f)
     }
 
@@ -2288,71 +2270,31 @@ class Renderer(
 
     /**
      * Draws desk furniture for a specific wall Y position.
-     * Uses DeskColumn data if available, falls back to legacy hardcoded methods.
+     * Uses the generated DeskColumn data as the authoritative desk appearance.
      */
     private fun drawDeskFurnitureForRow(wallY: Float) {
-        if (deskColumns.isNotEmpty()) {
-            // Data-driven rendering from desk columns
-            for (column in deskColumns) {
-                for ((rowIndex, row) in column.rows.withIndex()) {
-                    if (row.wallY == wallY) {
-                        drawRowFromConfig(column, row, rowIndex)
-                    }
+        for (column in deskColumns) {
+            for ((rowIndex, row) in column.rows.withIndex()) {
+                if (row.wallY == wallY) {
+                    drawRowFromConfig(column, row, rowIndex)
                 }
+            }
+        }
+
+        // These are structural lounge surfaces rather than assignable desks.
+        if (wallY == 185f) {
+            val zones = OfficeLayout.columnZones(deskColumns)
+            val loungeColumn = deskColumns.find { it.baseX == zones.loungeBaseX }
+            if (loungeColumn?.rows?.none { it.wallY == 185f } != false) {
+                drawLoungeFurniture(zones.loungeBaseX)
             }
 
-            // Right column row 3 lounge area stays hardcoded (not a desk row)
-            if (wallY == 185f) {
-                val rightColumn = deskColumns.find { it.baseX == RIGHT_COLUMN_X }
-                val hasRow3 = rightColumn?.rows?.any { it.wallY == 185f } ?: false
-                if (!hasRow3) {
-                    drawDeskFurniture3Right(RIGHT_COLUMN_X)
-                }
-
-                // Left column row 3: standalone east desk surface + items (no chair)
-                val leftColumn = deskColumns.find { it.baseX == LEFT_COLUMN_X }
-                val leftRow3 = leftColumn?.rows?.find { it.wallY == 185f }
-                if (leftRow3 != null && leftRow3.eastDesk == null) {
-                    val baseX = LEFT_COLUMN_X
-                    drawFurniture("desk_right", baseX + 40f, 185f + 11f)
-                    drawFurniture("red_book", baseX + 42f, 185f + 12f)
-                    drawFurniture("notes", baseX + 42f, 185f + 22f)
-                }
-            }
-
-            // Extra decorations that were part of legacy rows
-            if (wallY == 125f) {
-                drawFurniture("notice", LEFT_COLUMN_X + 60f, 131f)
-            }
-            if (wallY == 155f) {
-                val rightColumn = deskColumns.find { it.baseX == RIGHT_COLUMN_X }
-                val hasRow2 = rightColumn?.rows?.any { it.wallY == 155f } ?: false
-                if (hasRow2) {
-                    drawFurniture("post_it_notes", RIGHT_COLUMN_X + 70f, 160f)
-                }
-                drawFurniture("small_art_blue", 110f, 160f)
-            }
-            if (wallY == 185f) {
-                drawFurniture("small_calendar", 110f, 190f)
-            }
-        } else {
-            // Legacy fallback: hardcoded furniture rendering
-            when (wallY) {
-                125f -> {
-                    drawDeskFurniture1(LEFT_COLUMN_X)
-                    drawDeskFurniture1(RIGHT_COLUMN_X)
-                }
-                155f -> {
-                    drawDeskFurniture2(LEFT_COLUMN_X, isLeftColumn = true)
-                    drawDeskFurniture2(RIGHT_COLUMN_X, isLeftColumn = false)
-                }
-                185f -> {
-                    drawDeskFurniture3Left(LEFT_COLUMN_X)
-                    drawDeskFurniture3Right(RIGHT_COLUMN_X)
-                }
-                215f -> {
-                    // Row 4 has no furniture, just the wall (left column only)
-                }
+            val deskColumn = deskColumns.find { it.baseX == zones.deskBaseX }
+            val deskRow3 = deskColumn?.rows?.find { it.wallY == 185f }
+            if (deskRow3 != null && deskRow3.eastDesk == null) {
+                drawFurniture("desk_right", zones.deskBaseX + 40f, 196f)
+                drawFurniture("red_book", zones.deskBaseX + 42f, 197f)
+                drawFurniture("notes", zones.deskBaseX + 42f, 207f)
             }
         }
     }
@@ -2376,24 +2318,39 @@ class Renderer(
                 drawDeskWall3(RIGHT_COLUMN_X)
             }
             215f -> {
-                // Only left column has row 4
-                drawDeskWall4(LEFT_COLUMN_X)
+                drawDeskWall4(OfficeLayout.columnZones(deskColumns).deskBaseX)
             }
         }
     }
 
-    /**
-     * Collect all characters from render data and sort by Y position.
-     * Returns a list of visible characters sorted by Y (lower Y = behind).
-     */
-    private fun collectAndSortEntities(renderData: RenderData): List<CharacterRenderInfo> {
-        val entities = mutableListOf<CharacterRenderInfo>()
-        entities.addAll(renderData.developers)
-        renderData.projectManager?.let { entities.add(it) }
-        renderData.productOwner?.let { entities.add(it) }
-        return entities
-            .filter { it.visible }
-            .sortedBy { it.y }
+    private sealed class SceneActor {
+        abstract val entityId: String
+        abstract val y: Float
+
+        data class Character(val info: CharacterRenderInfo) : SceneActor() {
+            override val entityId: String get() = info.entityId
+            override val y: Float get() = info.y
+        }
+
+        data class Pet(val info: PetRenderInfo) : SceneActor() {
+            override val entityId: String get() = info.entityId
+            override val y: Float get() = info.y
+        }
+    }
+
+    /** Collect visible developers and pets in shared floor-depth order. */
+    private fun collectAndSortEntities(renderData: RenderData): List<SceneActor> {
+        return (
+            renderData.developers.filter { it.visible }.map { SceneActor.Character(it) } +
+                renderData.pets.filter { it.visible }.map { SceneActor.Pet(it) }
+            ).sortedBy { it.y }
+    }
+
+    private fun drawSceneActor(actor: SceneActor) {
+        when (actor) {
+            is SceneActor.Character -> drawCharacterInfo(actor.info)
+            is SceneActor.Pet -> drawPet(actor.info)
+        }
     }
 
     /**
@@ -2404,7 +2361,7 @@ class Renderer(
     fun drawScene(renderData: RenderData) {
         developerCount = renderData.developers.size
         drawSky()
-        drawOfficeScene(renderData)
+        drawOfficeScene(renderData, height.toFloat())
 
         // Draw debug overlays
         drawWalkableZones()
@@ -2444,11 +2401,43 @@ class Renderer(
         val savedDevCount = developerCount
         if (projectLabel != null) companyName = projectLabel
         developerCount = renderData.developers.size
-        drawOfficeScene(renderData)
+        drawOfficeScene(renderData, OfficeLayout.contentHeight(height.toFloat()))
         companyName = savedName
         developerCount = savedDevCount
 
         // Restore transform matrices
+        batch.transformMatrix = savedBatchTransform
+        shapeRenderer.transformMatrix = savedShapeTransform
+    }
+
+    /** Draw wall and floor only for an unused slot in a partial lower row. */
+    fun drawEmptyOfficeCell(offsetX: Float, offsetY: Float) {
+        val savedBatchTransform = batch.transformMatrix.cpy()
+        val savedShapeTransform = shapeRenderer.transformMatrix.cpy()
+        val translation = Matrix4().idt().translate(offsetX, -offsetY, 0f)
+        batch.transformMatrix = translation
+        shapeRenderer.transformMatrix = translation
+
+        batch.color = Color.WHITE
+        drawOfficeWallSurface()
+        drawFloor()
+        endBatch()
+
+        if (nightMode) {
+            beginBatch()
+            val savedColor = batch.color.cpy()
+            batch.color = NIGHT_OVERLAY_COLOR
+            batch.draw(
+                ledPixelRegion,
+                0f,
+                0f,
+                width.toFloat(),
+                OfficeLayout.contentHeight(height.toFloat())
+            )
+            batch.color = savedColor
+            endBatch()
+        }
+
         batch.transformMatrix = savedBatchTransform
         shapeRenderer.transformMatrix = savedShapeTransform
     }
@@ -2458,9 +2447,11 @@ class Renderer(
      * Separated from drawScene so it is not repeated per-office in grid mode.
      */
     fun drawOverlays() {
+        applyOfficeViewport()
         drawWalkableZones()
         drawLineNetwork()
         drawDebugLabels()
+        applyCompositeViewport()
         drawUIOverlay()
     }
 
@@ -2468,19 +2459,23 @@ class Renderer(
      * Core per-office rendering: background, furniture, characters, effects, night overlay.
      * Does NOT include debug overlays or UI — those are drawn once per frame by the caller.
      */
-    private fun drawOfficeScene(renderData: RenderData) {
+    private fun drawOfficeScene(renderData: RenderData, nightOverlayHeight: Float) {
         furnitureLabels.clear()
+
+        // Every office starts from the same neutral SpriteBatch tint. Previously
+        // the first project inherited the UI's palette-white tint while later
+        // projects inherited libGDX white from the lava lamp renderer.
+        batch.color = Color.WHITE
 
         // Store character data for debug overlay / labels
         debugDevelopers = renderData.developers
-        debugPM = renderData.projectManager
-        debugPO = renderData.productOwner
 
         // Extract occupied desks from render data
         occupiedDesks = renderData.desks.filter { it.occupied }.map { it.id }.toSet()
 
         // Extract desk columns for data-driven rendering
         deskColumns = renderData.deskColumns
+        accentPalette = renderData.accentPalette
 
         // Draw wall (sky is drawn separately before the office loop)
         drawOfficeWall()
@@ -2499,14 +2494,20 @@ class Renderer(
         drawFurniture("tree", 162f, 90f)
         drawFurniture("whiteboard", 180f, 83f)
         drawFurniture("whiteboard", 205f, 83f)
-        drawFurniture("couch_orange", 225f, 95f)
-        drawFurniture("blue_trash_can", 260f, 95f)
+        drawFurniture(accentPalette.couchSprite, 225f, 95f)
+        drawFurniture(accentPalette.trashCanSprite, 260f, 95f)
         drawFurniture("bookshelf", 290f, 80f)
         drawFloorLamp(283f, 82f)
 
         // Collect and sort all entities once
         val entities = collectAndSortEntities(renderData)
         val drawnEntities = mutableSetOf<String>()
+        val underChairDogsByRow = renderData.pets
+            .filter { it.visible }
+            .mapNotNull { pet ->
+                OfficeLayout.underChairRow(pet, renderData.desks)?.let { rowY -> rowY to pet }
+            }
+            .groupBy({ it.first }, { it.second })
 
         // Interleaved rendering: for each desk wall Y level, draw characters
         // that should appear BEHIND that wall, then the wall, then furniture
@@ -2514,13 +2515,23 @@ class Renderer(
             // Draw characters with y <= wallY (these appear behind this wall)
             for (entity in entities) {
                 if (entity.y <= wallY && entity.entityId !in drawnEntities) {
-                    drawCharacterInfo(entity)
+                    drawSceneActor(entity)
                     drawnEntities.add(entity.entityId)
                 }
             }
 
             // Draw desk walls at this Y level for both columns
             drawDeskWallsForRow(wallY)
+
+            // A dog resting at this row belongs behind the chair. Draw it
+            // after the cubicle wall but before the row's furniture so only
+            // the nose peeks into a pulled-back occupied chair.
+            for (dog in underChairDogsByRow[wallY].orEmpty()) {
+                if (dog.entityId !in drawnEntities) {
+                    drawPet(dog)
+                    drawnEntities.add(dog.entityId)
+                }
+            }
 
             // Draw desk furniture for this row (desks, chairs, monitors)
             drawDeskFurnitureForRow(wallY)
@@ -2529,19 +2540,24 @@ class Renderer(
         // Draw remaining characters (in front of all walls - Y > 215)
         for (entity in entities) {
             if (entity.entityId !in drawnEntities) {
-                drawCharacterInfo(entity)
+                drawSceneActor(entity)
             }
         }
 
         // Additional decorations not part of desk columns
-        drawDog(105f, 200f)
-        drawCat(165f, 190f)
-        drawFurniture("tree", 76f, 218f)
+        val zones = OfficeLayout.columnZones(deskColumns)
+        drawFurniture("tree", zones.deskBaseX + 31f, 218f)
 
-        drawFurniture("large_table", 193f, 220f)
-        drawFurniture("printer", 215f, 221f)
-        drawFurniture("document", 205f, 222f)
-        lavaLamp.draw(batch, ledPixelRegion, ::flipY)
+        drawFurniture("large_table", zones.loungeBaseX + 18f, 220f)
+        drawFurniture("printer", zones.loungeBaseX + 40f, 221f)
+        drawFurniture("document", zones.loungeBaseX + 30f, 222f)
+        lavaLamp.draw(
+            batch,
+            ledPixelRegion,
+            ::flipY,
+            zones.loungeBaseX + 20f,
+            accentPalette
+        )
 
         drawFurniture("tree", 305f, 123f)
         drawFurniture("tree", 305f, 153f)
@@ -2550,7 +2566,7 @@ class Renderer(
         endBatch()
 
         // Night mode overlay (dim + monitor glows)
-        if (nightMode) drawNightOverlay(renderData)
+        if (nightMode) drawNightOverlay(renderData, nightOverlayHeight)
 
         // Draw effects on top of everything (including night overlay sign)
         beginBatch()
@@ -2640,12 +2656,6 @@ class Renderer(
                     }
                     drawLabel(dev.entityId, dev.x, dev.y - 10f, color)
                 }
-                debugPM?.let {
-                    if (it.visible) drawLabel(it.entityId, it.x, it.y - 10f, Colors.GREEN)
-                }
-                debugPO?.let {
-                    if (it.visible) drawLabel(it.entityId, it.x, it.y - 10f, Colors.GREEN)
-                }
             }
             LabelMode.DESKS -> {
                 for (column in deskColumns) {
@@ -2688,8 +2698,6 @@ class Renderer(
             LabelMode.POSITIONS -> {
                 val allChars = mutableListOf<CharacterRenderInfo>()
                 allChars.addAll(debugDevelopers.filter { it.visible })
-                debugPM?.let { if (it.visible) allChars.add(it) }
-                debugPO?.let { if (it.visible) allChars.add(it) }
 
                 endBatch()
 

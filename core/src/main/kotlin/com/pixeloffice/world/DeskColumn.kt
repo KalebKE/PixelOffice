@@ -17,6 +17,7 @@ enum class ChairColor {
     WHITE,
     BLUE,
     GREEN,
+    YELLOW,
     ORANGE
 }
 

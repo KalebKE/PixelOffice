@@ -18,7 +18,7 @@ interface Pathfinder {
 
     /**
      * Get the midpoint position for a desk (between aisle and desk).
-     * Used by PM/PO to stop at the midpoint when visiting desks they don't own.
+     * Used by developers to leave and approach desks through the aisle.
      */
     fun getDeskMidpoint(deskId: String): Pair<Float, Float>? = null
 }

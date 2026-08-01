@@ -77,6 +77,40 @@ The config specifies the first frame's position, and the system calculates subse
 
 The configuration file defines all sprite coordinates, animation settings, and game parameters.
 
+### Generated Office Appearance
+
+Assignable desks are furnished deterministically from the event project ID.
+Each nine-desk office keeps a balanced mix of five computers and four monitors,
+uses every available chair color, and distributes wall art with some empty
+spaces. Working desktops do not also receive loose books or mugs; those items
+are reserved for equipment-free surfaces. This is generated at runtime, so a
+project keeps the same appearance across restarts without a persisted layout
+file.
+
+Each project also receives a coordinated accent palette. Sunset, Forest,
+Ocean, and Slate select the couch sprite, trash-can sprite, lava-lamp base,
+animated lava, and nighttime glow together. Both lounge areas within an office
+use the same palette.
+
+The taller three-row desk block and shorter two-row lounge block can exchange
+physical sides per project. This orientation is independently seeded, so it
+does not reshuffle desk furnishings or accent colors. The fourth-row wall and
+tree stay with the desk block; the lower printer table and lava lamp stay with
+the lounge block.
+
+The cat and dog are office entities rather than fixed renderer decorations.
+They start at distinct, project-specific desk or lounge anchors and use the
+office navigation graph when roaming. Their timing can be configured with:
+
+```json
+"pets": {
+  "enabled": true,
+  "roam_min_seconds": 60.0,
+  "roam_max_seconds": 120.0,
+  "walk_speed": 20.0
+}
+```
+
 ### Sprite Sheet Section
 
 ```json
@@ -93,11 +127,10 @@ The configuration file defines all sprite coordinates, animation settings, and g
     "developer_variants": {
       "blue": "blue_shirt",
       "green": "glasses",
-      "red": "cool_hair"
+      "red": "cool_hair",
+      "red_hair": "red_hair",
+      "dark_hair": "dark_hair"
     },
-
-    "project_manager": "red_hair",
-    "product_owner": "dark_hair",
 
     "animals": {
       "cat": {"x": 65, "y": 129, "w": 16, "h": 13, "frames": 2, "frame_duration": 0.3},
@@ -161,7 +194,7 @@ The configuration file defines all sprite coordinates, animation settings, and g
     "width": 320,
     "height": 240,
     "fps": 30,
-    "title": "Pixel Office - Claude Code Visualization"
+    "title": "Pixel Office - Agent Visualization"
   }
 }
 ```
@@ -240,7 +273,7 @@ data class SpriteDefinition(
 )
 
 // Main sprite sheet manager
-class SpriteSheet(config: SpriteSheetConfig) {
+class SpriteSheet(config: SpriteSheetConfig, developerVariants: List<String>) {
     fun setTexture(texture: Texture)
     fun initialize()
 
@@ -256,7 +289,7 @@ class SpriteSheet(config: SpriteSheetConfig) {
 
 **Usage:**
 ```kotlin
-val spriteSheet = SpriteSheet(config.spriteSheet)
+val spriteSheet = SpriteSheet(config.spriteSheet, config.sprites.colorVariants)
 spriteSheet.setTexture(texture)
 spriteSheet.initialize()
 

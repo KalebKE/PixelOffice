@@ -24,7 +24,8 @@ class Developer(
     val agentId: String = "",
     colorVariant: Int = 0,
     private val walkSpeed: Float = 40f,
-    despairDuration: Float = 2f
+    despairDuration: Float = 2f,
+    interruptDuration: Float = 3f
 ) : BaseEntity(x, y, entityId) {
 
     init {
@@ -41,16 +42,19 @@ class Developer(
     // Walk target
     private var walkTarget: Pair<Float, Float>? = null
     private var reachedTarget = false
+    private var movementPaused = false
 
     // Waypoint-based pathfinding
     private var waypointPath: MutableList<Pair<Float, Float>> = mutableListOf()
     private var currentWaypointIndex = 0
     private var pathfinder: Pathfinder? = null
+    private var deskArrivalState = DeveloperStateNames.WRITING_CODE
 
     // State machine
     private val stateMachine = DeveloperStateMachine(
         this,
-        despairDuration = despairDuration
+        despairDuration = despairDuration,
+        interruptDuration = interruptDuration
     )
 
     // Child entities
@@ -76,7 +80,7 @@ class Developer(
         stateMachine.update(dt)
 
         // Handle waypoint-based walking
-        if (waypointPath.isNotEmpty() && currentWaypointIndex < waypointPath.size) {
+        if (!movementPaused && waypointPath.isNotEmpty() && currentWaypointIndex < waypointPath.size) {
             val (targetX, targetY) = waypointPath[currentWaypointIndex]
             val reached = moveTowards(targetX, targetY, walkSpeed, dt)
             if (reached) {
@@ -88,7 +92,7 @@ class Developer(
                     currentWaypointIndex = 0
                 }
             }
-        } else {
+        } else if (!movementPaused) {
             // Handle legacy single-target walking
             walkTarget?.let { (targetX, targetY) ->
                 val reached = moveTowards(targetX, targetY, walkSpeed, dt)
@@ -99,14 +103,20 @@ class Developer(
             }
         }
 
-        // Update thought bubble position if visible, relative to chair when sitting
-        // Tail points toward desk center: west (face right) → tail right, east (face left) → tail left
+        // Update thought bubble relative to the chair while sitting and to the
+        // character while walking or socializing away from their own desk.
         if (thoughtBubble != null && showBubble) {
-            val isWestSide = deskFacingDirection == "right"
-            thoughtBubble?.facingLeft = isWestSide
-            val renderX = chairPosition?.first ?: x
-            val bubbleX = if (isWestSide) renderX - 16f else renderX + 16f
-            thoughtBubble?.attachTo(bubbleX, y - 26)
+            // Unstarted entities are used by sprite-position tests and retain
+            // the historical chair-relative behavior. Live patrollers have an
+            // active state and anchor bubbles to their current position.
+            val sitting = shouldUseSittingPosture() ||
+                (stateMachine.currentStateName == null && chairPosition != null)
+            val anchorX = if (sitting) chairPosition?.first ?: x else x
+            val anchorY = if (sitting) chairPosition?.second ?: y else y
+            val facesRight = if (sitting) deskFacingDirection == "right" else facingDirection == "right"
+            thoughtBubble?.facingLeft = facesRight
+            val bubbleX = if (facesRight) anchorX - 16f else anchorX + 16f
+            thoughtBubble?.attachTo(bubbleX, anchorY - 26f)
             thoughtBubble?.update(dt)
         }
 
@@ -128,21 +138,7 @@ class Developer(
     }
 
     override fun getRenderInfo(): Map<String, Any> {
-        val shouldSit = if (PixelOfficeGame.forceSittingMode && spriteVariant == 1) {
-            // Force sitting for green variant when debug mode is on
-            true
-        } else {
-            // Normal logic: sit when at desk and in appropriate state
-            isAtDesk() &&
-            (stateMachine.currentStateName == DeveloperStateNames.IDLE ||
-             stateMachine.currentStateName == DeveloperStateNames.THINKING ||
-             stateMachine.currentStateName == DeveloperStateNames.WRITING_CODE ||
-             stateMachine.currentStateName == DeveloperStateNames.BEING_INTERRUPTED ||
-             stateMachine.currentStateName == DeveloperStateNames.TESTS_FAILING ||
-             stateMachine.currentStateName == DeveloperStateNames.RESEARCHING ||
-             stateMachine.currentStateName == DeveloperStateNames.RUNNING_COMMAND ||
-             stateMachine.currentStateName == DeveloperStateNames.CELEBRATING)
-        }
+        val shouldSit = shouldUseSittingPosture()
         val posture = if (shouldSit) "sitting" else "standing"
 
         val renderX = if (posture == "sitting") chairPosition?.first ?: x else x
@@ -182,19 +178,7 @@ class Developer(
     }
 
     fun getTypedRenderInfo(): CharacterRenderInfo {
-        val shouldSit = if (PixelOfficeGame.forceSittingMode && spriteVariant == 1) {
-            true
-        } else {
-            isAtDesk() &&
-            (stateMachine.currentStateName == DeveloperStateNames.IDLE ||
-             stateMachine.currentStateName == DeveloperStateNames.THINKING ||
-             stateMachine.currentStateName == DeveloperStateNames.WRITING_CODE ||
-             stateMachine.currentStateName == DeveloperStateNames.BEING_INTERRUPTED ||
-             stateMachine.currentStateName == DeveloperStateNames.TESTS_FAILING ||
-             stateMachine.currentStateName == DeveloperStateNames.RESEARCHING ||
-             stateMachine.currentStateName == DeveloperStateNames.RUNNING_COMMAND ||
-             stateMachine.currentStateName == DeveloperStateNames.CELEBRATING)
-        }
+        val shouldSit = shouldUseSittingPosture()
         val posture = if (shouldSit) "sitting" else "standing"
 
         val children = mutableListOf<EffectRenderInfo>()
@@ -212,7 +196,6 @@ class Developer(
         val effectiveFacing = if (posture == "sitting") deskFacingDirection ?: facingDirection else facingDirection
 
         return CharacterRenderInfo(
-            type = "developer",
             entityId = entityId,
             x = renderX,
             y = renderY,
@@ -313,7 +296,7 @@ class Developer(
     fun walkFromDeskWithPathfinding(targetX: Float, targetY: Float) {
         val mid = deskMidpoint
         val pf = pathfinder
-        if (mid != null && pf != null) {
+        if (isAtDesk() && mid != null && pf != null) {
             val pathFromMid = pf.calculatePath(mid.first, mid.second, targetX, targetY)
             setWalkPath(listOf(mid) + pathFromMid)
         } else {
@@ -328,13 +311,100 @@ class Developer(
         pathfinder = pf
     }
 
+    fun setMovementPaused(paused: Boolean) {
+        movementPaused = paused
+        if (paused) {
+            velocity.x = 0f
+            velocity.y = 0f
+        }
+    }
+
     // State machine interface
 
     fun handleEvent(event: String, data: Any? = null) {
+        val destinationState = authoritativeDestination(event)
+        if (destinationState != null) {
+            office?.beforeDeveloperAgentEvent(agentId)
+            applyAuthoritativeState(destinationState)
+            return
+        }
         stateMachine.handleEvent(event, data)
     }
 
+    private fun authoritativeDestination(event: String): String? = when (event) {
+        "idle" -> DeveloperStateNames.IDLE
+        "thinking_started" -> DeveloperStateNames.THINKING
+        "planning_started" -> DeveloperStateNames.WALKING_TO_WHITEBOARD
+        "researching_started" -> DeveloperStateNames.RESEARCHING
+        "code_writing_started" -> DeveloperStateNames.WRITING_CODE
+        "command_started" -> DeveloperStateNames.RUNNING_COMMAND
+        "waiting_started" -> DeveloperStateNames.WAITING
+        "command_succeeded" -> DeveloperStateNames.CELEBRATING
+        "tests_failed" -> DeveloperStateNames.TESTS_FAILING
+        else -> null
+    }
+
+    private fun applyAuthoritativeState(destinationState: String) {
+        if (destinationState == DeveloperStateNames.IDLE) {
+            if (isAtDesk()) {
+                stateMachine.transitionTo(DeveloperStateNames.IDLE)
+            } else {
+                deskArrivalState = DeveloperStateNames.IDLE
+                stateMachine.transitionTo(DeveloperStateNames.WALKING_TO_DESK)
+            }
+            return
+        }
+
+        if (destinationState == DeveloperStateNames.WALKING_TO_WHITEBOARD) {
+            stateMachine.transitionTo(destinationState)
+            return
+        }
+
+        if (!isAtDesk()) {
+            deskArrivalState = destinationState
+            stateMachine.transitionTo(DeveloperStateNames.WALKING_TO_DESK)
+        } else {
+            stateMachine.transitionTo(destinationState)
+        }
+    }
+
+    fun beginInterruption() {
+        stateMachine.transitionTo(DeveloperStateNames.BEING_INTERRUPTED)
+    }
+
+    fun endInterruption() {
+        if (stateMachine.currentStateName == DeveloperStateNames.BEING_INTERRUPTED) {
+            stateMachine.handleEvent("interrupt_ended")
+        }
+    }
+
     fun getState(): String? = stateMachine.currentStateName
+
+    private fun shouldUseSittingPosture(): Boolean {
+        if (PixelOfficeGame.forceSittingMode && spriteVariant == 1) return true
+        if (!isAtDesk()) return false
+        return stateMachine.currentStateName in setOf(
+            DeveloperStateNames.IDLE,
+            DeveloperStateNames.THINKING,
+            DeveloperStateNames.WRITING_CODE,
+            DeveloperStateNames.BEING_INTERRUPTED,
+            DeveloperStateNames.TESTS_FAILING,
+            DeveloperStateNames.RESEARCHING,
+            DeveloperStateNames.RUNNING_COMMAND,
+            DeveloperStateNames.WAITING,
+            DeveloperStateNames.CELEBRATING
+        )
+    }
+
+    fun consumeDeskArrivalState(): String {
+        val state = deskArrivalState
+        deskArrivalState = DeveloperStateNames.WRITING_CODE
+        return state
+    }
+
+    fun setDeskArrivalState(state: String) {
+        deskArrivalState = state
+    }
 
     // Child entity management
 
@@ -349,9 +419,7 @@ class Developer(
         }
     }
 
-    /**
-     * Show annoyed bubble when PM interrupts.
-     */
+    /** Show an annoyed bubble when a coworker interrupts. */
     fun showAnnoyedBubble() {
         showBubbleOfType("annoyed")
     }

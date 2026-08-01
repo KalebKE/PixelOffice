@@ -10,10 +10,14 @@ import kotlin.random.Random
  * Animated lava lamp decoration for the office.
  * Renders rising/falling blobs in a lamp shape.
  */
-class LavaLamp(
-    private val x: Float,
-    private val y: Float
-) {
+class LavaLamp(private val y: Float) {
+    private data class PaletteColors(
+        val base: Color,
+        val glass: Color,
+        val lava: Color,
+        val glow: Color
+    )
+
     // Lamp dimensions (pixel art scale)
     private val lampWidth = 6f
     private val lampHeight = 12f
@@ -23,10 +27,30 @@ class LavaLamp(
     private val blobs: List<Blob>
     private var time = 0f
 
-    // Colors - warm orange/red lava lamp palette
-    private val glassColor = Color(0.2f, 0.15f, 0.25f, 0.6f)
-    private val lavaColor = Color(1f, 0.4f, 0.1f, 1f)
-    private val glowColor = Color(1f, 0.5f, 0.2f, 1f)
+    private val sunsetColors = PaletteColors(
+        base = Color(0.3f, 0.2f, 0.12f, 1f),
+        glass = Color(0.2f, 0.15f, 0.25f, 0.6f),
+        lava = Color(1f, 0.4f, 0.1f, 1f),
+        glow = Color(1f, 0.5f, 0.2f, 1f)
+    )
+    private val forestColors = PaletteColors(
+        base = Color(0.08f, 0.24f, 0.16f, 1f),
+        glass = Color(0.06f, 0.16f, 0.18f, 0.65f),
+        lava = Color(0.1f, 0.9f, 0.35f, 1f),
+        glow = Color(0.2f, 1f, 0.45f, 1f)
+    )
+    private val oceanColors = PaletteColors(
+        base = Color(0.08f, 0.18f, 0.35f, 1f),
+        glass = Color(0.05f, 0.12f, 0.3f, 0.65f),
+        lava = Color(0.1f, 0.7f, 1f, 1f),
+        glow = Color(0.2f, 0.75f, 1f, 1f)
+    )
+    private val slateColors = PaletteColors(
+        base = Color(0.25f, 0.18f, 0.32f, 1f),
+        glass = Color(0.16f, 0.1f, 0.25f, 0.65f),
+        lava = Color(0.9f, 0.25f, 0.75f, 1f),
+        glow = Color(1f, 0.35f, 0.85f, 1f)
+    )
 
     init {
         val rng = Random(42)
@@ -48,19 +72,26 @@ class LavaLamp(
         }
     }
 
-    fun draw(batch: SpriteBatch, pixelRegion: TextureRegion, flipY: (Float) -> Float) {
+    fun draw(
+        batch: SpriteBatch,
+        pixelRegion: TextureRegion,
+        flipY: (Float) -> Float,
+        x: Float,
+        palette: OfficeAccentPalette
+    ) {
         val screenY = flipY(y)
+        val colors = colorsFor(palette)
 
         // Draw lamp base (dark)
-        batch.color = Color(0.3f, 0.25f, 0.2f, 1f)
+        batch.color = colors.base
         batch.draw(pixelRegion, x - 1f, screenY - 2f, lampWidth + 2f, 2f)
 
         // Draw lamp glass outline
-        batch.color = glassColor
+        batch.color = colors.glass
         batch.draw(pixelRegion, x, screenY, lampWidth, lampHeight)
 
         // Draw animated blobs
-        batch.color = lavaColor
+        batch.color = colors.lava
         for (blob in blobs) {
             val blobY = screenY + blob.yOffset + 1f
             val blobX = x + lampWidth / 2f - blob.size / 2f + sin(time * 0.5f + blob.phase) * 0.5f
@@ -68,15 +99,22 @@ class LavaLamp(
         }
 
         // Draw lamp cap (dark)
-        batch.color = Color(0.3f, 0.25f, 0.2f, 1f)
+        batch.color = colors.base
         batch.draw(pixelRegion, x - 1f, screenY + lampHeight, lampWidth + 2f, 2f)
 
         batch.color = Color.WHITE
     }
 
-    fun drawNightGlow(batch: SpriteBatch, glowRegion: TextureRegion, flipY: (Float) -> Float) {
+    fun drawNightGlow(
+        batch: SpriteBatch,
+        glowRegion: TextureRegion,
+        flipY: (Float) -> Float,
+        x: Float,
+        palette: OfficeAccentPalette
+    ) {
         val screenY = flipY(y)
         val glowSize = 24f
+        val glowColor = colorsFor(palette).glow
 
         batch.color = Color(glowColor.r, glowColor.g, glowColor.b, 0.15f)
         batch.draw(
@@ -87,5 +125,12 @@ class LavaLamp(
             glowSize
         )
         batch.color = Color.WHITE
+    }
+
+    private fun colorsFor(palette: OfficeAccentPalette): PaletteColors = when (palette) {
+        OfficeAccentPalette.SUNSET -> sunsetColors
+        OfficeAccentPalette.FOREST -> forestColors
+        OfficeAccentPalette.OCEAN -> oceanColors
+        OfficeAccentPalette.SLATE -> slateColors
     }
 }
