@@ -12,21 +12,11 @@ import com.badlogic.gdx.files.FileHandle
  */
 
 @Serializable
-data class NetworkConfig(
-    val host: String = "localhost",
-    val port: Int = 9999,
-    @SerialName("buffer_size")
-    val bufferSize: Int = 4096,
-    @SerialName("reconnect_delay")
-    val reconnectDelay: Float = 5.0f
-)
-
-@Serializable
 data class DisplayConfig(
     val width: Int = 320,
     val height: Int = 240,
     val fps: Int = 30,
-    val title: String = "Pixel Office - Claude Code Visualization"
+    val title: String = "Pixel Office - Agent Visualization"
 )
 
 @Serializable
@@ -70,8 +60,6 @@ data class OfficeConfig(
     val deskPositions: List<Position> = emptyList(),
     @SerialName("whiteboard_positions")
     val whiteboardPositions: List<Position> = emptyList(),
-    @SerialName("pm_patrol_path")
-    val pmPatrolPath: List<Position> = emptyList(),
     val furniture: List<FurnitureItem> = emptyList(),
     @SerialName("walkable_zones")
     val walkableZones: List<WalkableZone> = emptyList()
@@ -110,7 +98,7 @@ data class SpriteConfig(
     @SerialName("tile_size")
     val tileSize: Int = 16,
     @SerialName("color_variants")
-    val colorVariants: List<String> = listOf("blue", "green", "red")
+    val colorVariants: List<String> = listOf("blue", "green", "red", "red_hair", "dark_hair")
 )
 
 @Serializable
@@ -142,10 +130,6 @@ data class SpriteSheetConfig(
     val characters: Map<String, SpriteRect> = emptyMap(),
     @SerialName("developer_variants")
     val developerVariants: Map<String, String> = emptyMap(),
-    @SerialName("project_manager")
-    val projectManager: String = "blonde",
-    @SerialName("product_owner")
-    val productOwner: String = "dark_hair",
     val animals: Map<String, AnimatedSpriteRect> = emptyMap(),
     val furniture: Map<String, SpriteRect> = emptyMap(),
     val tiles: Map<String, SpriteRect> = emptyMap(),
@@ -172,48 +156,33 @@ data class SpriteSheetConfig(
     fun getFurniture(name: String): SpriteRect? = furniture[name]
 
     fun getTile(name: String): SpriteRect? = tiles[name]
-
-    fun getPMCharacter(): SpriteRect? = characters[projectManager]
-
-    fun getPMCharacterSitting(): SpriteRect? {
-        val sittingName = "${projectManager}_sitting"
-        return characters[sittingName]
-    }
-
-    fun getPOCharacter(): SpriteRect? = characters[productOwner]
-
-    fun getPOCharacterSitting(): SpriteRect? {
-        val sittingName = "${productOwner}_sitting"
-        return characters[sittingName]
-    }
 }
 
 @Serializable
 data class DeveloperConfig(
     @SerialName("walk_speed")
     val walkSpeed: Float = 40.0f,
-    @SerialName("thinking_duration")
-    val thinkingDuration: Float = 3.0f,
     @SerialName("despair_duration")
-    val despairDuration: Float = 2.0f
+    val despairDuration: Float = 2.0f,
+    @SerialName("idle_patrol_min_seconds")
+    val idlePatrolMinSeconds: Float = 20.0f,
+    @SerialName("idle_patrol_max_seconds")
+    val idlePatrolMaxSeconds: Float = 45.0f,
+    @SerialName("idle_patrol_max_stops")
+    val idlePatrolMaxStops: Int = 3,
+    @SerialName("social_duration_seconds")
+    val socialDurationSeconds: Float = 3.0f
 )
 
 @Serializable
-data class PMConfig(
-    @SerialName("patrol_speed")
-    val patrolSpeed: Float = 30.0f,
-    @SerialName("interrupt_chance")
-    val interruptChance: Float = 0.1f,
-    @SerialName("interrupt_duration")
-    val interruptDuration: Float = 3.0f
-)
-
-@Serializable
-data class POConfig(
+data class PetConfig(
+    val enabled: Boolean = true,
+    @SerialName("roam_min_seconds")
+    val roamMinSeconds: Float = 60.0f,
+    @SerialName("roam_max_seconds")
+    val roamMaxSeconds: Float = 120.0f,
     @SerialName("walk_speed")
-    val walkSpeed: Float = 35.0f,
-    @SerialName("question_timeout")
-    val questionTimeout: Float = 30.0f
+    val walkSpeed: Float = 20.0f
 )
 
 @Serializable
@@ -244,25 +213,21 @@ data class DemoConfig(
 )
 
 @Serializable
-data class HeartbeatConfig(
-    val port: Int = 9997,
-    @SerialName("timeout_minutes")
-    val timeoutMinutes: Int = 5,
-    @SerialName("check_interval_seconds")
-    val checkIntervalSeconds: Int = 60
-)
-
-@Serializable
-data class AoConfig(
-    val enabled: Boolean = false,
-    val url: String = "http://localhost:3001",
+data class EventReceiverConfig(
+    val enabled: Boolean = true,
+    val host: String = "127.0.0.1",
+    @SerialName("udp_port")
+    val udpPort: Int = 9997,
+    @SerialName("http_port")
+    val httpPort: Int = 3003,
+    @SerialName("stale_session_minutes")
+    val staleSessionMinutes: Int = 30,
     @SerialName("grid_columns")
     val gridColumns: Int = 2
 )
 
 @Serializable
 data class Config(
-    val network: NetworkConfig = NetworkConfig(),
     val display: DisplayConfig = DisplayConfig(),
     val office: OfficeConfig = OfficeConfig(),
     val animation: AnimationConfig = AnimationConfig(),
@@ -270,15 +235,11 @@ data class Config(
     @SerialName("sprite_sheet")
     val spriteSheet: SpriteSheetConfig = SpriteSheetConfig(),
     val developer: DeveloperConfig = DeveloperConfig(),
-    @SerialName("project_manager")
-    val projectManager: PMConfig = PMConfig(),
-    @SerialName("product_owner")
-    val productOwner: POConfig = POConfig(),
+    val pets: PetConfig = PetConfig(),
     val demo: DemoConfig = DemoConfig(),
     @SerialName("sky_traffic")
     val skyTraffic: SkyTrafficConfig = SkyTrafficConfig(),
-    val heartbeat: HeartbeatConfig = HeartbeatConfig(),
-    val ao: AoConfig = AoConfig()
+    val events: EventReceiverConfig = EventReceiverConfig()
 ) {
     companion object {
         private val json = Json {

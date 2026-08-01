@@ -61,6 +61,7 @@ data class SpriteDefinition(
  */
 class SpriteSheet(
     private val config: SpriteSheetConfig?,
+    private val developerVariants: List<String> = listOf("blue", "green", "red", "red_hair", "dark_hair"),
     private var texture: Texture? = null
 ) {
     private val sprites = mutableMapOf<String, SpriteDefinition>()
@@ -83,8 +84,6 @@ class SpriteSheet(
         if (initialized || texture == null) return
 
         createDeveloperSprites()
-        createPMSprites()
-        createProductOwnerSprites()
         createThoughtBubbleSprites()
         createGhostSprites()
         createFurnitureSprites()
@@ -96,9 +95,7 @@ class SpriteSheet(
 
     private fun createDeveloperSprites() {
         val tex = texture ?: return
-        val variants = listOf("blue", "green", "red")
-
-        for (variant in variants) {
+        for (variant in developerVariants) {
             val sprite = SpriteDefinition(
                 name = "developer_$variant",
                 width = 16,
@@ -150,78 +147,6 @@ class SpriteSheet(
 
                 sprites[sittingSprite.name] = sittingSprite
             }
-        }
-    }
-
-    private fun createPMSprites() {
-        val tex = texture ?: return
-        val sprite = SpriteDefinition(
-            name = "project_manager",
-            width = 16,
-            height = 24
-        )
-
-        // Get PM character from config
-        val pmChar = config?.projectManager ?: "blonde"
-        val rect = config?.getCharacter(pmChar)
-        val baseFrame = if (rect != null) {
-            SpriteFrame.fromRect(tex, rect)
-        } else {
-            SpriteFrame(TextureRegion(tex, 64, 104, 16, 24), 16, 24) // Default: blonde
-        }
-
-        val managerAnimNames = listOf("idle", "walking_down", "walking_left", "walking_right",
-            "walking_up", "walking")
-        createStandardAnimations(sprite, baseFrame, managerAnimNames)
-        sprites[sprite.name] = sprite
-
-        // Create sitting variant if available in config
-        val sittingRect = config?.getPMCharacterSitting()
-        if (sittingRect != null) {
-            val sittingSprite = SpriteDefinition(
-                name = "project_manager_sitting",
-                width = sittingRect.w,
-                height = sittingRect.h
-            )
-            val sittingFrame = SpriteFrame.fromRect(tex, sittingRect)
-            createStandardAnimations(sittingSprite, sittingFrame, managerAnimNames)
-            sprites[sittingSprite.name] = sittingSprite
-        }
-    }
-
-    private fun createProductOwnerSprites() {
-        val tex = texture ?: return
-        val sprite = SpriteDefinition(
-            name = "product_owner",
-            width = 16,
-            height = 24
-        )
-
-        // Get PO character from config
-        val poChar = config?.productOwner ?: "dark_hair"
-        val rect = config?.getCharacter(poChar)
-        val baseFrame = if (rect != null) {
-            SpriteFrame.fromRect(tex, rect)
-        } else {
-            SpriteFrame(TextureRegion(tex, 48, 104, 16, 24), 16, 24) // Default: dark_hair
-        }
-
-        val managerAnimNames = listOf("idle", "walking_down", "walking_left", "walking_right",
-            "walking_up", "walking")
-        createStandardAnimations(sprite, baseFrame, managerAnimNames)
-        sprites[sprite.name] = sprite
-
-        // Create sitting variant if available in config
-        val sittingRect = config?.getPOCharacterSitting()
-        if (sittingRect != null) {
-            val sittingSprite = SpriteDefinition(
-                name = "product_owner_sitting",
-                width = sittingRect.w,
-                height = sittingRect.h
-            )
-            val sittingFrame = SpriteFrame.fromRect(tex, sittingRect)
-            createStandardAnimations(sittingSprite, sittingFrame, managerAnimNames)
-            sprites[sittingSprite.name] = sittingSprite
         }
     }
 
@@ -356,8 +281,8 @@ class SpriteSheet(
     }
 
     fun getDeveloperSpriteName(variant: Int): String {
-        val variants = listOf("blue", "green", "red")
-        val variantName = variants[variant % variants.size]
+        val variants = developerVariants.ifEmpty { listOf("blue") }
+        val variantName = variants[Math.floorMod(variant, variants.size)]
         return "developer_$variantName"
     }
 

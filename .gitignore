@@ -2,5 +2,6 @@
 /core/build/
 /desktop/build/
 /.gradle/
+local.properties
 CLAUDE.md
 docs/ARCHITECTURE.md

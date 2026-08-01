@@ -1,0 +1,1 @@
+"""Pixel Office hook integration."""

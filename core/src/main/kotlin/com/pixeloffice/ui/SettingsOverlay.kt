@@ -84,55 +84,6 @@ class SettingsOverlay(
         rebuildDeveloperTable(devTable)
         content.add(devTable).colspan(6).fillX().row()
 
-        // --- PM / PO ---
-        content.add(Label("PM / PO", skin, "header")).colspan(6).padTop(10f).row()
-
-        val pmCheck = CheckBox(" Spawn PM", skin)
-        pmCheck.isChecked = config.spawnPM
-        pmCheck.addListener(object : ChangeListener() {
-            override fun changed(event: ChangeEvent, actor: Actor) {
-                config.spawnPM = pmCheck.isChecked
-            }
-        })
-        content.add(pmCheck).colspan(2)
-
-        val pmDeskBox = SelectBox<String>(skin)
-        val pmDeskItems = GdxArray<String>()
-        pmDeskItems.add("Patrol")
-        for (id in config.getAllDeskIds()) pmDeskItems.add(id)
-        pmDeskBox.items = pmDeskItems
-        pmDeskBox.selected = config.pmDeskId ?: "Patrol"
-        pmDeskBox.addListener(object : ChangeListener() {
-            override fun changed(event: ChangeEvent, actor: Actor) {
-                config.pmDeskId = if (pmDeskBox.selected == "Patrol") null else pmDeskBox.selected
-            }
-        })
-        content.add(Label("Desk:", skin)).padLeft(8f)
-        content.add(pmDeskBox).width(160f).row()
-
-        val poCheck = CheckBox(" Spawn PO", skin)
-        poCheck.isChecked = config.spawnPO
-        poCheck.addListener(object : ChangeListener() {
-            override fun changed(event: ChangeEvent, actor: Actor) {
-                config.spawnPO = poCheck.isChecked
-            }
-        })
-        content.add(poCheck).colspan(2)
-
-        val poDeskBox = SelectBox<String>(skin)
-        val poDeskItems = GdxArray<String>()
-        poDeskItems.add("Patrol")
-        for (id in config.getAllDeskIds()) poDeskItems.add(id)
-        poDeskBox.items = poDeskItems
-        poDeskBox.selected = config.poDeskId ?: "Patrol"
-        poDeskBox.addListener(object : ChangeListener() {
-            override fun changed(event: ChangeEvent, actor: Actor) {
-                config.poDeskId = if (poDeskBox.selected == "Patrol") null else poDeskBox.selected
-            }
-        })
-        content.add(Label("Desk:", skin)).padLeft(8f)
-        content.add(poDeskBox).width(160f).row()
-
         // --- Debug ---
         content.add(Label("Debug", skin, "header")).colspan(6).padTop(10f).row()
 
@@ -285,7 +236,7 @@ class SettingsOverlay(
 
             val variantBox = SelectBox<String>(skin)
             val variantItems = GdxArray<String>()
-            variantItems.addAll("0", "1", "2")
+            variantItems.addAll("0", "1", "2", "3", "4")
             variantBox.items = variantItems
             variantBox.selected = dev.colorVariant.toString()
             variantBox.addListener(object : ChangeListener() {
@@ -339,7 +290,7 @@ class SettingsOverlay(
         addBtn.addListener(object : ChangeListener() {
             override fun changed(event: ChangeEvent, actor: Actor) {
                 val nextId = config.developers.size + 1
-                config.developers.add(DeveloperSettings("demo_agent_$nextId", config.developers.size % 3))
+                config.developers.add(DeveloperSettings("demo_agent_$nextId", config.developers.size % 5))
                 rebuildDeveloperTable(devTable)
             }
         })
