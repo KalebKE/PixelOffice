@@ -380,11 +380,15 @@ class Office(
      * Set up default desk columns that reproduce the current hardcoded furniture layout.
      * Delegates to SettingsConfig.fromDefaults() as the single source of truth.
      */
-    fun setupDefaultDeskColumns(): SettingsConfig {
+    fun setupDefaultDeskColumns(loungeOnLeft: Boolean? = null): SettingsConfig {
         // Clear config.json desks so only column-registered desks are used
         desks.clear()
 
-        val generated = SettingsConfig.randomizedForProject(projectId)
+        val generated = if (loungeOnLeft == null) {
+            SettingsConfig.randomizedForProject(projectId)
+        } else {
+            SettingsConfig.randomizedForProject(projectId, loungeOnLeft)
+        }
         applyDeskColumns(generated)
         setupPets()
         return generated.deepCopy()

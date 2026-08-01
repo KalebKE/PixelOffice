@@ -7,6 +7,7 @@ import com.pixeloffice.integration.AgentState
 import com.pixeloffice.integration.AgentStateMapper
 import com.pixeloffice.rendering.OfficeLayout
 import com.pixeloffice.rendering.RenderData
+import com.pixeloffice.ui.SettingsConfig
 import kotlin.math.ceil
 import kotlin.math.min
 
@@ -16,7 +17,7 @@ import kotlin.math.min
  */
 class OfficeGrid(
     private val config: Config,
-    columns: Int = 2,
+    columns: Int = 3,
     private val gutterX: Float = 0f,
     private val gutterY: Float = 0f
 ) {
@@ -25,6 +26,7 @@ class OfficeGrid(
     private val projectOrder = mutableListOf<String>()
     private val projectLabels = mutableMapOf<String, String>()
     private val appliedStates = mutableMapOf<String, AgentState>()
+    private val loungeOrientationByProject = mutableMapOf<String, Boolean>()
 
     init {
         // Always have at least one office so there's always something to render
@@ -165,8 +167,24 @@ class OfficeGrid(
         }
     }
 
-    private fun createOffice(projectId: String): Office = Office(config, projectId).also {
-        it.setupDefaultDeskColumns()
+    private fun createOffice(projectId: String): Office {
+        val loungeOnLeft = loungeOrientationByProject.getOrPut(projectId) {
+            val activeOrientations = projectOrder
+                .asSequence()
+                .filterNot { it == "default" }
+                .mapNotNull(loungeOrientationByProject::get)
+                .toList()
+            val leftCount = activeOrientations.count { it }
+            val rightCount = activeOrientations.size - leftCount
+            when {
+                leftCount < rightCount -> true
+                rightCount < leftCount -> false
+                else -> SettingsConfig.stableLoungeOnLeftForProject(projectId)
+            }
+        }
+        return Office(config, projectId).also {
+            it.setupDefaultDeskColumns(loungeOnLeft)
+        }
     }
 
     fun getOfficeRenderData(): List<OfficeRenderEntry> {

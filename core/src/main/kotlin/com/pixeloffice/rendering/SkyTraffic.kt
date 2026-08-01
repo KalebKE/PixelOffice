@@ -71,7 +71,7 @@ class ActiveUfo(
  * Also manages UFOs which fly, hover, and fire tractor beams to abduct cows.
  */
 class SkyTraffic(
-    private val screenWidth: Int,
+    private var screenWidth: Int,
     private val skyHeight: Int,
     spriteDir: String = "sprites/32bit-PaperAirplane",
     frameCount: Int = 4,
@@ -119,6 +119,10 @@ class SkyTraffic(
     private val ufoBeamFrameDuration = 0.3f
 
     private val silhouetteColor = Color(0.05f, 0.05f, 0.1f, 0.9f)
+
+    fun setRenderWidth(width: Int) {
+        screenWidth = width.coerceAtLeast(1)
+    }
 
     init {
         // Load paper airplane sprites using multi-frame numbered format

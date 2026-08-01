@@ -47,6 +47,42 @@ class OfficeGridTest {
     }
 
     @Test
+    fun `default grid fills three columns before adding a row`() {
+        val grid = OfficeGrid(config)
+        grid.syncWithSnapshots(
+            (1..4).map { snapshot("agent-$it", "project-$it") }
+        )
+
+        assertEquals(listOf(0, 1, 2, 0), grid.getOfficeRenderData().map { it.column })
+        assertEquals(listOf(0, 0, 0, 1), grid.getOfficeRenderData().map { it.row })
+        assertEquals(960f, grid.worldWidth)
+        assertEquals(442f, grid.worldHeight)
+    }
+
+    @Test
+    fun `repository grid balances both desk column orientations`() {
+        val grid = OfficeGrid(config)
+        val projectIds = listOf(
+            "/projects/atlas",
+            "/projects/beacon",
+            "/projects/cedar",
+            "/projects/dynamo",
+            "/projects/ember",
+            "/projects/flint"
+        )
+
+        grid.syncWithSnapshots(projectIds.mapIndexed { index, projectId ->
+            snapshot("agent-$index", projectId)
+        })
+
+        val loungePositions = grid.getOfficeRenderData().map { entry ->
+            entry.renderData.deskColumns.minBy { it.rows.size }.baseX
+        }
+        assertEquals(3, loungePositions.count { it == DeskColumn.LEFT_COLUMN_X })
+        assertEquals(3, loungePositions.count { it == DeskColumn.RIGHT_COLUMN_X })
+    }
+
+    @Test
     fun `projects wrap into 202 pixel rows after configured columns`() {
         val expectedDimensions = mapOf(
             1 to (320f to 240f),

@@ -6,8 +6,21 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.pixeloffice.core.UfoConfig
 import java.util.Calendar
+import kotlin.math.ceil
+import kotlin.math.min
 import kotlin.math.sin
 import kotlin.random.Random
+
+internal data class SkyCoverageSegment(val startX: Int, val width: Int)
+
+internal fun skyCoverageSegments(renderWidth: Int, baseWidth: Int): List<SkyCoverageSegment> {
+    if (renderWidth <= 0 || baseWidth <= 0) return emptyList()
+    val count = ceil(renderWidth.toFloat() / baseWidth).toInt()
+    return (0 until count).map { index ->
+        val startX = index * baseWidth
+        SkyCoverageSegment(startX, min(baseWidth, renderWidth - startX))
+    }
+}
 
 /**
  * Procedural sky system that reflects wall-clock time.
@@ -26,6 +39,8 @@ class SkyRenderer(
     skyTrafficFrameCount: Int = 4,
     ufoConfig: UfoConfig = UfoConfig()
 ) {
+    private val baseSkyWidth = screenWidth.coerceAtLeast(1)
+
     // Sky strip height in pixels
     private val skyHeight = OfficeLayout.SKY_HEIGHT.toInt()
 
@@ -58,13 +73,13 @@ class SkyRenderer(
     private data class CloudPuff(val offsetX: Float, val offsetY: Float, val radius: Float)
     private data class Cloud(var x: Float, val y: Float, val speed: Float, val puffs: List<CloudPuff>)
 
-    private val clouds: MutableList<Cloud>
+    private val clouds = mutableListOf<Cloud>()
     private val cloudColor = Color()
 
     // ── Star data ──
     private data class Star(val x: Float, val y: Float, val brightness: Float, val twinkleSpeed: Float, val phase: Float)
 
-    private val stars: List<Star>
+    private val stars = mutableListOf<Star>()
 
     // When set, overrides wall-clock time for sky colors/stars/nightness
     var overrideHourFraction: Float? = null
@@ -79,38 +94,48 @@ class SkyRenderer(
     private val tmpColor = Color()
 
     init {
-        val rng = Random(42) // seeded for reproducible layout
+        rebuildSkyDecorations()
+    }
 
-        // Generate clouds
-        clouds = mutableListOf()
-        val cloudCount = rng.nextInt(4, 9)
-        for (i in 0 until cloudCount) {
-            val puffCount = rng.nextInt(3, 8)
-            val puffs = mutableListOf<CloudPuff>()
-            var px = 0f
-            for (j in 0 until puffCount) {
-                val radius = rng.nextFloat() * 4f + 2f // 2-6px
-                puffs.add(CloudPuff(px, rng.nextFloat() * 4f - 2f, radius))
-                px += radius * 0.8f + rng.nextFloat() * 2f
+    private fun rebuildSkyDecorations() {
+        clouds.clear()
+        stars.clear()
+
+        for ((segmentIndex, segment) in skyCoverageSegments(screenWidth, baseSkyWidth).withIndex()) {
+            val rng = Random(42 xor (segmentIndex * 0x1F123BB5))
+            val widthRatio = segment.width.toFloat() / baseSkyWidth
+            val cloudCount = (rng.nextInt(4, 9) * widthRatio).toInt().coerceAtLeast(1)
+            repeat(cloudCount) {
+                val puffCount = rng.nextInt(3, 8)
+                val puffs = mutableListOf<CloudPuff>()
+                var px = 0f
+                repeat(puffCount) {
+                    val radius = rng.nextFloat() * 4f + 2f
+                    puffs.add(CloudPuff(px, rng.nextFloat() * 4f - 2f, radius))
+                    px += radius * 0.8f + rng.nextFloat() * 2f
+                }
+                clouds.add(
+                    Cloud(
+                        x = segment.startX + rng.nextFloat() * segment.width,
+                        y = rng.nextFloat() * 22f + 6f,
+                        speed = rng.nextFloat() * 2.5f + 0.5f,
+                        puffs = puffs
+                    )
+                )
             }
-            clouds.add(Cloud(
-                x = rng.nextFloat() * screenWidth,
-                y = rng.nextFloat() * 22f + 6f, // 6-28 within the 38px strip
-                speed = rng.nextFloat() * 2.5f + 0.5f, // 0.5-3.0 px/sec
-                puffs = puffs
-            ))
-        }
 
-        // Generate stars
-        val starCount = rng.nextInt(20, 36)
-        stars = List(starCount) {
-            Star(
-                x = rng.nextFloat() * screenWidth,
-                y = rng.nextFloat() * 34f + 2f, // 2-36 within the 38px strip
-                brightness = rng.nextFloat() * 0.5f + 0.5f, // 0.5-1.0
-                twinkleSpeed = rng.nextFloat() * 3f + 1f, // 1-4 Hz
-                phase = rng.nextFloat() * 6.28f
-            )
+            val starCount = (rng.nextInt(20, 36) * widthRatio).toInt().coerceAtLeast(1)
+            repeat(starCount) {
+                stars.add(
+                    Star(
+                        x = segment.startX + rng.nextFloat() * segment.width,
+                        y = rng.nextFloat() * 34f + 2f,
+                        brightness = rng.nextFloat() * 0.5f + 0.5f,
+                        twinkleSpeed = rng.nextFloat() * 3f + 1f,
+                        phase = rng.nextFloat() * 6.28f
+                    )
+                )
+            }
         }
     }
 
@@ -313,12 +338,13 @@ class SkyRenderer(
         sr.circle(cx, cy, radius, segments)
     }
 
-    /**
-     * Update the sky rendering width (for multi-office grids).
-     * Clouds and stars generated at init may not cover the full width — they wrap naturally.
-     */
+    /** Update all procedural sky systems to cover the current rendered width. */
     fun setRenderWidth(width: Int) {
-        screenWidth = width
+        val nextWidth = width.coerceAtLeast(1)
+        skyTraffic.setRenderWidth(nextWidth)
+        if (screenWidth == nextWidth) return
+        screenWidth = nextWidth
+        rebuildSkyDecorations()
     }
 
     fun dispose() {

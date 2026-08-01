@@ -872,7 +872,7 @@
     "udp_port": 9997,
     "http_port": 3003,
     "stale_session_minutes": 30,
-    "grid_columns": 2
+    "grid_columns": 3
   },
   "sky_traffic": {
     "enabled": true,

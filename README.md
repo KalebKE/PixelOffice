@@ -222,7 +222,7 @@ Runtime settings live in `assets/config.json`:
     "udp_port": 9997,
     "http_port": 3003,
     "stale_session_minutes": 30,
-    "grid_columns": 2
+    "grid_columns": 3
   },
   "developer": {
     "idle_patrol_min_seconds": 20.0,

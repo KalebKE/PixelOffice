@@ -708,9 +708,6 @@ class Renderer(
         beginBatch()
         skyRenderer.drawStars(batch, ledPixelRegion)
         endBatch()
-
-        // Restore default width
-        skyRenderer.setRenderWidth(width)
     }
 
     /** Draw the shared sky in its fixed-height screen band using square pixels. */

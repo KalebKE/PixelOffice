@@ -132,10 +132,12 @@ data class SettingsConfig(
          * Build a balanced desk appearance that is stable for a project ID.
          * Desk geometry and availability remain identical to [fromDefaults].
          */
-        fun randomizedForProject(projectId: String): SettingsConfig {
+        fun randomizedForProject(
+            projectId: String,
+            loungeOnLeft: Boolean = stableLoungeOnLeftForProject(projectId)
+        ): SettingsConfig {
             val defaults = fromDefaults()
-            val swapColumns = projectRandom(projectId, COLUMN_ORIENTATION_SALT).nextBoolean()
-            val result = if (swapColumns) {
+            val result = if (loungeOnLeft) {
                 defaults.copy(
                     column1 = defaults.column1.copy(baseX = DeskColumn.RIGHT_COLUMN_X),
                     column2 = defaults.column2.copy(baseX = DeskColumn.LEFT_COLUMN_X)
@@ -169,6 +171,9 @@ data class SettingsConfig(
             }
             return result
         }
+
+        internal fun stableLoungeOnLeftForProject(projectId: String): Boolean =
+            projectRandom(projectId, COLUMN_ORIENTATION_SALT).nextBoolean()
 
         private fun projectRandom(projectId: String, salt: Int): Random =
             Random(31 * projectId.hashCode() + salt)

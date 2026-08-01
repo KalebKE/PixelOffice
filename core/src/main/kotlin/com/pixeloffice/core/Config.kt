@@ -223,7 +223,7 @@ data class EventReceiverConfig(
     @SerialName("stale_session_minutes")
     val staleSessionMinutes: Int = 30,
     @SerialName("grid_columns")
-    val gridColumns: Int = 2
+    val gridColumns: Int = 3
 )
 
 @Serializable
