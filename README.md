@@ -1,5 +1,9 @@
 # Pixel Office
 
+<p align="center">
+  <img src="assets/icons/pixel-office-macos-1024.png" alt="Pixel Office app icon" width="180" />
+</p>
+
 A real-time pixel-art office for Claude Code and Codex sessions. Structured
 agent lifecycle hooks make developers think, plan at whiteboards, write code,
 run commands, wait for input, celebrate, fail tests, and return to their desks.
