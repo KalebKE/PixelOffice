@@ -1,15 +1,9 @@
 {
-  "network": {
-    "host": "localhost",
-    "port": 9999,
-    "buffer_size": 4096,
-    "reconnect_delay": 5.0
-  },
   "display": {
     "width": 320,
     "height": 240,
     "fps": 30,
-    "title": "Pixel Office - Claude Code Visualization"
+    "title": "Pixel Office - Agent Visualization"
   },
   "office": {
     "tile_size": 16,
@@ -411,7 +405,9 @@
     "color_variants": [
       "blue",
       "green",
-      "red"
+      "red",
+      "red_hair",
+      "dark_hair"
     ]
   },
   "sprite_sheet": {
@@ -517,10 +513,10 @@
     "developer_variants": {
       "blue": "blue_shirt",
       "green": "glasses",
-      "red": "cool_hair"
+      "red": "cool_hair",
+      "red_hair": "red_hair",
+      "dark_hair": "dark_hair"
     },
-    "project_manager": "red_hair",
-    "product_owner": "dark_hair",
     "animals": {
       "cat": {
         "x": 65,
@@ -854,31 +850,30 @@
   },
   "developer": {
     "walk_speed": 15,
-    "thinking_duration": 3.0,
-    "despair_duration": 2.0
+    "despair_duration": 2.0,
+    "idle_patrol_min_seconds": 20.0,
+    "idle_patrol_max_seconds": 45.0,
+    "idle_patrol_max_stops": 3,
+    "social_duration_seconds": 3.0
   },
-  "project_manager": {
-    "patrol_speed": 15,
-    "interrupt_chance": 0.1,
-    "interrupt_duration": 3.0
-  },
-  "product_owner": {
-    "walk_speed": 10,
-    "question_timeout": 30.0
+  "pets": {
+    "enabled": true,
+    "roam_min_seconds": 60.0,
+    "roam_max_seconds": 120.0,
+    "walk_speed": 20.0
   },
   "demo": {
-    "enabled": true,
+    "enabled": false,
     "sample_events_file": "tests/fixtures/sample_events.json"
   },
-  "factory": {
-    "enabled": true
-  },
-  "ao": {
-    "enabled": false,
-    "url": "http://localhost:3003",
+  "events": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "udp_port": 9997,
+    "http_port": 3003,
+    "stale_session_minutes": 30,
     "grid_columns": 2
   },
-  "render_mode": "3d",
   "sky_traffic": {
     "enabled": true,
     "spawn_interval": 30.0,

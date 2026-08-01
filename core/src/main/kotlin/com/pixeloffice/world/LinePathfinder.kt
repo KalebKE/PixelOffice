@@ -28,24 +28,24 @@ class LinePathfinder(private val lineNetwork: LineNetwork) : Pathfinder {
         // 1. Find nearest navigation point to start
         val startPoint = lineNetwork.findNearestPoint(startX, startY)
         if (startPoint == null) {
-            Gdx.app.log("LinePathfinder", "No start point found near ($startX, $startY)")
+            Gdx.app?.log("LinePathfinder", "No start point found near ($startX, $startY)")
             return listOf(Pair(endX, endY))
         }
 
         // 2. Find nearest navigation point to end
         val endPoint = lineNetwork.findNearestPoint(endX, endY)
         if (endPoint == null) {
-            Gdx.app.log("LinePathfinder", "No end point found near ($endX, $endY)")
+            Gdx.app?.log("LinePathfinder", "No end point found near ($endX, $endY)")
             return listOf(Pair(endX, endY))
         }
 
-        Gdx.app.log("LinePathfinder", "Pathfinding from ${startPoint.id} to ${endPoint.id}")
+        Gdx.app?.log("LinePathfinder", "Pathfinding from ${startPoint.id} to ${endPoint.id}")
 
         // 3. Get path through the network using BFS
         val navPath = lineNetwork.getPath(startPoint.id, endPoint.id)
 
         if (navPath.isEmpty()) {
-            Gdx.app.log("LinePathfinder", "No path found, using direct path")
+            Gdx.app?.log("LinePathfinder", "No path found, using direct path")
             return listOf(Pair(endX, endY))
         }
 
@@ -65,7 +65,7 @@ class LinePathfinder(private val lineNetwork: LineNetwork) : Pathfinder {
             path
         }
 
-        Gdx.app.log("LinePathfinder", "Path: $result")
+        Gdx.app?.log("LinePathfinder", "Path: $result")
         return result
     }
 

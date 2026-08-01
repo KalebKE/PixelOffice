@@ -1,502 +1,313 @@
 # Pixel Office
 
-**A real-time pixel art visualization of Claude Code at work — watch AI agents think, code, debug, and despair in a tiny virtual office.**
+A real-time pixel-art office for Claude Code and Codex sessions. Structured
+agent lifecycle hooks make developers think, plan at whiteboards, write code,
+run commands, wait for input, celebrate, fail tests, and return to their desks.
+When developers remain idle, they occasionally patrol the office and talk to
+coworkers before returning to work. Every agent is represented by the same
+developer character system; behavior comes from state rather than job title.
+Each project gets its own stable mix of computers, monitors, chair colors,
+wall art, couches, trash cans, and lava-lamp colors. The cat and dog also start
+at project-specific desk or lounge spots and occasionally roam through the
+office.
 
 <p align="center">
   <img src="images/pixel_office.gif" alt="Pixel Office" />
 </p>
 
----
+## Requirements
 
-## What Is This?
+- JDK 17+
+- Python 3
+- Claude Code, Codex, or another source that emits the AgentEvent protocol
 
-> **Erlich:** Gentlemen. What you are looking at is not merely a "side project." What you are looking at is Pixel Office — a real-time, pixel-art office simulation that visualizes Claude Code's entire workflow as tiny developers walking around, typing, whiteboarding, and having existential crises when tests fail. It is, without exaggeration, the most important developer tool since... well, since whatever Gavin Belson is pretending he invented this week.
->
-> **Richard:** Erlich, you didn't even—
->
-> **Erlich:** Richard. I provided *vision*. I provided the *incubator*. I provided the kombucha. You provided... what, a state machine? Please. This is a billion-dollar visualization platform and I will not have you underselling it.
->
-> **Jian-Yang:** It is like Tamagotchi, but for code. You watch little man die when test fail.
->
-> **Erlich:** That is... actually not a terrible pitch.
+## Build and run
 
----
-
-## Quick Start
-
-> **Jared:** Okay! So I'm going to walk you through getting Pixel Office running on your machine, and I just want you to know — I believe in you. Whatever your experience level, you deserve to see this build succeed.
->
-> **Gilfoyle:** It's a Gradle project. You run one command.
->
-> **Jared:** Yes, but *emotionally*, there's more to it than that. Let's start with what you'll need.
-
-### Prerequisites
-
-| Requirement | Version |
-|---|---|
-| JDK | 21+ |
-| Gradle | Wrapper included (`./gradlew`) |
-| OS | macOS, Linux, or Windows |
-
-> **Jared:** JDK 21. That's important. Not 17, not 11 — *21*. I know change is scary, but you can do this. I've seen you do harder things. Well, I haven't *seen* you specifically, but I believe you have.
-
-### Build & Run
+Run commands from the repository root:
 
 ```bash
-# One command to build, launch, and connect (recommended)
 ./start.sh
+```
 
-# Or run manually with Gradle
+Equivalent Gradle commands:
+
+```bash
 ./gradlew desktop:run
-
-# Build a fat JAR for distribution
 ./gradlew desktop:dist
-
-# Quick compile check (no run)
-./gradlew compileKotlin
+./gradlew test
 ```
 
-> **Russ Hanneman:** Hold on — you're telling me I can just type ONE COMMAND and it builds, launches, waits for the server, AND connects tmux? That's like... that's like having a Lamborghini that drives ITSELF, parks ITSELF, and then sends you a selfie from the parking garage. *(looks at Jared)* This guy fucks.
->
-> **Jared:** Oh! That's... thank you, Russ. That means a lot, actually. No one's ever— I'm fine. I'm fine.
->
-> **Gilfoyle:** `start.sh` builds the project, launches it in the background, waits up to 30 seconds for the TCP server on port 9999, and auto-connects your tmux pane if you're in one. It also cleans up when you Ctrl+C. If your JDK isn't 21, the build will fail. And I'll know.
->
-> **Jared:** On macOS, the desktop:run task automatically adds `-XstartOnFirstThread` for LWJGL3. You don't need to worry about that. I've worried about it enough for both of us.
+Starting the desktop application also starts the event receiver. There is no
+separate server process to launch. By default, Pixel Office listens on
+loopback only:
 
----
+- UDP `127.0.0.1:9997` for live Claude Code and Codex events
+- HTTP `http://127.0.0.1:3003/api/events` for canonical AgentEvent POSTs
 
-## Connecting Claude Code via tmux
+## Install agent hooks
 
-> **Big Head:** So, uh, I was messing around with tmux — I don't totally know what tmux is, to be honest — and somehow I got the office thing to show what Claude was doing? Like, in real time?
->
-> **Richard:** You... you set up the TCP pipe?
->
-> **Big Head:** I think so? I just kind of typed stuff and it worked. There's a script now. It does everything.
-
-### Option A: Use `start.sh` (recommended)
-
-Make sure `demo.enabled` is `false` in `config.json`, then from a tmux pane:
+Install user-level hooks for both Claude Code and Codex:
 
 ```bash
-./start.sh
+python3 hooks/manage_hooks.py install
 ```
 
-This builds and launches Pixel Office in the background, waits for the server on port 9999, and auto-connects the current tmux pane. Logs go to `.game.log`. Press Ctrl+C to stop — it disconnects the pipe and kills the game process automatically.
+The installer:
 
-> **Big Head:** Yeah, that's the one. You just run it and everything happens. It even fixes the mouse scroll thing in tmux. I don't know what that means but it's fixed now.
->
-> **Gilfoyle:** It sets `tmux mouse on` and rebinds `WheelUpPane`/`WheelDownPane` so scroll works in alternate screen mode. Without it, scrolling in tmux sends garbage to the pane instead of scrolling the buffer.
->
-> **Big Head:** See? Fixed.
+- copies the fail-open event emitter to
+  `~/.local/share/pixel-office/pixel_office_hook.py`
+- merges Pixel Office handlers into `~/.claude/settings.json`
+- merges Pixel Office handlers into `~/.codex/hooks.json`
+- preserves existing settings and creates timestamped backups before changing
+  existing files
 
-### Option B: Connect additional panes with `connect.sh`
+Codex requires one additional trust step. Open `/hooks`, review the Pixel
+Office definitions, and trust them.
 
-If Pixel Office is already running (via `start.sh` or `./gradlew desktop:run`), you can connect more tmux panes:
+Inspect or remove the integration:
 
 ```bash
-./connect.sh
+python3 hooks/manage_hooks.py status
+python3 hooks/manage_hooks.py uninstall
 ```
 
-Run this from any tmux pane you want to pipe into Pixel Office. It checks that the game server is up, applies the mouse scroll fix, and connects via `tmux pipe-pane`. To disconnect a pane later: `tmux pipe-pane`.
+Uninstall removes only Pixel Office-owned handlers.
 
-> **Big Head:** Oh cool, so if you have like, multiple Claude things going, each one can be its own little office dude?
->
-> **Gilfoyle:** Each connected pane's output stream gets parsed independently by the `StreamParser`. Multiple panes means multiple data sources feeding the same office. Agent spawns from different panes create separate developers.
+Restart sessions that were already open when hooks were first installed so
+they load the new hook definitions. Updating and reinstalling the emitter at
+the same path does not require restarting those sessions.
 
-### Option C: Manual connection
+## Event behavior
 
-If you prefer doing it yourself, or you're not using the scripts:
-
-1. Set `demo.enabled` to `false` in `config.json`
-2. Start Pixel Office: `./gradlew desktop:run`
-3. In your tmux pane: `tmux pipe-pane -o -t $TMUX_PANE 'nc localhost 9999'`
-
-> **Gilfoyle:** `nc` opens a TCP connection to localhost on port 9999 and pipes the tmux pane's output stream through it. The `TmuxReceiver` class listens on a `ServerSocket`, accepts the connection, and enqueues raw data into a `ConcurrentLinkedQueue` for the GL thread to poll. If you need me to explain netcat, close the terminal.
->
-> **Big Head:** The `nc` part is netcat — it's like... a net. For cats. No wait, it's a network thing.
-
-### Network Configuration
-
-In `config.json`:
-
-```json
-{
-  "network": {
-    "host": "localhost",
-    "port": 9999,
-    "buffer_size": 4096,
-    "reconnect_delay": 5.0
-  }
-}
-```
-
-> **Big Head:** If port 9999 doesn't work you can change it to whatever. I accidentally used 8080 once and it connected to something else and the office got really confused.
-
----
-
-## Demo Mode
-
-> **Russ Hanneman:** Okay, forget the tmux pipe nerd stuff for a second. You want to see this thing GO? Demo mode. It's like a test drive in a McLaren — you don't need to know where you're going, you just need to feel the SPEED.
-
-Set `demo.enabled` to `true` in `config.json`:
-
-```json
-{
-  "demo": {
-    "enabled": true
-  }
-}
-```
-
-> **Russ Hanneman:** Boom. Three devs, a PM, and a PO — auto-spawned. They cycle through states every 20 seconds, staggered by 2 seconds each, and let me tell you, watching those little guys walk to the whiteboard is like watching money MOVE.
-
-### Demo Keyboard Controls
-
-> **Russ Hanneman:** And check this out — NUM keys. You press a button, something happens. It's like the steering wheel buttons on my Lamborghini. My OTHER Lamborghini.
-
-| Key | Action |
+| Agent hook | Office behavior |
 |---|---|
-| `1` | Spawn a new developer |
-| `2` | Trigger thinking |
-| `3` | Trigger coding |
-| `4` | Trigger test failure (+ camera shake) |
-| `5` | Spawn Product Owner (asks question) |
-| `6` | Dismiss Product Owner |
-| `7` | Toggle PM sitting at desk |
-| `8` | Toggle PO sitting at desk |
-| `9` | Cycle: researching → command → celebrating |
+| Session start | Spawn a developer at an idle desk |
+| User prompt | Think, or plan at the whiteboard in plan mode |
+| Read/search tool | Research |
+| Edit/write/apply-patch tool | Write code |
+| Shell/exec tool | Run a command |
+| Ordinary tool completes | Resume thinking |
+| Permission request | Wait for input |
+| Successful test/build | Celebrate |
+| Failed test/build | Despair |
+| Turn stop | Return to the desk and idle |
+| Session end | Leave the office |
+| Subagent start/stop | Spawn/remove a coworker |
 
-> **Russ Hanneman:** Press 4. PRESS 4. The whole screen shakes and a GHOST comes out of the developer. A GHOST. When tests fail, a ghost literally leaves their body. That is a THREE COMMA feature.
->
-> **Dinesh:** You... you know the three commas thing is about money, not feature count, right?
->
-> **Russ Hanneman:** Everything is about money, Dinesh.
+Pixel Office never receives prompts, command strings, tool arguments, tool
+output, or file contents. The hook bridge converts those inputs into a small
+state packet before sending it.
 
----
+These states describe observable lifecycle boundaries. `coding` means an edit
+or write tool is actively mutating files. While the model is composing that
+edit before the tool starts—and after the tool returns—it appears as
+`thinking`. Pixel Office does not infer hidden model intent.
+
+## Event protocol
+
+Any local tool can drive Pixel Office by sending the same JSON payload over a
+UDP datagram or an HTTP POST:
+
+```json
+{
+  "version": 1,
+  "provider": "codex",
+  "sessionId": "session-123",
+  "agentId": "main",
+  "projectId": "/absolute/project/path",
+  "projectLabel": "pixel_office",
+  "kind": "upsert",
+  "state": "coding",
+  "activity": "edit",
+  "occurredAt": 1785452400000
+}
+```
+
+Fields:
+
+- `kind`: `upsert`, `touch`, or `end`
+- `state`: `idle`, `thinking`, `planning`, `researching`, `coding`, `running`,
+  `waiting`, `success`, or `failure`
+- `occurredAt`: Unix epoch milliseconds; older updates for the same agent are
+  ignored
+- `provider`, `sessionId`, and `agentId`: stable agent identity
+- `projectId` and `projectLabel`: office grouping and visible project name
+
+Every session is rendered as a developer.
+
+Agent identity is the combination of `provider`, `sessionId`, and `agentId`.
+Projects fill the configured number of columns from left to right, then add
+rows from top to bottom. The sky is shared across the first row; lower rows
+repeat the office wall and floor without adding another sky. Sessions that
+disappear without an end event expire after 30 minutes by default.
+
+On desktop, the shared sky keeps its preferred 4x pixel height while the office
+grid beneath it scales to fit the current monitor's work area. During a manual
+resize, the edge moved furthest leads and the other dimension follows the
+fixed-sky geometry, so the office stays undistorted without side margins. The
+combined window is capped and centered when its layout changes; maximize,
+fullscreen, and layouts too large for the display use the split fitted viewport.
+
+### Send a synthetic event
+
+```bash
+python3 - <<'PY'
+import json, socket, time
+
+event = {
+    "version": 1,
+    "provider": "manual",
+    "sessionId": "demo-session",
+    "agentId": "main",
+    "projectId": "/tmp/example",
+    "projectLabel": "example",
+    "kind": "upsert",
+    "state": "planning",
+    "activity": "plan",
+    "occurredAt": int(time.time() * 1000),
+}
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.sendto(json.dumps(event).encode(), ("127.0.0.1", 9997))
+sock.close()
+PY
+```
+
+The HTTP equivalent is:
+
+```bash
+curl -X POST http://127.0.0.1:3003/api/events \
+  -H 'Content-Type: application/json' \
+  --data-binary @event.json
+```
+
+Both transports accept one version-1 `AgentEvent` per packet or request. They
+reject other payload shapes; there is no terminal-output or snapshot adapter.
+
+## Running across a LAN
+
+Pixel Office can receive events from other computers on the same network. On
+the computer displaying the office:
+
+1. Set `events.host` in `assets/config.json` to `0.0.0.0` or that computer's
+   LAN address.
+2. Restart Pixel Office.
+3. Allow inbound UDP port `9997` through the host firewall. Allow TCP port
+   `3003` as well if using the HTTP endpoint.
+
+On each computer running agents, install the hooks with the Pixel Office
+computer's LAN address:
+
+```bash
+python3 hooks/manage_hooks.py install --host 192.168.1.50 --port 9997
+```
+
+Replace `192.168.1.50` with the receiver's actual address. The receiver has no
+authentication or encryption, so expose it only on a trusted network. The
+bundled hooks use UDP; custom senders may use UDP or HTTP.
 
 ## Configuration
 
-> **Gilfoyle:** `config.json` controls everything. If you don't understand it, you shouldn't be modifying it. If you do understand it, you probably still shouldn't, but at least you'll know what you broke.
+Runtime settings live in `assets/config.json`:
 
-### config.json Sections
+```json
+{
+  "events": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "udp_port": 9997,
+    "http_port": 3003,
+    "stale_session_minutes": 30,
+    "grid_columns": 2
+  },
+  "developer": {
+    "idle_patrol_min_seconds": 20.0,
+    "idle_patrol_max_seconds": 45.0,
+    "idle_patrol_max_stops": 3,
+    "social_duration_seconds": 3.0
+  },
+  "pets": {
+    "enabled": true,
+    "roam_min_seconds": 60.0,
+    "roam_max_seconds": 120.0,
+    "walk_speed": 20.0
+  },
+  "demo": {
+    "enabled": false
+  }
+}
+```
 
-| Section | What It Controls |
+Desk appearance and initial pet placement are generated automatically from
+the project ID. They stay the same across application restarts without a saved
+layout file; changing a project's ID gives it a different office. Pet roaming
+uses the same navigation paths as developers and never changes desk capacity.
+Lounge furniture and the lava lamp use one coordinated Sunset, Forest, Ocean,
+or Slate accent palette per project.
+The tall desk block and shorter lounge block may also exchange sides. The
+lower tree wall and printer-table/lava-lamp area move with their respective
+blocks. Their walking routes mirror with the layout, and the orientation
+remains stable for that project.
+
+Set `demo.enabled` to `true` to disable live input and run the built-in
+animation cycle. Demo keyboard controls:
+
+| Key | Action |
 |---|---|
-| `network` | TCP server host, port, buffer size, reconnect delay |
-| `display` | Window size (320x240), FPS (30), title |
-| `office` | Desk positions, whiteboard positions, walkable zones, furniture |
-| `animation` | Frame durations for idle, walk, typing, thinking, ghost |
-| `sprites` | Character/desk/whiteboard dimensions, color variants |
-| `sprite_sheet` | Palette, transparent color, sprite definitions |
-| `developer` | Walk speed (15), thinking duration (3s), despair duration (2s) |
-| `project_manager` | Patrol speed, interrupt chance (0.1), interrupt duration (3s) |
-| `product_owner` | Walk speed, question timeout (30s) |
-| `demo` | Enabled flag, sample events file |
-
-> **Gilfoyle:** The `developer.thinking_duration` controls how long the thinking state lasts before auto-transitioning to the whiteboard. The `despair_duration` is how long they sit in existential dread after tests fail. I set that to 2 seconds because real despair is infinite and we had to pick a number.
->
-> **Dinesh:** Mine would be longer.
->
-> **Gilfoyle:** I know.
-
-### Settings Overlay (Runtime Customization)
-
-> **Gavin Belson:** What I'm about to show you isn't merely a settings panel. It's a *platform* for self-expression. It's about making the world a better place — one desk configuration at a time.
->
-> **Richard:** It's a settings overlay, Gavin.
->
-> **Gavin Belson:** Richard, when I was at Hooli, I oversaw the customization of forty thousand workstations. Each one was a reflection of the human spirit. This... this is that, but pixel art.
-
-Tap the top-right corner of the screen (or open programmatically) to access runtime desk customization:
-
-| Option | Values |
-|---|---|
-| **Equipment** | Computer, Monitor, None |
-| **Chair Color** | Black, White, Blue, Green, Orange |
-| **Wall Decor** | Art, Small Art (Orange/Blue), Calendar, Notice, Post-it Notes, None |
-| **Desk Items** | Red/Blue/Green Book, Notes, Document, Coffee Mug, None |
-| **Developer** | Add/remove, assign color variant (0-3), assign to desk |
-| **PM / PO** | Spawn toggle, assign to patrol or specific desk |
-| **Debug Mode** | Toggle debug overlay (FPS, coords, walkable zones, line network) |
-
-> **Gavin Belson:** You can change the chair color to *orange*. Do you understand what that means? It means freedom. It means choice. It means making the world a better place through customizable office furniture.
->
-> **Jian-Yang:** I change all chair to green. It is better.
->
-> **Gavin Belson:** You can't just— it's PER DESK, Jian-Yang.
->
-> **Jian-Yang:** I change all desk. All green. Is better feng shui.
-
----
-
-## Developer States
-
-> **Gilfoyle:** There are exactly 11 states. Not 10, not 12 — 11. Each one represents a phase of the developer's workflow, mapped from real Claude Code tool usage. I'll explain them once. Take notes or don't. I won't repeat myself.
-
-| # | State | Animation | Visual Effect | Triggered By | Duration |
-|---|---|---|---|---|---|
-| 1 | **IDLE** | Sitting idle | — | Default / return state | Indefinite |
-| 2 | **THINKING** | Thinking pose | Thought bubble | `thinking_started` event | 3s → auto walks to whiteboard |
-| 3 | **RESEARCHING** | Thinking pose | Thought bubble | `researching_started` event | Until interrupted |
-| 4 | **WALKING_TO_WHITEBOARD** | Walking sprite | — | `planning_started` / thinking timeout | Until arrival |
-| 5 | **AT_WHITEBOARD** | Thinking pose | Thought bubble | Reached whiteboard | 5s → walks back |
-| 6 | **WALKING_TO_DESK** | Walking sprite | — | Done at whiteboard | Until arrival → writing code |
-| 7 | **WRITING_CODE** | Typing animation | — | `code_writing_started` event | Until interrupted |
-| 8 | **RUNNING_COMMAND** | Sitting idle | — | `command_started` event | Until result |
-| 9 | **CELEBRATING** | Sitting idle | Success bubble | `command_succeeded` event | 1.5s → idle |
-| 10 | **TESTS_FAILING** | Despair animation | Ghost rises from body | `tests_failed` event + camera shake | 2s → walks to whiteboard |
-| 11 | **BEING_INTERRUPTED** | Sitting idle | Annoyed bubble | PM interruption | 3s → returns to previous state |
-
-> **Gilfoyle:** TESTS_FAILING spawns a ghost that rises out of the developer's body. It's a pixel art representation of the soul leaving when CI goes red. It's the most honest piece of software visualization ever created.
->
-> **Dinesh:** I wrote the ghost rendering, by the way.
->
-> **Gilfoyle:** The ghost is three frames and a Y-offset. Don't strain your arm patting yourself on the back.
-
-### Activity → Event → State Mapping
-
-> **Gilfoyle:** This is how Claude Code tool invocations become office animations. The `StreamParser` detects tool use, `Patterns.kt` classifies the activity, and `handleActivity()` dispatches the event to the developer's state machine. If you can't follow this table, close the repository.
-
-| Activity Type | Event Dispatched | Target State |
-|---|---|---|
-| `AGENT_SPAWN` | *(spawns new Developer)* | — |
-| `THINKING` | `thinking_started` | THINKING |
-| `PLANNING` | `planning_started` | WALKING_TO_WHITEBOARD |
-| `FILE_READ` | `researching_started` | RESEARCHING |
-| `WEB_SEARCH` | `researching_started` | RESEARCHING |
-| `CODE_WRITING` | `code_writing_started` | WRITING_CODE |
-| `CODE_EDITING` | `code_writing_started` | WRITING_CODE |
-| `TEST_EXECUTION` | `command_started` | RUNNING_COMMAND |
-| `BUILD_EXECUTION` | `command_started` | RUNNING_COMMAND |
-| `BASH_EXECUTION` | `command_started` | RUNNING_COMMAND |
-| `COMMITTING` | `command_started` | RUNNING_COMMAND |
-| `INSTALLING_DEPS` | `command_started` | RUNNING_COMMAND |
-| `TEST_FAILURE` | `tests_failed` + camera shake | TESTS_FAILING |
-| `BUILD_FAILURE` | `tests_failed` + camera shake | TESTS_FAILING |
-| `TEST_SUCCESS` | `command_succeeded` | CELEBRATING |
-| `BUILD_SUCCESS` | `command_succeeded` | CELEBRATING |
-| `USER_QUESTION` | *(spawns Product Owner)* | — |
-| `UNKNOWN` | *(ignored)* | — |
-
-> **Dinesh:** I just want to point out that the camera shake on test failure was MY idea.
->
-> **Gilfoyle:** It was a parameter change. You changed a float.
->
-> **Dinesh:** It was a *creative* float.
-
----
+| `1` | Spawn a developer |
+| `2` | Think |
+| `3` | Code |
+| `4` | Fail a test |
+| `9` | Cycle research, command, and success |
 
 ## Architecture
 
-> **Richard:** Okay, so, the architecture — and I know this is going to sound complicated, but it's actually... it's actually quite elegant? I think? Let me just—
->
-> **Erlich:** Richard, confidence. Project this.
->
-> **Richard:** Right. Okay. Here's the full pipeline.
+```text
+Claude Code hooks ─┐
+                   ├─> pixel_office_hook.py ─> UDP AgentEvent
+Codex hooks ───────┘
 
-### The Pipeline
+Custom senders ─────────────────────────────> UDP or HTTP AgentEvent
 
-```
-tmux pipe-pane ─→ TCP (port 9999) ─→ TmuxReceiver
-                                          │
-                                          ▼
-                                     StreamParser
-                                          │
-                                          ▼
-                              Patterns.detectToolActivity()
-                                          │
-                                          ▼
-                                   DetectedActivity
-                                          │
-                                          ▼
-                           PixelOfficeGame.handleActivity()
-                                          │
-                                          ▼
-                              Developer.handleEvent()
-                                          │
-                                          ▼
-                             DeveloperStateMachine
-                                     ┌────┴────┐
-                                     ▼         ▼
-                              Animation    Bubble/Ghost
-                                     │         │
-                                     ▼         ▼
-                                   RenderData
-                                       │
-                                       ▼
-                                    Renderer ─→ Screen
+AgentEventReceiver
+  ─> AgentSessionStore
+  ─> OfficeGrid
+  ─> entity state machines
+  ─> 2D renderer
 ```
 
-> **Richard:** So, tmux pipes Claude Code's raw terminal output over TCP to port 9999. The `TmuxReceiver` is a `ServerSocket` running on a daemon thread — it accepts the connection and enqueues raw strings into a `ConcurrentLinkedQueue`. The GL thread polls that queue every frame.
->
-> **Richard:** Then the `StreamParser` processes the raw data. Claude Code outputs JSON streaming format — `content_block_start`, `content_block_delta`, `tool_use`, `tool_result` — and the parser reassembles that into structured events. It tracks active agents and routes tool results back to the right agent.
->
-> **Richard:** Then `Patterns.detectToolActivity()` classifies the tool. A `Write` tool becomes `CODE_WRITING`. A `Read` becomes `FILE_READ`. `Bash` gets sub-classified — it checks regex patterns for test commands, build commands, commit commands, and install commands. The priority order is: test > build > commit > install > generic bash.
->
-> **Richard:** And then — okay this is the part I'm actually proud of — the `DetectedActivity` goes to `handleActivity()` which maps it to a state machine event, and the `DeveloperStateMachine` handles the transition. Each state is its own class implementing `enter()`, `update()`, `exit()`, and `onEvent()`. The state machine is completely decoupled from the parser. You could swap out the entire detection pipeline and the states wouldn't know.
->
-> **Erlich:** That's what I was going to say.
+The UDP receiver runs on a daemon thread and queues validated events. The
+LibGDX render thread drains them, updates the session store, and synchronizes
+the office grid. Network threads never mutate game entities directly.
 
-### Rendering
+The application has one 2D rendering path. Projects fill grid columns from
+left to right and continue vertically as needed. The first row shares the sky;
+additional rows repeat the office wall and floor without repeating the sky.
 
-> **Dinesh:** Okay, MY turn. The rendering pipeline. This is where it all comes together visually, and it's — frankly — it's beautiful work.
->
-> **Gilfoyle:** It draws sprites.
+## Verification
 
-> **Dinesh:** It draws sprites IN THE CORRECT ORDER, Gilfoyle. There's a typed render data system — `RenderData` — with `CharacterRenderInfo`, `DeskRenderInfo`, `WhiteboardRenderInfo`, and `EffectRenderInfo` which is a sealed class with `Bubble` and `Ghost` subtypes. Zero unchecked casts. ZERO.
->
-> **Gilfoyle:** Congratulations on using Kotlin's type system as intended.
->
-> **Dinesh:** The coordinate system is Y-down for world coordinates and Y-up for screen coordinates. The `Renderer` handles the `flipY` conversion. The `GameCamera` supports smooth panning, zooming, and a screen-shake effect that triggers on test failures. The office uses a `SpriteSheet` system that loads from the `sprite_sheet` config — palette-indexed with a transparent color index. Every frame, entities produce `RenderData`, and the renderer consumes it. No entity ever talks to the renderer directly.
->
-> **Gilfoyle:** He rehearsed this.
->
-> **Dinesh:** I did NOT rehearse this.
+Run the core and hook suites after changing event handling:
 
----
-
-## Extending the Application
-
-> **Richard:** So if you want to add new things, the architecture makes it pretty straightforward. I'll walk through the three main extension points.
-
-### Adding a New Developer State
-
-1. Add the state name to `DeveloperStateNames` in `states/DeveloperStates.kt`:
-   ```kotlin
-   const val MY_STATE = "my_state"
-   ```
-2. Create a new `State<Developer>` subclass:
-   ```kotlin
-   class MyState : State<Developer>(DeveloperStateNames.MY_STATE) {
-       override fun enter(entity: Developer, prevState: State<Developer>?) { }
-       override fun update(entity: Developer, dt: Float): String? = null
-       override fun exit(entity: Developer, nextState: State<Developer>?) { }
-       override fun onEvent(entity: Developer, event: String, data: Any?): String? {
-           return when (event) {
-               "some_event" -> DeveloperStateNames.IDLE
-               else -> null
-           }
-       }
-   }
-   ```
-3. Register it in `DeveloperStateMachine`:
-   ```kotlin
-   addState(MyState())
-   ```
-4. Add transitions TO your state from existing states' `onEvent()` methods.
-
-> **Gilfoyle:** If your new state breaks existing transitions, that's your problem. The state machine has 11 states and they all work. Don't add a 12th unless you understand the first 11.
-
-### Adding a New Activity Type
-
-1. Add to `ActivityType` enum in `parsing/Patterns.kt`:
-   ```kotlin
-   MY_ACTIVITY,
-   ```
-2. Add detection logic in `Patterns.detectToolActivity()` or `classifyBashCommand()`.
-3. Map it to a developer event in `PixelOfficeGame.handleActivity()`:
-   ```kotlin
-   ActivityType.MY_ACTIVITY -> {
-       resolveDeveloper(activity)?.handleEvent("my_event")
-   }
-   ```
-
-### Adding New Sprites
-
-1. Add sprite definitions to `config.json` under `sprite_sheet`.
-2. Reference the sprite name in `Renderer.kt` where needed.
-
-> **Richard:** And, uh, if you're adding patterns for Bash command classification, the priority order matters. Test patterns are checked first, then build, then commit, then install. If your command matches multiple patterns, the first match wins.
->
-> **Gilfoyle:** Don't add patterns that match `ls`. I will find you.
-
----
-
-## Keyboard Reference
-
-| Key | Action | Context |
-|---|---|---|
-| `ESC` / `Q` | Quit | Always |
-| `F1` | Toggle debug overlay (also in Settings) | Always |
-| `F2` | Force sitting mode | Always |
-| `F4` | Cycle label mode | Always |
-| `F5` | Toggle night mode | Always |
-| `Arrow Keys` | Pan camera | Always |
-| `+` / Numpad `+` | Zoom in | Always |
-| `-` / Numpad `-` | Zoom out | Always |
-| `1` | Spawn developer | Demo only |
-| `2` | Trigger thinking | Demo only |
-| `3` | Trigger coding | Demo only |
-| `4` | Test failure + shake | Demo only |
-| `5` | Spawn Product Owner | Demo only |
-| `6` | Dismiss Product Owner | Demo only |
-| `7` | Toggle PM at desk | Demo only |
-| `8` | Toggle PO at desk | Demo only |
-| `9` | Cycle states | Demo only |
-
----
-
-## Project Structure
-
-```
-pixel-office-libgdx/
-├── assets/
-│   ├── config.json                  # All configuration
-│   └── sprites/                     # Sprite sheet PNG + JSON
-├── core/src/main/kotlin/com/pixeloffice/
-│   ├── PixelOfficeGame.kt           # Main game loop, input, demo mode
-│   ├── animation/
-│   │   └── SpriteSheet.kt           # Palette-indexed sprite loading
-│   ├── core/
-│   │   ├── Config.kt                # JSON config parser
-│   │   └── EventBus.kt              # Event system
-│   ├── entities/
-│   │   ├── BaseEntity.kt            # Entity base class
-│   │   ├── Developer.kt             # Developer agent entity
-│   │   ├── Ghost.kt                 # Ghost effect (tests failing)
-│   │   ├── ProductOwner.kt          # PO entity (user questions)
-│   │   ├── ProjectManager.kt        # PM entity (interruptions)
-│   │   └── ThoughtBubble.kt         # Bubble effects
-│   ├── network/
-│   │   └── TmuxReceiver.kt          # TCP socket server
-│   ├── parsing/
-│   │   ├── AnsiStripper.kt          # Terminal escape code removal
-│   │   ├── Patterns.kt              # Activity detection + classification
-│   │   └── StreamParser.kt          # Claude Code JSON stream parser
-│   ├── rendering/
-│   │   ├── GameCamera.kt            # Camera, zoom, shake
-│   │   ├── RenderData.kt            # Typed render data classes
-│   │   └── Renderer.kt              # All drawing, Y-flip, UI
-│   ├── states/
-│   │   ├── DeveloperStates.kt       # 11 states + state machine
-│   │   └── StateMachine.kt          # Generic state machine
-│   ├── ui/
-│   │   ├── SettingsConfig.kt        # Runtime settings data model
-│   │   ├── SettingsOverlay.kt       # Settings UI panel
-│   │   └── SettingsSkin.kt          # UI theme/skin
-│   └── world/
-│       ├── AgentActivityTracker.kt   # Per-agent activity history
-│       ├── CollisionMap.kt           # Collision detection
-│       ├── DeskColumn.kt             # Desk layout DSL
-│       ├── LineNetwork.kt            # Navigation graph
-│       ├── LinePathfinder.kt         # A* pathfinding
-│       ├── Office.kt                 # World state, entity management
-│       └── Pathfinder.kt            # Pathfinding interface
-├── desktop/                          # LWJGL3 desktop launcher
-├── android/                          # Android module
-├── ios/                              # iOS module (RoboVM)
-└── gradle/                           # Gradle wrapper
+```bash
+./gradlew :core:test --no-build-cache
+python3 -m unittest discover -s hooks/tests -v
+git diff --check
 ```
 
----
+Stop a running Pixel Office instance before using `./gradlew clean`; removing
+its build artifacts while the JVM is live can cause class-loading failures.
+Rendering and layout changes should also be checked in the running application
+at representative one-row and multi-row grid sizes.
 
-> **Erlich:** And that, gentlemen, is Pixel Office. A real-time visualization engine for artificial intelligence, built on a custom state machine architecture with typed render data and zero unchecked casts. If that doesn't scream "unicorn," I don't know what does.
->
-> **Jian-Yang:** Erlich. Your name is not in the code.
->
-> **Erlich:** My name is in the VISION, Jian-Yang. The VISION.
->
-> **Jian-Yang:** I search git log. You have zero commit.
->
-> **Erlich:** ...This meeting is over.
+## Troubleshooting
+
+- No Claude activity: run `python3 hooks/manage_hooks.py status` and restart
+  Claude Code after installing hooks.
+- No Codex activity: open `/hooks` and trust the installed definitions.
+- Receiver not running: start Pixel Office and look for the
+  `[PixelOffice] Agent events listening` startup message.
+- Hook errors: the emitter intentionally exits successfully even when Pixel
+  Office is closed; run it through the unit tests to inspect mapping behavior.
+- Port conflict: change both `events.udp_port` and the installer `--port`
+  value, then reinstall hooks.
+- Demo characters instead of live agents: set `demo.enabled` to `false`.

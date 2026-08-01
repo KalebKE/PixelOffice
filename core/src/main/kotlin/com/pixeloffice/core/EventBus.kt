@@ -31,10 +31,7 @@ enum class EventType {
 
     // Internal events
     DEVELOPER_ARRIVED_AT_DESK,
-    DEVELOPER_ARRIVED_AT_WHITEBOARD,
-    PM_INTERRUPT,
-    PO_ARRIVED,
-    PO_LEFT
+    DEVELOPER_ARRIVED_AT_WHITEBOARD
 }
 
 /**
