@@ -9,16 +9,9 @@ import com.badlogic.gdx.input.GestureDetector.GestureAdapter
 import com.badlogic.gdx.math.Matrix4
 import com.pixeloffice.animation.SpriteSheet
 import com.pixeloffice.core.Config
-import com.pixeloffice.core.EventBus
-import com.pixeloffice.network.AoClient
-import com.pixeloffice.network.DiscoveryBroadcaster
-import com.pixeloffice.network.HeartbeatReceiver
-import com.pixeloffice.network.TmuxReceiver
+import com.pixeloffice.integration.AgentSessionStore
+import com.pixeloffice.network.AgentEventReceiver
 import com.pixeloffice.world.OfficeGrid
-import com.pixeloffice.parsing.ActivityType
-import com.pixeloffice.parsing.DetectedActivity
-import com.pixeloffice.parsing.Patterns
-import com.pixeloffice.parsing.StreamParser
 import com.pixeloffice.rendering.GameCamera
 import com.pixeloffice.rendering.Renderer
 import com.pixeloffice.ui.SettingsConfig
@@ -28,47 +21,37 @@ import com.pixeloffice.world.Office
 /**
  * Main libGDX application for Pixel Office.
  *
- * Orchestrates the network receiver, stream parser, office simulation,
- * and rendering.
+ * Orchestrates structured agent events, the office simulation, and rendering.
  */
-class PixelOfficeGame : ApplicationAdapter() {
+class PixelOfficeGame(
+    private val onWindowLayoutChanged: (
+        width: Int,
+        height: Int,
+        fixedSky: Boolean
+    ) -> Unit = { _, _, _ -> },
+    private val onWindowResizeRequested: (
+        worldWidth: Int,
+        worldHeight: Int,
+        fixedSky: Boolean,
+        requestedWidth: Int,
+        requestedHeight: Int
+    ) -> Unit = { _, _, _, _, _ -> }
+) : ApplicationAdapter() {
 
     companion object {
         var forceSittingMode = false
         private const val DEMO_CYCLE_DURATION = 20f
         private const val DEMO_INITIAL_SIT_DURATION = 5f
         private const val DEMO_STAGGER_INTERVAL = 2f
-
-        private val BROADCAST_TYPES = setOf(
-            ActivityType.TEST_FAILURE,
-            ActivityType.BUILD_FAILURE,
-            ActivityType.TEST_SUCCESS,
-            ActivityType.BUILD_SUCCESS
-        )
+        private const val STALE_CHECK_INTERVAL_SECONDS = 5f
     }
 
     // Configuration
     private lateinit var config: Config
 
-    // Core systems
-    private lateinit var eventBus: EventBus
-
-    // Per-connection parsers and agent mappings
-    private val streamParsers = mutableMapOf<String, StreamParser>()
-    private val connectionToAgent = mutableMapOf<String, String>()
-    private val pendingConnections = mutableSetOf<String>()
-
-    // Subagent tracking: connectionId → list of spawned subagent agentIds
-    private val connectionSubagents = mutableMapOf<String, MutableList<String>>()
-    private val roundRobinCounters = mutableMapOf<String, Int>()
-
-    // Network
-    private lateinit var receiver: TmuxReceiver
-    private lateinit var discoveryBroadcaster: DiscoveryBroadcaster
-    private lateinit var heartbeatReceiver: HeartbeatReceiver
-
-    // Terminal → Agent ID mapping (from heartbeat system)
-    private val terminalToAgent = mutableMapOf<String, String>()
+    // Structured agent events
+    private var eventReceiver: AgentEventReceiver? = null
+    private var sessionStore: AgentSessionStore? = null
     private var staleCheckTimer = 0f
 
     // Sprites and animation
@@ -96,40 +79,21 @@ class PixelOfficeGame : ApplicationAdapter() {
     private var settingsOpen = false
     private var settingsConfig = SettingsConfig.fromDefaults()
 
-    // AO integration (optional, config-driven)
-    private var aoClient: AoClient? = null
     private var officeGrid: OfficeGrid? = null
 
     // Night mode
     private var nightModeAutomatic = true
 
-    // Touch input
-    private var lastTouchX = 0f
-    private var lastTouchY = 0f
-    private var isDragging = false
-
     override fun create() {
         // Load configuration
         config = Config.load("config.json")
 
-        // Initialize core systems
-        eventBus = EventBus()
-
-        // Initialize network
-        receiver = TmuxReceiver(
-            host = config.network.host,
-            port = config.network.port,
-            bufferSize = config.network.bufferSize,
-            reconnectDelay = config.network.reconnectDelay
-        )
-        setupNetworkCallbacks()
-
         // Initialize sprite sheet (without texture yet)
-        spriteSheet = SpriteSheet(config.spriteSheet)
+        spriteSheet = SpriteSheet(config.spriteSheet, config.sprites.colorVariants)
 
         // Initialize world
         office = Office(config)
-        office.setupDefaultDeskColumns()
+        settingsConfig = office.setupDefaultDeskColumns()
 
         // Initialize rendering
         renderer = Renderer(
@@ -161,41 +125,41 @@ class PixelOfficeGame : ApplicationAdapter() {
             onClose = { toggleSettings() }
         )
 
-        // Discovery broadcaster (for LAN auto-discovery)
-        discoveryBroadcaster = DiscoveryBroadcaster(tcpPort = config.network.port)
-
-        // Heartbeat receiver for terminal detection
-        heartbeatReceiver = HeartbeatReceiver(
-            port = config.heartbeat.port,
-            onNewTerminal = { terminalId ->
-                // Post to GL thread since this callback runs on heartbeat thread
-                Gdx.app.postRunnable {
-                    handleNewTerminal(terminalId)
-                }
-            }
-        )
-
-        // Agent Orchestrator integration (if configured)
-        if (config.ao.enabled) {
-            aoClient = AoClient(config.ao.url).also { it.start() }
-            officeGrid = OfficeGrid(config, columns = config.ao.gridColumns)
-            Gdx.app.log("PixelOffice", "AO integration enabled, listening at: ${config.ao.url}")
-            // Camera bounds will be updated dynamically when offices are created
-        }
-
         // Demo mode
         demoMode = config.demo.enabled
         if (demoMode) {
             renderer.setDemoMode(true)
-        } else {
-            // Start network receiver, discovery broadcaster, and heartbeat receiver
-            receiver.start()
-            discoveryBroadcaster.start()
-            heartbeatReceiver.start()
+        } else if (config.events.enabled) {
+            sessionStore = AgentSessionStore(
+                staleAfterMs = config.events.staleSessionMinutes.coerceAtLeast(1) * 60_000L
+            )
+            officeGrid = OfficeGrid(config, columns = config.events.gridColumns)
+            officeGrid?.let { grid ->
+                renderer.resizeGrid(
+                    Gdx.graphics.width,
+                    Gdx.graphics.height,
+                    grid.worldWidth,
+                    grid.officeWorldHeight
+                )
+            }
+            eventReceiver = AgentEventReceiver(
+                host = config.events.host,
+                udpPort = config.events.udpPort,
+                httpPort = config.events.httpPort
+            ).also { it.start() }
+            Gdx.app.log(
+                "PixelOffice",
+                "Agent events listening on ${config.events.host}:${config.events.udpPort}/udp " +
+                    "and ${config.events.host}:${config.events.httpPort}/api/events"
+            )
         }
 
         // Set up touch input for mobile
         setupTouchInput()
+
+        // Desktop uses this to constrain the native window. Mobile launchers keep
+        // the default no-op callback and rely on the aspect-fit viewport.
+        updateWindowLayout()
 
         Gdx.app.log("PixelOffice", "Game initialized")
     }
@@ -217,10 +181,11 @@ class PixelOfficeGame : ApplicationAdapter() {
 
             override fun tap(x: Float, y: Float, count: Int, button: Int): Boolean {
                 // Check for settings button click (top-right area)
-                // The button is drawn at (width-75, height-4) in screen coords
-                // Tap coords: x is from left, y is from top (Gdx.input style)
+                // Tap coords are physical pixels from the top-left; map them through
+                // the aspect-fit viewport into the fixed UI coordinate space.
+                val (uiX, uiY) = renderer.screenToUi(x, y) ?: return false
                 val screenWidth = config.display.width
-                if (x >= screenWidth - 16f && y <= 16f && !settingsOpen) {
+                if (uiX >= screenWidth - 16f && uiY <= 16f && !settingsOpen) {
                     toggleSettings()
                     return true
                 }
@@ -239,205 +204,6 @@ class PixelOfficeGame : ApplicationAdapter() {
         Gdx.input.inputProcessor = inputMultiplexer
     }
 
-    private fun setupNetworkCallbacks() {
-        receiver.onConnect = { connectionId ->
-            receiver.postToGLThread {
-                handleNewConnection(connectionId)
-            }
-        }
-
-        receiver.onDisconnect = { connectionId ->
-            receiver.postToGLThread {
-                handleDisconnection(connectionId)
-            }
-        }
-    }
-
-    private fun handleNewConnection(connectionId: String) {
-        val parser = StreamParser()
-        streamParsers[connectionId] = parser
-
-        val agentId = "agent_$connectionId"
-        connectionToAgent[connectionId] = agentId
-        pendingConnections.add(connectionId)
-
-        renderer.setConnectionCount(receiver.getConnectionCount())
-        Gdx.app.log("PixelOffice", "New connection (pending): $connectionId → agent $agentId")
-    }
-
-    private fun handleDisconnection(connectionId: String) {
-        val wasPending = pendingConnections.remove(connectionId)
-        streamParsers.remove(connectionId)
-
-        val agentId = connectionToAgent.remove(connectionId)
-        if (agentId != null && !wasPending) {
-            office.getDeveloper(agentId)?.handleEvent("idle")
-        }
-
-        // Idle subagent developers/managers and clean up tracking
-        connectionSubagents.remove(connectionId)?.forEach { subId ->
-            when (subId) {
-                "pm" -> office.getProjectManager()?.handleEvent("idle")
-                "po" -> office.getProductOwner()?.handleEvent("idle")
-                else -> office.getDeveloper(subId)?.handleEvent("idle")
-            }
-        }
-        roundRobinCounters.remove(connectionId)
-
-        renderer.setConnectionCount(receiver.getConnectionCount())
-        if (wasPending) {
-            Gdx.app.log("PixelOffice", "Probe disconnected (no developer spawned): $connectionId")
-        } else {
-            Gdx.app.log("PixelOffice", "Disconnected: $connectionId (agent $agentId)")
-        }
-    }
-
-    /**
-     * Handle a new terminal detected via heartbeat.
-     * Spawns a developer immediately for instant visual feedback.
-     */
-    private fun handleNewTerminal(terminalId: String) {
-        val agentId = "terminal_$terminalId"
-        val developer = office.spawnDeveloper(agentId)
-        if (developer != null) {
-            terminalToAgent[terminalId] = agentId
-            Gdx.app.log("PixelOffice", "Developer spawned for terminal heartbeat: $terminalId → $agentId")
-        } else {
-            Gdx.app.log("PixelOffice", "Failed to spawn developer for terminal: $terminalId (no desk available)")
-        }
-    }
-
-    /**
-     * Check for stale terminals (no heartbeat for timeout period) and remove their developers.
-     */
-    private fun checkStaleTerminals() {
-        val timeoutMs = config.heartbeat.timeoutMinutes * 60 * 1000L
-        val staleTerminals = heartbeatReceiver.getStaleTerminals(timeoutMs)
-
-        for (terminalId in staleTerminals) {
-            val agentId = terminalToAgent.remove(terminalId)
-            if (agentId != null) {
-                office.removeDeveloper(agentId)
-                Gdx.app.log("PixelOffice", "Removed stale developer: $agentId (terminal: $terminalId, no heartbeat for ${config.heartbeat.timeoutMinutes} minutes)")
-            }
-            heartbeatReceiver.removeTerminal(terminalId)
-        }
-    }
-
-    private fun handleActivity(activity: DetectedActivity) {
-        // Record every activity to the tracker before dispatching animations
-        val agentId = activity.agentId ?: office.getAllDevelopers().lastOrNull()?.agentId
-        if (agentId != null) {
-            office.recordAgentActivity(agentId, activity.type, activity.toolName, extractActivityContext(activity))
-        }
-
-        when (activity.type) {
-            ActivityType.AGENT_SPAWN -> {
-                val parentId = activity.agentId ?: "unknown"
-                val description = (activity.details?.get("description") as? String) ?: ""
-                val managerType = Patterns.managerTypeForDescription(description)
-
-                if (managerType != null) {
-                    // Route to PM or PO instead of spawning a developer
-                    val connId = connectionToAgent.entries.find { it.value == parentId }?.key
-                    if (connId != null) {
-                        connectionSubagents.getOrPut(connId) { mutableListOf() }.add(managerType)
-                    }
-                    Gdx.app.log("PixelOffice", "Manager subagent routed: $managerType (parent: $parentId, desc: $description)")
-                } else {
-                    val spawnId = "${parentId}_sub_${office.getAllDevelopers().size}"
-                    val dev = office.spawnDeveloper(spawnId)
-                    if (dev != null) {
-                        val connId = connectionToAgent.entries.find { it.value == parentId }?.key
-                        if (connId != null) {
-                            connectionSubagents.getOrPut(connId) { mutableListOf() }.add(spawnId)
-                        }
-                        Gdx.app.log("PixelOffice", "Subagent spawned: $spawnId (parent: $parentId)")
-                    } else {
-                        Gdx.app.log("PixelOffice", "Subagent spawn FAILED (no desk): $spawnId")
-                    }
-                }
-            }
-            ActivityType.THINKING -> {
-                dispatchEvent(activity, "thinking_started")
-            }
-            ActivityType.PLANNING -> {
-                dispatchEvent(activity, "planning_started")
-            }
-            ActivityType.FILE_READ, ActivityType.WEB_SEARCH -> {
-                dispatchEvent(activity, "researching_started")
-            }
-            ActivityType.CODE_WRITING, ActivityType.CODE_EDITING -> {
-                dispatchEvent(activity, "code_writing_started")
-            }
-            ActivityType.TEST_EXECUTION, ActivityType.BUILD_EXECUTION,
-            ActivityType.BASH_EXECUTION, ActivityType.COMMITTING,
-            ActivityType.INSTALLING_DEPS -> {
-                dispatchEvent(activity, "command_started")
-            }
-            ActivityType.TEST_FAILURE, ActivityType.BUILD_FAILURE -> {
-                dispatchEvent(activity, "tests_failed")
-                camera.shake(3f)
-            }
-            ActivityType.TEST_SUCCESS, ActivityType.BUILD_SUCCESS -> {
-                dispatchEvent(activity, "command_succeeded")
-            }
-            ActivityType.USER_QUESTION -> {
-                office.getAllDevelopers().lastOrNull()?.let { dev ->
-                    office.spawnProductOwner(dev.agentId)
-                }
-            }
-            ActivityType.UNKNOWN -> {
-                // Unknown activities don't trigger animations
-            }
-        }
-    }
-
-    /**
-     * Dispatch an event to the correct entity (developer, PM, or PO) based on the activity's agentId.
-     */
-    private fun dispatchEvent(activity: DetectedActivity, event: String) {
-        val id = activity.agentId
-        when (id) {
-            "pm" -> office.getProjectManager()?.handleEvent(event)
-            "po" -> office.getProductOwner()?.handleEvent(event)
-            else -> {
-                val dev = if (id != null) office.getDeveloper(id) else office.getAllDevelopers().lastOrNull()
-                dev?.handleEvent(event)
-            }
-        }
-    }
-
-    /**
-     * Resolve the developer for an activity, preferring the activity's agentId.
-     */
-    private fun resolveDeveloper(activity: DetectedActivity): com.pixeloffice.entities.Developer? {
-        val id = activity.agentId
-        return if (id != null) office.getDeveloper(id) else office.getAllDevelopers().lastOrNull()
-    }
-
-    /**
-     * Extract brief context from an activity's details for tracking.
-     */
-    private fun extractActivityContext(activity: DetectedActivity): String? {
-        val details = activity.details ?: return null
-        return when (activity.type) {
-            ActivityType.CODE_WRITING, ActivityType.CODE_EDITING -> {
-                (details["file_path"] as? String)?.substringAfterLast('/')
-            }
-            ActivityType.FILE_READ -> {
-                (details["file_path"] as? String)?.substringAfterLast('/')
-                    ?: (details["pattern"] as? String)
-            }
-            ActivityType.BASH_EXECUTION, ActivityType.TEST_EXECUTION,
-            ActivityType.BUILD_EXECUTION, ActivityType.COMMITTING,
-            ActivityType.INSTALLING_DEPS -> {
-                (details["command"] as? String)?.take(40)
-            }
-            else -> null
-        }
-    }
-
     override fun render() {
         // Calculate delta time
         val dt = Gdx.graphics.deltaTime.coerceAtMost(0.1f)
@@ -454,82 +220,33 @@ class PixelOfficeGame : ApplicationAdapter() {
         // Handle input
         handleInput()
 
-        // Process network data (if not demo mode)
+        // Process structured agent events (if not demo mode)
         if (!demoMode) {
-            // AO mode: drain SSE snapshots and sync offices
-            val aoSnapshots = aoClient?.drainSnapshots()
-            if (aoSnapshots != null) {
-                val prevOfficeCount = officeGrid?.getAllOffices()?.size ?: 0
-                officeGrid?.syncWithSnapshots(aoSnapshots)
-                // Only resize window when the number of offices changes
-                officeGrid?.let { grid ->
-                    val newOfficeCount = grid.getAllOffices().size
-                    if (newOfficeCount != prevOfficeCount) {
-                        val newWidth = grid.worldWidth.toInt().coerceAtLeast(config.display.width)
-                        val newHeight = grid.worldHeight.toInt().coerceAtLeast(config.display.height)
-                        Gdx.graphics.setWindowedMode(newWidth, newHeight)
-                    }
-                    camera.setWorldBounds(grid.worldWidth, grid.worldHeight)
-                }
+            val store = sessionStore
+            var sessionsChanged = false
+            eventReceiver?.drainEvents()?.forEach { event ->
+                sessionsChanged = store?.applyEvent(event) == true || sessionsChanged
             }
 
-            val drained = receiver.drainData()
-            for ((connectionId, data) in drained) {
-                val parser = streamParsers[connectionId] ?: continue
-                val agentId = connectionToAgent[connectionId] ?: continue
-
-                // Spawn developer on first real data (skips TCP probes)
-                if (pendingConnections.remove(connectionId)) {
-                    office.spawnDeveloper(agentId)
-                    Gdx.app.log("PixelOffice", "Developer spawned on first data: $agentId")
-                }
-
-                val activities = parser.feed(data)
-                val subagents = connectionSubagents[connectionId]
-                for (activity in activities) {
-                    if (activity.type == ActivityType.AGENT_SPAWN) {
-                        // AGENT_SPAWN always goes to parent (it creates the subagent)
-                        activity.agentId = activity.agentId ?: agentId
-                        handleActivity(activity)
-                    } else if (!subagents.isNullOrEmpty() && activity.type in BROADCAST_TYPES) {
-                        // Broadcast: send to all developers (parent + subagents)
-                        val allAgents = listOf(agentId) + subagents
-                        for (targetId in allAgents) {
-                            val copy = activity.copy(agentId = targetId)
-                            handleActivity(copy)
-                        }
-                    } else if (!subagents.isNullOrEmpty()) {
-                        // Round-robin: distribute across parent + subagents
-                        val allAgents = listOf(agentId) + subagents
-                        val counter = roundRobinCounters.getOrPut(connectionId) { 0 }
-                        activity.agentId = allAgents[counter % allAgents.size]
-                        roundRobinCounters[connectionId] = counter + 1
-                        handleActivity(activity)
-                    } else {
-                        // No subagents: original behavior
-                        activity.agentId = activity.agentId ?: agentId
-                        handleActivity(activity)
-                    }
-                }
+            staleCheckTimer += dt
+            if (staleCheckTimer >= STALE_CHECK_INTERVAL_SECONDS) {
+                staleCheckTimer = 0f
+                sessionsChanged = store?.expireStaleSessions() == true || sessionsChanged
             }
+
+            if (sessionsChanged && store != null) syncEventOffices(store)
         } else {
             runDemo(dt)
-        }
-
-        // Check for stale terminals periodically (if not demo mode)
-        if (!demoMode) {
-            staleCheckTimer += dt
-            if (staleCheckTimer >= config.heartbeat.checkIntervalSeconds) {
-                staleCheckTimer = 0f
-                checkStaleTerminals()
-            }
         }
 
         // Update systems
         camera.update(dt)
         renderer.update(dt)
-        office.update(dt)
-        officeGrid?.update(dt)
+        if (demoMode || officeGrid == null) {
+            office.update(dt)
+        } else {
+            officeGrid?.update(dt)
+        }
 
         // Night mode auto-detection (synced with procedural sky)
         if (nightModeAutomatic) {
@@ -541,28 +258,30 @@ class PixelOfficeGame : ApplicationAdapter() {
 
         // Render scene
         val grid = officeGrid
-        if (grid != null && config.ao.enabled) {
+        if (grid != null && !demoMode) {
             // Multi-office grid rendering: draw each office at its grid offset
             val entries = grid.getOfficeRenderData()
             if (entries.isNotEmpty()) {
-                val gridMatrix = Matrix4().setToOrtho2D(
-                    0f, 0f,
+                val officeMatrix = Matrix4().setToOrtho2D(
+                    0f, grid.projectionBottom,
                     grid.worldWidth,
-                    grid.worldHeight
+                    grid.officeWorldHeight
                 )
-                renderer.setCameraMatrix(gridMatrix)
-                // Draw sky once spanning all offices
-                renderer.drawSky(grid.worldWidth.toInt())
+                renderer.setCameraMatrix(officeMatrix)
+                renderer.drawFixedSky()
+                renderer.applyOfficeViewport()
+                for (emptyCell in grid.getEmptyCellOffsets()) {
+                    renderer.drawEmptyOfficeCell(emptyCell.offsetX, emptyCell.offsetY)
+                }
                 for (entry in entries) {
-                    renderer.drawScene(entry.renderData, entry.offsetX, entry.offsetY, entry.projectId)
+                    renderer.drawScene(entry.renderData, entry.offsetX, entry.offsetY, entry.projectLabel)
                 }
 
-                // Clear camera for overlays (render in screen space)
-                renderer.setCameraMatrix(null)
                 // Draw debug/UI overlays once after all offices
                 renderer.drawOverlays()
+                renderer.setCameraMatrix(null)
             } else {
-                // No AO offices yet, fall back to local office
+                // No active project offices yet, fall back to the local office.
                 val renderData = office.getRenderData()
                 renderer.drawScene(renderData)
             }
@@ -575,6 +294,57 @@ class PixelOfficeGame : ApplicationAdapter() {
         // Draw settings overlay on top
         if (settingsOpen) {
             settingsOverlay.render()
+        }
+    }
+
+    private fun syncEventOffices(store: AgentSessionStore) {
+        val grid = officeGrid ?: return
+        val previousWorldWidth = grid.worldWidth
+        val previousWorldHeight = grid.worldHeight
+        grid.syncWithSnapshots(store.snapshots())
+        if (grid.worldWidth != previousWorldWidth || grid.worldHeight != previousWorldHeight) {
+            updateWindowLayout()
+            renderer.resizeGrid(
+                Gdx.graphics.width,
+                Gdx.graphics.height,
+                grid.worldWidth,
+                grid.officeWorldHeight
+            )
+        }
+        camera.setWorldBounds(grid.worldWidth, grid.worldHeight)
+    }
+
+    private fun updateWindowLayout() {
+        val grid = officeGrid
+        val fixedSky = !demoMode && grid != null
+        val worldWidth = if (!demoMode && grid != null) grid.worldWidth.toInt() else config.display.width
+        val worldHeight = if (!demoMode && grid != null) grid.worldHeight.toInt() else config.display.height
+        onWindowLayoutChanged(worldWidth, worldHeight, fixedSky)
+    }
+
+    override fun resize(width: Int, height: Int) {
+        if (::renderer.isInitialized) {
+            val grid = officeGrid
+            if (!demoMode && grid != null) {
+                renderer.resizeGrid(width, height, grid.worldWidth, grid.officeWorldHeight)
+            } else {
+                renderer.resize(
+                    width,
+                    height,
+                    config.display.width.toFloat(),
+                    config.display.height.toFloat()
+                )
+            }
+        }
+        if (::settingsOverlay.isInitialized) {
+            settingsOverlay.resize(width, height)
+        }
+        if (::config.isInitialized) {
+            val grid = officeGrid
+            val fixedSky = !demoMode && grid != null
+            val worldWidth = if (!demoMode && grid != null) grid.worldWidth.toInt() else config.display.width
+            val worldHeight = if (!demoMode && grid != null) grid.worldHeight.toInt() else config.display.height
+            onWindowResizeRequested(worldWidth, worldHeight, fixedSky, width, height)
         }
     }
 
@@ -672,36 +442,6 @@ class PixelOfficeGame : ApplicationAdapter() {
                 office.getAllDevelopers().lastOrNull()?.handleEvent("tests_failed")
                 camera.shake(3f)
             }
-            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_5)) {
-                // Spawn Product Owner to ask question to last developer
-                office.getAllDevelopers().lastOrNull()?.let { dev ->
-                    office.spawnProductOwner(dev.agentId)
-                }
-            }
-            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_6)) {
-                // Dismiss Product Owner (simulate answer received)
-                office.dismissProductOwner()
-            }
-            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_7)) {
-                // Toggle PM sitting
-                val pm = office.getProjectManager()
-                if (pm?.getAssignedDeskId() != null) {
-                    pm.clearAssignedDesk()
-                } else {
-                    val deskId = office.getNextAvailableDeskId()
-                    if (deskId != null) office.assignPMToDesk(deskId)
-                }
-            }
-            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_8)) {
-                // Toggle PO sitting
-                val po = office.getProductOwner()
-                if (po?.getAssignedDeskId() != null) {
-                    po.clearAssignedDesk()
-                } else {
-                    val deskId = office.getNextAvailableDeskId()
-                    if (deskId != null) office.assignPOToDesk(deskId)
-                }
-            }
             if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_9)) {
                 // Cycle through new states: researching → command → celebrating
                 val dev = office.getAllDevelopers().lastOrNull()
@@ -725,14 +465,8 @@ class PixelOfficeGame : ApplicationAdapter() {
             office.spawnDeveloper("demo_agent_1", colorVariant = 0)
             office.spawnDeveloper("demo_agent_2", colorVariant = 1)
             office.spawnDeveloper("demo_agent_3", colorVariant = 2)
-
-            // PM and PO are already spawned as permanent managers by Office.setupDefaultDeskColumns()
-            // Just adjust their sit durations for demo pacing
-            office.getProjectManager()?.sitDuration = 15f
-            office.getProductOwner()?.let { po ->
-                po.sitDuration = 15f
-                po.setSitTimerStart(-7.5f)
-            }
+            office.spawnDeveloper("demo_agent_4", colorVariant = 3)
+            office.spawnDeveloper("demo_agent_5", colorVariant = 4)
         }
 
         // Cycle through states for all developers with initial sit period and stagger
@@ -801,17 +535,10 @@ class PixelOfficeGame : ApplicationAdapter() {
     }
 
     override fun dispose() {
-        // Stop AO client
-        aoClient?.stop()
-
-        // Stop network receiver, discovery broadcaster, and heartbeat receiver
-        receiver.stop()
-        discoveryBroadcaster.stop()
-        heartbeatReceiver.stop()
+        eventReceiver?.stop()
 
         settingsOverlay.dispose()
         renderer.dispose()
-        eventBus.clear()
         Gdx.app.log("PixelOffice", "Game disposed")
     }
 }

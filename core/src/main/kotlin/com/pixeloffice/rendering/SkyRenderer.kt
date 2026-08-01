@@ -27,7 +27,7 @@ class SkyRenderer(
     ufoConfig: UfoConfig = UfoConfig()
 ) {
     // Sky strip height in pixels
-    private val skyHeight = 38
+    private val skyHeight = OfficeLayout.SKY_HEIGHT.toInt()
 
     // Animation time accumulator
     private var time = 0f

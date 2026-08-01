@@ -39,6 +39,7 @@ class LineNetwork(private val config: Config) {
     // Desk positions for navigation (can be overridden programmatically)
     private var deskPositions: List<DeskNavPosition> =
         config.office.deskPositions.map { DeskNavPosition(it.id, it.x.toFloat(), it.y.toFloat()) }
+    private var loungeOnLeft = false
 
     // Calculated aisle centers
     private var leftAisleX = 22f
@@ -55,8 +56,9 @@ class LineNetwork(private val config: Config) {
      * Call this after desk columns are set up to use DeskColumn positions
      * instead of config.json desk_positions.
      */
-    fun setDeskPositions(positions: List<DeskNavPosition>) {
+    fun setDeskPositions(positions: List<DeskNavPosition>, loungeOnLeft: Boolean) {
         deskPositions = positions
+        this.loungeOnLeft = loungeOnLeft
         rebuild()
     }
 
@@ -114,8 +116,9 @@ class LineNetwork(private val config: Config) {
      * Create all navigation points in the network.
      */
     private fun createAllPoints() {
-        // Get unique desk row Y values
-        val deskRowYs = deskPositions.map { it.y.toInt() }.distinct().sorted()
+        val deskRowYs = deskRowYs()
+        val leftDeskRowYs = deskRowYs(leftSide = true).toSet()
+        val rightDeskRowYs = deskRowYs(leftSide = false).toSet()
 
         // Corridor intersection points (where aisles meet corridor)
         addPoint(NavPoint(leftAisleX, corridorY, "corridor_left"))
@@ -132,14 +135,16 @@ class LineNetwork(private val config: Config) {
         for (rowY in deskRowYs) {
             val rowYFloat = rowY.toFloat()
 
-            // Left aisle intersection
-            addPoint(NavPoint(leftAisleX, rowYFloat, "left_aisle_y$rowY"))
+            // Each outer aisle follows the rows of the physical column beside
+            // it. When the columns swap, these vertical paths swap as well.
+            if (rowY in leftDeskRowYs) {
+                addPoint(NavPoint(leftAisleX, rowYFloat, "left_aisle_y$rowY"))
+            }
 
             // Center aisle intersection
             addPoint(NavPoint(centerAisleX, rowYFloat, "center_aisle_y$rowY"))
 
-            // Right aisle intersection (only for first two rows based on config)
-            if (rowY <= 166) {
+            if (rowY in rightDeskRowYs) {
                 addPoint(NavPoint(rightAisleX, rowYFloat, "right_aisle_y$rowY"))
             }
         }
@@ -159,7 +164,7 @@ class LineNetwork(private val config: Config) {
 
             // Right column: rightmost connects right (top-right), others connect left (top-left)
             for ((index, desk) in rightDesks.withIndex()) {
-                val connectsRight = index == 0 && rowY <= 166  // right aisle only exists for y <= 166
+                val connectsRight = index == 0
                 val deskX = if (connectsRight) desk.x + deskWidth else desk.x
                 addPoint(NavPoint(deskX, desk.y, desk.id))
             }
@@ -174,15 +179,20 @@ class LineNetwork(private val config: Config) {
         // Bottom corridor intersection points (y=200, between green couch and large table)
         val bottomCorridorY = 200f
         addPoint(NavPoint(centerAisleX, bottomCorridorY, "bottom_corridor_center"))
-        addPoint(NavPoint(rightAisleX, bottomCorridorY, "bottom_corridor_right"))
+        if (loungeOnLeft) {
+            addPoint(NavPoint(leftAisleX, bottomCorridorY, "bottom_corridor_left"))
+        } else {
+            addPoint(NavPoint(rightAisleX, bottomCorridorY, "bottom_corridor_right"))
+        }
     }
 
     /**
      * Create all line segments connecting points.
      */
     private fun createAllLines() {
-        // Get unique desk row Y values
-        val deskRowYs = deskPositions.map { it.y.toInt() }.distinct().sorted()
+        val deskRowYs = deskRowYs()
+        val leftDeskRowYs = deskRowYs(leftSide = true)
+        val rightDeskRowYs = deskRowYs(leftSide = false)
 
         // --- Horizontal corridor line ---
         // First, collect all points on the corridor (y = corridorY) sorted by X
@@ -201,15 +211,14 @@ class LineNetwork(private val config: Config) {
         }
 
         // --- Vertical aisle lines ---
-        // Left aisle: connect corridor to each row
-        connectVerticalPoints("corridor_left", deskRowYs.map { "left_aisle_y$it" })
+        // Each outer aisle follows its physical column. This makes the short
+        // and tall vertical routes exchange sides with the desk blocks.
+        connectVerticalPoints("corridor_left", leftDeskRowYs.map { "left_aisle_y$it" })
 
         // Center aisle: connect corridor to each row
         connectVerticalPoints("corridor_center", deskRowYs.map { "center_aisle_y$it" })
 
-        // Right aisle: connect corridor to first two rows only
-        val rightAisleRows = deskRowYs.filter { it <= 166 }.map { "right_aisle_y$it" }
-        connectVerticalPoints("corridor_right", rightAisleRows)
+        connectVerticalPoints("corridor_right", rightDeskRowYs.map { "right_aisle_y$it" })
 
         // --- Horizontal desk row lines ---
         for (rowY in deskRowYs) {
@@ -238,13 +247,19 @@ class LineNetwork(private val config: Config) {
         }
 
         // --- Extend aisles to bottom ---
-        val lastLeftRow = deskRowYs.maxOrNull()
+        val lastLeftRow = leftDeskRowYs.maxOrNull()
         val lastCenterRow = deskRowYs.maxOrNull()
-        val lastRightRow = deskRowYs.filter { it <= 166 }.maxOrNull()
+        val lastRightRow = rightDeskRowYs.maxOrNull()
 
-        // Left aisle: last desk row → bottom
+        // The short/lounge side bends into the movable bottom corridor. The
+        // tall side continues straight down, mirroring the original layout.
         if (lastLeftRow != null) {
-            addLine("left_aisle_y$lastLeftRow", "left_aisle_bottom")
+            if (loungeOnLeft) {
+                addLine("left_aisle_y$lastLeftRow", "bottom_corridor_left")
+                addLine("bottom_corridor_left", "left_aisle_bottom")
+            } else {
+                addLine("left_aisle_y$lastLeftRow", "left_aisle_bottom")
+            }
         }
 
         // Center aisle: last desk row → bottom corridor → bottom
@@ -253,15 +268,31 @@ class LineNetwork(private val config: Config) {
             addLine("bottom_corridor_center", "center_aisle_bottom")
         }
 
-        // Right aisle: last right row → bottom corridor → bottom
         if (lastRightRow != null) {
-            addLine("right_aisle_y$lastRightRow", "bottom_corridor_right")
-            addLine("bottom_corridor_right", "right_aisle_bottom")
+            if (loungeOnLeft) {
+                addLine("right_aisle_y$lastRightRow", "right_aisle_bottom")
+            } else {
+                addLine("right_aisle_y$lastRightRow", "bottom_corridor_right")
+                addLine("bottom_corridor_right", "right_aisle_bottom")
+            }
         }
 
-        // Horizontal line at bottom corridor (y=210) connecting center and right aisles
-        addLine("bottom_corridor_center", "bottom_corridor_right")
+        if (loungeOnLeft) {
+            addLine("bottom_corridor_left", "bottom_corridor_center")
+        } else {
+            addLine("bottom_corridor_center", "bottom_corridor_right")
+        }
     }
+
+    private fun deskRowYs(): List<Int> =
+        deskPositions.map { it.y.toInt() }.distinct().sorted()
+
+    private fun deskRowYs(leftSide: Boolean): List<Int> =
+        deskPositions
+            .filter { (it.x < centerAisleX) == leftSide }
+            .map { it.y.toInt() }
+            .distinct()
+            .sorted()
 
     /**
      * Connect a list of vertical points (from start down through rows).

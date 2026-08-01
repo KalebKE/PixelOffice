@@ -6,7 +6,7 @@ import com.pixeloffice.PixelOfficeGame
 
 fun main() {
     val config = Lwjgl3ApplicationConfiguration().apply {
-        setTitle("Pixel Office - Claude Code Visualization")
+        setTitle("Pixel Office - Agent Visualization")
         setWindowedMode(320 * 4, 240 * 4) // 4x scale
         useVsync(true)
         setForegroundFPS(30)
@@ -18,5 +18,8 @@ fun main() {
         // setWindowIcon("icon.png")
     }
 
-    Lwjgl3Application(PixelOfficeGame(), config)
+    Lwjgl3Application(
+        PixelOfficeGame(::applyDesktopWindowLayout, ::constrainDesktopWindowResize),
+        config
+    )
 }

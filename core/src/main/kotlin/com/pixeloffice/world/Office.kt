@@ -2,11 +2,12 @@ package com.pixeloffice.world
 
 import com.pixeloffice.core.Config
 import com.pixeloffice.entities.*
-import com.pixeloffice.parsing.ActivityType
 import com.pixeloffice.rendering.*
+import com.pixeloffice.states.DeveloperStateNames
 import com.pixeloffice.ui.ColumnSettings
 import com.pixeloffice.ui.SettingsConfig
 import kotlin.math.sqrt
+import kotlin.random.Random
 
 /**
  * A desk in the office.
@@ -18,8 +19,8 @@ data class Desk(
     val chairX: Float = x,
     val chairY: Float = y,
     val side: DeskSide? = null,
-    var occupiedBy: String? = null,      // Entity ID (any character type)
-    var occupantType: String? = null     // "developer", "project_manager", "product_owner"
+    var occupiedBy: String? = null,
+    var occupantType: String? = null
 )
 
 /**
@@ -31,27 +32,57 @@ data class Whiteboard(
     val y: Float
 )
 
+private enum class PatrolPhase {
+    IDLE_DELAY,
+    WALKING,
+    PAUSING,
+    TALKING,
+    RETURNING
+}
+
+private data class DeveloperPatrol(
+    var phase: PatrolPhase = PatrolPhase.IDLE_DELAY,
+    var idleElapsed: Float = 0f,
+    var triggerAfter: Float = 0f,
+    var stopsVisited: Int = 0,
+    var targetDeskId: String? = null,
+    var pauseRemaining: Float = 0f,
+    var socialCooldown: Float = 0f,
+    val visitedDeskIds: MutableSet<String> = mutableSetOf()
+)
+
+private enum class ConversationKind { DESK_VISIT, PATROL_COLLISION }
+
+private data class DeveloperConversation(
+    val firstAgentId: String,
+    val secondAgentId: String,
+    val visitorAgentId: String?,
+    val interruptedAgentId: String?,
+    val kind: ConversationKind,
+    var remaining: Float
+) {
+    fun participants(): List<String> = listOf(firstAgentId, secondAgentId)
+}
+
 /**
  * Manages the office layout and all entities within it.
  *
  * Handles desk allocation, entity spawning, and provides
  * the world state for rendering.
  */
-class Office(private val config: Config) {
+class Office(
+    private val config: Config,
+    private val projectId: String = "default",
+    private val randomFloat: () -> Float = { Random.nextFloat() }
+) {
 
     companion object {
-        // PM/PO default spawn positions (upper corridor)
-        const val PM_START_X = 64f
-        const val PM_START_Y = 110f
-        const val PO_PATROL_START_X = 150f
-        const val PO_PATROL_START_Y = 110f
+        const val SOCIAL_COLLISION_DISTANCE = 15f
+        const val SOCIAL_COLLISION_COOLDOWN_SECONDS = 2f
 
-        // Permanent manager desk assignments (east-side desks in column 2)
-        const val PM_DESK_ID = "deskColumn2_desk1"  // row 0 east
-        const val PO_DESK_ID = "deskColumn2_desk3"  // row 1 east
-
-        // Collision detection
-        const val MANAGER_COLLISION_DIST = 15f
+        private const val PET_START_SALT = 0x1872A1
+        private const val CAT_RANDOM_SALT = 0xCA7001
+        private const val DOG_RANDOM_SALT = 0xD06001
 
         // Bubble Y offset above entity
         const val BUBBLE_Y_OFFSET = -21f
@@ -74,12 +105,11 @@ class Office(private val config: Config) {
 
     // Entities
     private val developers = mutableMapOf<String, Developer>()
-    private var projectManager: ProjectManager? = null
-    private var productOwner: ProductOwner? = null
+    private val patrols = mutableMapOf<String, DeveloperPatrol>()
+    private val conversationsByParticipant = mutableMapOf<String, DeveloperConversation>()
     private val effects = mutableListOf<BaseEntity>() // Ghosts, bubbles, etc.
-
-    // Per-agent activity tracking
-    private val activityTracker = AgentActivityTracker()
+    private val pets = linkedMapOf<PetType, OfficePet>()
+    private var petAnchors = emptyList<PetAnchor>()
 
     // Entity ID counter
     private var nextEntityId = 0
@@ -132,7 +162,7 @@ class Office(private val config: Config) {
             com.badlogic.gdx.Gdx.app?.log("Office", "No available desk for agent: $agentId")
             return null
         }
-        val variant = colorVariant ?: (developers.size % 3)
+        val variant = colorVariant ?: stableVariantFor(agentId)
         return setupDeveloperAtDesk(agentId, desk, variant)
     }
 
@@ -147,7 +177,7 @@ class Office(private val config: Config) {
     fun assignDeveloperToDesk(agentId: String, deskId: String, colorVariant: Int? = null): Developer? {
         val desk = getDeskById(deskId) ?: return null
         if (!isDeskAvailable(deskId)) return null
-        val variant = colorVariant ?: (developers.size % 3)
+        val variant = colorVariant ?: stableVariantFor(agentId)
         return setupDeveloperAtDesk(agentId, desk, variant)
     }
 
@@ -161,7 +191,8 @@ class Office(private val config: Config) {
             agentId = agentId,
             colorVariant = colorVariant,
             walkSpeed = config.developer.walkSpeed,
-            despairDuration = config.developer.despairDuration
+            despairDuration = config.developer.despairDuration,
+            interruptDuration = config.developer.socialDurationSeconds
         )
 
         developer.setDeskPosition(desk.x, desk.y)
@@ -181,6 +212,7 @@ class Office(private val config: Config) {
         desk.occupantType = "developer"
         developers[agentId] = developer
         developer.start()
+        patrols[agentId] = DeveloperPatrol(triggerAfter = nextPatrolDelay())
 
         return developer
     }
@@ -189,9 +221,11 @@ class Office(private val config: Config) {
      * Remove a developer when agent finishes.
      */
     fun removeDeveloper(agentId: String) {
-        val developer = developers.remove(agentId) ?: return
-        activityTracker.removeAgent(agentId)
-
+        val developer = developers[agentId] ?: return
+        conversationsByParticipant[agentId]?.let { endConversation(it, cancelledAgentId = agentId) }
+        cancelPatrol(agentId)
+        developers.remove(agentId)
+        patrols.remove(agentId)
         // Release whiteboard
         developer.getAssignedWhiteboardId()?.let { whiteboardId ->
             releaseWhiteboard(whiteboardId)
@@ -217,28 +251,22 @@ class Office(private val config: Config) {
      */
     fun getAllDevelopers(): List<Developer> = developers.values.toList()
 
-    // Activity tracking
+    internal fun getPatrolPhase(agentId: String): String? = patrols[agentId]?.phase?.name
 
-    fun getActivityTracker(): AgentActivityTracker = activityTracker
+    internal fun getPatrolStopsVisited(agentId: String): Int = patrols[agentId]?.stopsVisited ?: 0
 
-    fun recordAgentActivity(agentId: String, type: ActivityType, toolName: String? = null, context: String? = null) {
-        activityTracker.recordActivity(agentId, type, toolName, context)
-    }
-
-    fun getAgentActivity(agentId: String): ActivityRecord? = activityTracker.getCurrentActivity(agentId)
-
-    // Desk IDs reserved for permanent managers (skip during developer allocation)
-    private val reservedDeskIds = setOf(PM_DESK_ID, PO_DESK_ID)
+    internal fun getActiveConversationCount(): Int =
+        conversationsByParticipant.values.distinctBy { System.identityHashCode(it) }.size
 
     private fun getAvailableDesk(): Desk? {
-        return desks.values.firstOrNull { it.occupiedBy == null && it.id !in reservedDeskIds }
+        return desks.values.firstOrNull { it.occupiedBy == null }
     }
 
     /**
-     * Get the next available (unoccupied) desk ID, excluding reserved manager desks.
+     * Get the next available (unoccupied) desk ID.
      */
     fun getNextAvailableDeskId(): String? {
-        return desks.values.firstOrNull { it.occupiedBy == null && it.id !in reservedDeskIds }?.id
+        return desks.values.firstOrNull { it.occupiedBy == null }?.id
     }
 
     // Desk assignment API
@@ -263,97 +291,6 @@ class Office(private val config: Config) {
         val desk = desks[deskId] ?: return
         desk.occupiedBy = null
         desk.occupantType = null
-    }
-
-    /**
-     * Assign the Project Manager to a specific desk.
-     *
-     * @param deskId The desk ID to assign the PM to.
-     * @return The PM, or null if desk not available.
-     */
-    fun assignPMToDesk(deskId: String): ProjectManager? {
-        val desk = getDeskById(deskId) ?: return null
-        if (!isDeskAvailable(deskId)) return null
-
-        // Create or get PM
-        val pm = projectManager ?: ProjectManager(
-            entityId = "pm",
-            patrolSpeed = config.projectManager.patrolSpeed,
-            interruptChance = config.projectManager.interruptChance,
-            interruptDuration = config.projectManager.interruptDuration
-        )
-
-        if (projectManager == null) {
-            projectManager = pm
-            pm.setPathfinder(pathfinder)
-            pm.setBubbleSpawner { entity, bubbleType ->
-                spawnThoughtBubble(entity, bubbleType)
-            }
-        }
-
-        // Assign to desk
-        pm.setAssignedDesk(deskId, desk.x, desk.y, desk.chairX, desk.chairY)
-        pm.setDeskFacing(facingForDeskSide(desk))
-        pathfinder.getDeskMidpoint(deskId)?.let { (mx, my) -> pm.setDeskMidpoint(mx, my) }
-        pm.x = desk.x
-        pm.y = desk.y
-
-        // Mark desk as occupied
-        desk.occupiedBy = pm.entityId
-        desk.occupantType = "project_manager"
-
-        // Set desk targets for patrol and developer references
-        val deskList = desks.values.map { d -> Triple(d.id, d.x, d.y) }
-        pm.setDeskTargets(deskList, startPatrol = false)
-        pm.setDevelopers(developers.values.toList())
-
-        return pm
-    }
-
-    /**
-     * Assign the Product Owner to a specific desk.
-     *
-     * @param deskId The desk ID to assign the PO to.
-     * @return The PO, or null if desk not available.
-     */
-    fun assignPOToDesk(deskId: String): ProductOwner? {
-        val desk = getDeskById(deskId) ?: return null
-        if (!isDeskAvailable(deskId)) return null
-
-        // Create or get PO
-        val po = productOwner ?: ProductOwner(
-            entityId = "po",
-            walkSpeed = config.productOwner.walkSpeed,
-            questionTimeout = config.productOwner.questionTimeout
-        )
-
-        if (productOwner == null) {
-            productOwner = po
-            po.setPathfinder(pathfinder)
-            po.setBubbleSpawner { entity, bubbleType ->
-                spawnThoughtBubble(entity, bubbleType)
-            }
-        }
-
-        // Assign to desk
-        po.setAssignedDesk(deskId, desk.x, desk.y, desk.chairX, desk.chairY)
-        po.setDeskFacing(facingForDeskSide(desk))
-        pathfinder.getDeskMidpoint(deskId)?.let { (mx, my) -> po.setDeskMidpoint(mx, my) }
-        po.x = desk.x
-        po.y = desk.y
-        po.active = true
-        po.visible = true
-
-        // Mark desk as occupied
-        desk.occupiedBy = po.entityId
-        desk.occupantType = "product_owner"
-
-        // Set desk targets for patrol and developer references
-        val deskList = desks.values.map { d -> Triple(d.id, d.x, d.y) }
-        po.setDeskTargets(deskList)
-        po.setDevelopers(developers.values.toList())
-
-        return po
     }
 
     private fun facingForDeskSide(desk: Desk): String {
@@ -396,18 +333,24 @@ class Office(private val config: Config) {
     // Desk Column management
 
     /**
-     * Set up desk column 1 (west/left side, baseX = 45f) using the DSL.
+     * Set up the taller desk column at its selected physical side.
      */
-    fun setupDeskColumn1(init: DeskColumnBuilder.() -> Unit) {
-        deskColumn1 = DeskColumnBuilder("deskColumn1", DeskColumn.LEFT_COLUMN_X).apply(init).build()
+    fun setupDeskColumn1(
+        baseX: Float = DeskColumn.LEFT_COLUMN_X,
+        init: DeskColumnBuilder.() -> Unit
+    ) {
+        deskColumn1 = DeskColumnBuilder("deskColumn1", baseX).apply(init).build()
         registerColumnDesks(deskColumn1!!)
     }
 
     /**
-     * Set up desk column 2 (east/right side, baseX = 175f) using the DSL.
+     * Set up the shorter lounge column at its selected physical side.
      */
-    fun setupDeskColumn2(init: DeskColumnBuilder.() -> Unit) {
-        deskColumn2 = DeskColumnBuilder("deskColumn2", DeskColumn.RIGHT_COLUMN_X).apply(init).build()
+    fun setupDeskColumn2(
+        baseX: Float = DeskColumn.RIGHT_COLUMN_X,
+        init: DeskColumnBuilder.() -> Unit
+    ) {
+        deskColumn2 = DeskColumnBuilder("deskColumn2", baseX).apply(init).build()
         registerColumnDesks(deskColumn2!!)
     }
 
@@ -437,13 +380,14 @@ class Office(private val config: Config) {
      * Set up default desk columns that reproduce the current hardcoded furniture layout.
      * Delegates to SettingsConfig.fromDefaults() as the single source of truth.
      */
-    fun setupDefaultDeskColumns() {
+    fun setupDefaultDeskColumns(): SettingsConfig {
         // Clear config.json desks so only column-registered desks are used
         desks.clear()
 
-        val defaults = SettingsConfig.fromDefaults()
-        applyDeskColumns(defaults)
-        spawnPermanentManagers()
+        val generated = SettingsConfig.randomizedForProject(projectId)
+        applyDeskColumns(generated)
+        setupPets()
+        return generated.deepCopy()
     }
 
     /**
@@ -453,9 +397,9 @@ class Office(private val config: Config) {
     private fun applyDeskColumns(settingsConfig: SettingsConfig) {
         fun applyColumn(
             columnSettings: ColumnSettings,
-            setup: (DeskColumnBuilder.() -> Unit) -> Unit
+            setup: (Float, DeskColumnBuilder.() -> Unit) -> Unit
         ) {
-            setup {
+            setup(columnSettings.baseX) {
                 for (rowSetting in columnSettings.rows) {
                     row(wallY = rowSetting.wallY) {
                         rowSetting.westDesk?.let { ds ->
@@ -496,7 +440,87 @@ class Office(private val config: Config) {
      */
     private fun syncDeskPositionsToLineNetwork() {
         val navPositions = desks.values.map { DeskNavPosition(it.id, it.x, it.y) }
-        lineNetwork.setDeskPositions(navPositions)
+        val loungeBaseX = listOfNotNull(deskColumn1, deskColumn2)
+            .minByOrNull { it.rows.size }
+            ?.baseX
+            ?: DeskColumn.RIGHT_COLUMN_X
+        lineNetwork.setDeskPositions(
+            navPositions,
+            loungeOnLeft = loungeBaseX == DeskColumn.LEFT_COLUMN_X
+        )
+    }
+
+    private fun setupPets() {
+        pets.clear()
+        petAnchors = emptyList()
+        if (!config.pets.enabled) return
+
+        val deskAnchors = desks.values.sortedBy { it.id }.mapNotNull { desk ->
+            lineNetwork.getDeskMidpoint(desk.id)?.let { point ->
+                val restingFacing = when (desk.side) {
+                    DeskSide.WEST -> "right"
+                    DeskSide.EAST -> "left"
+                    null -> null
+                }
+                PetAnchor("desk:${desk.id}", point.x, point.y, restingFacing)
+            }
+        }
+        val shortColumnBaseX = listOfNotNull(deskColumn1, deskColumn2)
+            .minByOrNull { it.rows.size }
+            ?.baseX
+            ?: DeskColumn.RIGHT_COLUMN_X
+        val loungePointIds = if (shortColumnBaseX == DeskColumn.LEFT_COLUMN_X) {
+            listOf("bottom_corridor_left", "bottom_corridor_center")
+        } else {
+            listOf("bottom_corridor_center", "bottom_corridor_right")
+        }
+        val loungeAnchors = loungePointIds.mapNotNull { pointId ->
+            lineNetwork.getPoint(pointId)?.let {
+                PetAnchor("lounge:${pointId.removePrefix("bottom_corridor_")}", it.x, it.y)
+            }
+        }
+        petAnchors = deskAnchors + loungeAnchors
+        if (petAnchors.isEmpty()) return
+
+        val starts = petAnchors.shuffled(projectRandom(PET_START_SALT))
+        val catStart = starts.first()
+        val dogStart = starts.getOrElse(1) { starts.first() }
+        val catRandom = projectRandom(CAT_RANDOM_SALT)
+        val dogRandom = projectRandom(DOG_RANDOM_SALT)
+        pets[PetType.CAT] = OfficePet(
+            PetType.CAT,
+            catStart,
+            pathfinder,
+            config.pets,
+            catRandom::nextFloat
+        )
+        pets[PetType.DOG] = OfficePet(
+            PetType.DOG,
+            dogStart,
+            pathfinder,
+            config.pets,
+            dogRandom::nextFloat
+        )
+    }
+
+    private fun projectRandom(salt: Int): Random = Random(31 * projectId.hashCode() + salt)
+
+    private fun updatePets(dt: Float) {
+        for (pet in pets.values) {
+            pet.update(dt)
+            if (!pet.isReadyToRoam()) continue
+
+            val occupiedByOtherPets = pets.values
+                .filterNot { it === pet }
+                .flatMap { listOfNotNull(it.currentAnchorId, it.targetAnchorId) }
+                .toSet()
+            val candidates = petAnchors.filter {
+                it.id != pet.currentAnchorId && it.id !in occupiedByOtherPets
+            }
+            if (candidates.isNotEmpty()) {
+                pet.startRoam(candidates[pet.chooseIndex(candidates.size)])
+            }
+        }
     }
 
     /**
@@ -508,18 +532,6 @@ class Office(private val config: Config) {
             removeDeveloper(agentId)
         }
         developers.clear()
-        activityTracker.clear()
-
-        // Clear PM/PO
-        projectManager?.let { pm ->
-            pm.getAssignedDeskId()?.let { unassignDesk(it) }
-        }
-        projectManager = null
-
-        productOwner?.let { po ->
-            po.getAssignedDeskId()?.let { unassignDesk(it) }
-        }
-        productOwner = null
 
         // Clear effects and occupied whiteboards
         effects.clear()
@@ -530,6 +542,7 @@ class Office(private val config: Config) {
 
         // Rebuild desk columns from settings
         applyDeskColumns(settingsConfig)
+        setupPets()
 
         // Spawn developers
         for (devSetting in settingsConfig.developers) {
@@ -545,9 +558,6 @@ class Office(private val config: Config) {
                 spawnDeveloper(devSetting.agentId, devSetting.colorVariant)
             }
         }
-
-        // Always spawn permanent managers at their assigned east-side desks
-        spawnPermanentManagers()
     }
 
     // Named location registry
@@ -593,123 +603,6 @@ class Office(private val config: Config) {
         return assignDeveloperToDesk(agentId, deskId, colorVariant)
     }
 
-    // PM management
-
-    /**
-     * Spawn the Project Manager.
-     */
-    fun spawnProjectManager(): ProjectManager {
-        if (projectManager == null) {
-            projectManager = ProjectManager(
-                entityId = "pm",
-                patrolSpeed = config.projectManager.patrolSpeed,
-                interruptChance = config.projectManager.interruptChance,
-                interruptDuration = config.projectManager.interruptDuration
-            )
-
-            // Set up pathfinder for navigation
-            projectManager?.setPathfinder(pathfinder)
-
-            // Set desk targets for patrol
-            val deskList = desks.values.map { desk ->
-                Triple(desk.id, desk.x, desk.y)
-            }
-            projectManager?.setDeskTargets(deskList)
-
-            // Set up bubble spawner for PM
-            projectManager?.setBubbleSpawner { entity, bubbleType ->
-                spawnThoughtBubble(entity, bubbleType)
-            }
-
-            // Set initial position to upper corridor
-            projectManager?.x = PM_START_X
-            projectManager?.y = PM_START_Y
-        }
-
-        return projectManager!!
-    }
-
-    /**
-     * Get the Project Manager.
-     */
-    fun getProjectManager(): ProjectManager? = projectManager
-
-    // PO management
-
-    /**
-     * Spawn Project Owner to ask a question.
-     *
-     * @param targetAgentId Agent ID of the developer to ask.
-     * @return The PO, or null if target developer not found.
-     */
-    fun spawnProductOwner(targetAgentId: String): ProductOwner? {
-        val developer = developers[targetAgentId] ?: return null
-
-        if (productOwner == null) {
-            productOwner = ProductOwner(
-                entityId = "po",
-                walkSpeed = config.productOwner.walkSpeed,
-                questionTimeout = config.productOwner.questionTimeout
-            )
-
-            // Configure patrol (like ProjectManager)
-            productOwner?.setPathfinder(pathfinder)
-            val deskList = desks.values.map { desk -> Triple(desk.id, desk.x, desk.y) }
-            productOwner?.setDeskTargets(deskList)
-            productOwner?.setBubbleSpawner { entity, bubbleType -> spawnThoughtBubble(entity, bubbleType) }
-        }
-
-        productOwner?.spawnForQuestion(developer)
-        return productOwner
-    }
-
-    /**
-     * Spawn Product Owner for patrol only (no question).
-     */
-    fun spawnProductOwnerPatrol(): ProductOwner? {
-        if (productOwner == null) {
-            productOwner = ProductOwner(
-                x = PO_PATROL_START_X,
-                y = PO_PATROL_START_Y,
-                entityId = "po",
-                walkSpeed = config.productOwner.walkSpeed,
-                questionTimeout = config.productOwner.questionTimeout
-            )
-            productOwner?.setPathfinder(pathfinder)
-            val deskList = desks.values.map { desk -> Triple(desk.id, desk.x, desk.y) }
-            productOwner?.setDeskTargets(deskList)
-            productOwner?.setBubbleSpawner { entity, bubbleType -> spawnThoughtBubble(entity, bubbleType) }
-        }
-        productOwner?.startPatrol()
-        return productOwner
-    }
-
-    /**
-     * Spawn PM and PO as permanent fixtures at their assigned east-side desks.
-     * Called from setupDefaultDeskColumns() and applyDeskColumns().
-     */
-    fun spawnPermanentManagers() {
-        // Only spawn if the desks exist (columns have been set up)
-        if (desks.containsKey(PM_DESK_ID)) {
-            assignPMToDesk(PM_DESK_ID)
-        }
-        if (desks.containsKey(PO_DESK_ID)) {
-            assignPOToDesk(PO_DESK_ID)
-        }
-    }
-
-    /**
-     * Called when user answers the question.
-     */
-    fun dismissProductOwner() {
-        productOwner?.answerReceived()
-    }
-
-    /**
-     * Get the Product Owner.
-     */
-    fun getProductOwner(): ProductOwner? = productOwner
-
     // Effect management
 
     private fun spawnGhost(developer: Developer): Ghost {
@@ -739,25 +632,15 @@ class Office(private val config: Config) {
      * Update all entities.
      */
     fun update(dt: Float) {
-        // Update developers
         for (developer in developers.values) {
             developer.update(dt)
         }
 
-        // Update PM
-        projectManager?.let { pm ->
-            pm.setDevelopers(developers.values.toList())
-            pm.update(dt)
-        }
+        updatePets(dt)
 
-        // Update PO
-        productOwner?.let { po ->
-            po.setDevelopers(developers.values.toList())
-            po.update(dt)
-        }
-
-        // Check PM/PO collision for chatting
-        checkManagerCollision()
+        updateConversations(dt)
+        updatePatrols(dt)
+        checkPatrollerCollisions()
 
         // Update effects and clean up finished ones
         val iterator = effects.iterator()
@@ -771,24 +654,325 @@ class Office(private val config: Config) {
         }
     }
 
-    /**
-     * Check if PM and PO collide while walking, triggering a chat.
-     */
-    private fun checkManagerCollision() {
-        val pm = projectManager ?: return
-        val po = productOwner ?: return
-
-        // Only check if both are walking
-        if (!pm.isWalking() || !po.isWalking()) return
-
-        // Check distance
-        val dx = pm.x - po.x
-        val dy = pm.y - po.y
-        val distSq = dx * dx + dy * dy
-        if (distSq < MANAGER_COLLISION_DIST * MANAGER_COLLISION_DIST) {
-            pm.startChatting()
-            po.startChatting()
+    /** Cancel transient social behavior before applying an authoritative agent event. */
+    fun beforeDeveloperAgentEvent(agentId: String) {
+        conversationsByParticipant[agentId]?.let {
+            endConversation(it, cancelledAgentId = agentId)
         }
+        cancelPatrol(agentId)
+    }
+
+    private fun stableVariantFor(agentId: String): Int {
+        val count = config.sprites.colorVariants.size.coerceAtLeast(1)
+        return Math.floorMod(agentId.hashCode(), count)
+    }
+
+    private fun unitRandom(): Float = randomFloat().coerceIn(0f, 0.999999f)
+
+    private fun nextPatrolDelay(): Float {
+        val min = minOf(config.developer.idlePatrolMinSeconds, config.developer.idlePatrolMaxSeconds)
+            .coerceAtLeast(0f)
+        val max = maxOf(config.developer.idlePatrolMinSeconds, config.developer.idlePatrolMaxSeconds)
+            .coerceAtLeast(min)
+        return min + (max - min) * unitRandom()
+    }
+
+    private fun updatePatrols(dt: Float) {
+        for ((agentId, patrol) in patrols.toMap()) {
+            val developer = developers[agentId] ?: continue
+            patrol.socialCooldown = (patrol.socialCooldown - dt).coerceAtLeast(0f)
+
+            when (patrol.phase) {
+                PatrolPhase.IDLE_DELAY -> {
+                    if (developer.getState() == DeveloperStateNames.IDLE &&
+                        developer.isAtDesk() &&
+                        agentId !in conversationsByParticipant
+                    ) {
+                        patrol.idleElapsed += dt
+                        if (patrol.idleElapsed >= patrol.triggerAfter) {
+                            startPatrol(agentId, patrol)
+                        }
+                    } else {
+                        patrol.idleElapsed = 0f
+                    }
+                }
+                PatrolPhase.WALKING -> {
+                    if (developer.getState() != DeveloperStateNames.IDLE) {
+                        cancelPatrol(agentId)
+                    } else if (developer.hasReachedTarget()) {
+                        arriveAtPatrolStop(agentId, patrol)
+                    }
+                }
+                PatrolPhase.PAUSING -> {
+                    patrol.pauseRemaining -= dt
+                    if (patrol.pauseRemaining <= 0f) {
+                        developer.showThoughtBubble(false)
+                        continuePatrol(agentId, patrol)
+                    }
+                }
+                PatrolPhase.TALKING -> Unit // Conversation timing is coordinated separately.
+                PatrolPhase.RETURNING -> {
+                    if (developer.getState() != DeveloperStateNames.IDLE) {
+                        cancelPatrol(agentId)
+                    } else if (developer.hasReachedTarget()) {
+                        finishPatrol(agentId, patrol)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun startPatrol(agentId: String, patrol: DeveloperPatrol) {
+        patrol.stopsVisited = 0
+        patrol.visitedDeskIds.clear()
+        patrol.targetDeskId = null
+        moveToNextPatrolStop(agentId, patrol)
+    }
+
+    private fun moveToNextPatrolStop(agentId: String, patrol: DeveloperPatrol) {
+        if (patrol.stopsVisited >= config.developer.idlePatrolMaxStops.coerceAtLeast(0)) {
+            beginReturnToDesk(agentId, patrol)
+            return
+        }
+
+        val developer = developers[agentId] ?: return
+        val target = choosePatrolDesk(agentId, patrol)
+        if (target == null) {
+            beginReturnToDesk(agentId, patrol)
+            return
+        }
+
+        patrol.phase = PatrolPhase.WALKING
+        patrol.targetDeskId = target.id
+        developer.setMovementPaused(false)
+        developer.setAnimation("walking")
+        if (developer.isAtDesk() && patrol.stopsVisited == 0) {
+            developer.walkFromDeskWithPathfinding(target.x, target.y)
+        } else {
+            developer.walkToWithPathfinding(target.x, target.y)
+        }
+    }
+
+    private fun choosePatrolDesk(agentId: String, patrol: DeveloperPatrol): Desk? {
+        val homeDeskId = deskForDeveloper(agentId)?.id
+        val candidates = desks.values.filter {
+            it.id != homeDeskId && it.id !in patrol.visitedDeskIds
+        }
+        if (candidates.isEmpty()) return null
+
+        val talkable = candidates.filter { desk ->
+            val target = developerAtDesk(desk)
+            target != null &&
+                target.agentId != agentId &&
+                target.isAtDesk() &&
+                target.agentId !in conversationsByParticipant
+        }
+        val pool = talkable.ifEmpty { candidates }
+        return pool[(unitRandom() * pool.size).toInt().coerceIn(0, pool.lastIndex)]
+    }
+
+    private fun arriveAtPatrolStop(agentId: String, patrol: DeveloperPatrol) {
+        val developer = developers[agentId] ?: return
+        val desk = patrol.targetDeskId?.let(desks::get)
+        desk?.let { patrol.visitedDeskIds.add(it.id) }
+        patrol.stopsVisited++
+        developer.stopWalking()
+        developer.setAnimation("idle")
+
+        val target = desk?.let(::developerAtDesk)?.takeIf {
+            it.agentId != agentId &&
+                it.isAtDesk() &&
+                it.agentId !in conversationsByParticipant
+        }
+        if (target != null) {
+            startDeskConversation(agentId, target.agentId, patrol)
+        } else {
+            patrol.phase = PatrolPhase.PAUSING
+            patrol.pauseRemaining = config.developer.socialDurationSeconds.coerceAtLeast(0f)
+            developer.showBubbleOfType(if (unitRandom() < 0.5f) "thinking" else "question")
+        }
+    }
+
+    private fun startDeskConversation(
+        visitorAgentId: String,
+        targetAgentId: String,
+        patrol: DeveloperPatrol
+    ) {
+        val visitor = developers[visitorAgentId] ?: return
+        val target = developers[targetAgentId] ?: return
+        val conversation = DeveloperConversation(
+            firstAgentId = visitorAgentId,
+            secondAgentId = targetAgentId,
+            visitorAgentId = visitorAgentId,
+            interruptedAgentId = targetAgentId,
+            kind = ConversationKind.DESK_VISIT,
+            remaining = config.developer.socialDurationSeconds.coerceAtLeast(0f)
+        )
+        patrol.phase = PatrolPhase.TALKING
+        visitor.setMovementPaused(true)
+        visitor.showBubbleOfType(if (unitRandom() < 0.5f) "blah" else "question")
+        target.beginInterruption()
+        patrols[targetAgentId]?.let {
+            it.idleElapsed = 0f
+            it.triggerAfter = nextPatrolDelay()
+        }
+        conversationsByParticipant[visitorAgentId] = conversation
+        conversationsByParticipant[targetAgentId] = conversation
+    }
+
+    private fun continuePatrol(agentId: String, patrol: DeveloperPatrol) {
+        if (patrol.stopsVisited >= config.developer.idlePatrolMaxStops.coerceAtLeast(0)) {
+            beginReturnToDesk(agentId, patrol)
+        } else {
+            moveToNextPatrolStop(agentId, patrol)
+        }
+    }
+
+    private fun beginReturnToDesk(agentId: String, patrol: DeveloperPatrol) {
+        val developer = developers[agentId] ?: return
+        val desk = deskForDeveloper(agentId)
+        if (desk == null || developer.isAtDesk()) {
+            finishPatrol(agentId, patrol)
+            return
+        }
+        patrol.phase = PatrolPhase.RETURNING
+        patrol.targetDeskId = desk.id
+        developer.setMovementPaused(false)
+        developer.setAnimation("walking")
+        developer.walkToWithPathfinding(desk.x, desk.y)
+    }
+
+    private fun finishPatrol(agentId: String, patrol: DeveloperPatrol) {
+        developers[agentId]?.let {
+            it.setMovementPaused(false)
+            it.stopWalking()
+            it.showThoughtBubble(false)
+            it.setAnimation("idle")
+        }
+        resetPatrol(patrol)
+    }
+
+    private fun resetPatrol(patrol: DeveloperPatrol) {
+        patrol.phase = PatrolPhase.IDLE_DELAY
+        patrol.idleElapsed = 0f
+        patrol.triggerAfter = nextPatrolDelay()
+        patrol.stopsVisited = 0
+        patrol.targetDeskId = null
+        patrol.pauseRemaining = 0f
+        patrol.visitedDeskIds.clear()
+    }
+
+    private fun cancelPatrol(agentId: String) {
+        val patrol = patrols[agentId] ?: return
+        developers[agentId]?.let {
+            it.setMovementPaused(false)
+            it.stopWalking()
+            it.showThoughtBubble(false)
+        }
+        resetPatrol(patrol)
+    }
+
+    private fun updateConversations(dt: Float) {
+        val conversations = conversationsByParticipant.values.toSet()
+        for (conversation in conversations) {
+            if (conversation.participants().any { it !in developers }) {
+                endConversation(conversation)
+                continue
+            }
+            conversation.remaining -= dt
+            if (conversation.remaining <= 0f) {
+                endConversation(conversation)
+            }
+        }
+    }
+
+    private fun endConversation(
+        conversation: DeveloperConversation,
+        cancelledAgentId: String? = null
+    ) {
+        if (conversation.participants().none { conversationsByParticipant[it] === conversation }) return
+
+        conversation.participants().forEach { conversationsByParticipant.remove(it) }
+        conversation.participants().forEach { agentId ->
+            developers[agentId]?.let { developer ->
+                developer.showThoughtBubble(false)
+                developer.setMovementPaused(false)
+            }
+        }
+        conversation.interruptedAgentId
+            ?.takeIf { it != cancelledAgentId }
+            ?.let { developers[it]?.endInterruption() }
+
+        when (conversation.kind) {
+            ConversationKind.DESK_VISIT -> {
+                val visitorId = conversation.visitorAgentId ?: return
+                val patrol = patrols[visitorId] ?: return
+                if (visitorId != cancelledAgentId &&
+                    developers[visitorId]?.getState() == DeveloperStateNames.IDLE
+                ) {
+                    continuePatrol(visitorId, patrol)
+                }
+            }
+            ConversationKind.PATROL_COLLISION -> {
+                for (agentId in conversation.participants()) {
+                    val patrol = patrols[agentId] ?: continue
+                    patrol.socialCooldown = SOCIAL_COLLISION_COOLDOWN_SECONDS
+                    if (agentId != cancelledAgentId &&
+                        developers[agentId]?.getState() == DeveloperStateNames.IDLE
+                    ) {
+                        patrol.phase = PatrolPhase.WALKING
+                        developers[agentId]?.setAnimation("walking")
+                    }
+                }
+            }
+        }
+    }
+
+    private fun checkPatrollerCollisions() {
+        val walking = patrols.entries.filter { (agentId, patrol) ->
+            patrol.phase == PatrolPhase.WALKING &&
+                patrol.socialCooldown <= 0f &&
+                agentId !in conversationsByParticipant
+        }
+        for (firstIndex in walking.indices) {
+            for (secondIndex in firstIndex + 1 until walking.size) {
+                val firstId = walking[firstIndex].key
+                val secondId = walking[secondIndex].key
+                if (firstId in conversationsByParticipant || secondId in conversationsByParticipant) continue
+                val first = developers[firstId] ?: continue
+                val second = developers[secondId] ?: continue
+                if (first.distanceTo(second) >= SOCIAL_COLLISION_DISTANCE) continue
+
+                val conversation = DeveloperConversation(
+                    firstAgentId = firstId,
+                    secondAgentId = secondId,
+                    visitorAgentId = null,
+                    interruptedAgentId = null,
+                    kind = ConversationKind.PATROL_COLLISION,
+                    remaining = config.developer.socialDurationSeconds.coerceAtLeast(0f)
+                )
+                walking[firstIndex].value.phase = PatrolPhase.TALKING
+                walking[secondIndex].value.phase = PatrolPhase.TALKING
+                first.setMovementPaused(true)
+                second.setMovementPaused(true)
+                first.setAnimation("idle")
+                second.setAnimation("idle")
+                first.showBubbleOfType("blah")
+                second.showBubbleOfType("blah")
+                conversationsByParticipant[firstId] = conversation
+                conversationsByParticipant[secondId] = conversation
+            }
+        }
+    }
+
+    private fun deskForDeveloper(agentId: String): Desk? {
+        val entityId = developers[agentId]?.entityId ?: return null
+        return desks.values.firstOrNull { it.occupiedBy == entityId }
+    }
+
+    private fun developerAtDesk(desk: Desk): Developer? {
+        val entityId = desk.occupiedBy ?: return null
+        return developers.values.firstOrNull { it.entityId == entityId }
     }
 
     // Rendering data
@@ -809,10 +993,10 @@ class Office(private val config: Config) {
                 WhiteboardRenderInfo(w.id, w.x, w.y)
             },
             developers = developers.values.map { it.getTypedRenderInfo() },
+            pets = pets.values.map { it.getTypedRenderInfo() },
             effects = effects.filter { it.visible }.map { it.toEffectRenderInfo() },
             deskColumns = columns,
-            projectManager = projectManager?.getTypedRenderInfo(),
-            productOwner = productOwner?.takeIf { it.isActive() }?.getTypedRenderInfo()
+            accentPalette = OfficeAccentPalette.forProject(projectId)
         )
     }
 
@@ -820,6 +1004,8 @@ class Office(private val config: Config) {
      * Get the line network for debug rendering.
      */
     fun getLineNetwork(): LineNetwork = lineNetwork
+
+    internal fun getPets(): List<OfficePet> = pets.values.toList()
 
     /**
      * Get all renderable entities in z-order.
@@ -830,13 +1016,7 @@ class Office(private val config: Config) {
         // Add characters (sorted by y for depth)
         val characters = mutableListOf<BaseEntity>()
         characters.addAll(developers.values)
-        projectManager?.let { characters.add(it) }
-        productOwner?.let { po ->
-            if (po.isActive()) {
-                characters.add(po)
-            }
-        }
-
+        characters.addAll(pets.values)
         characters.sortBy { it.y }
         entities.addAll(characters)
 

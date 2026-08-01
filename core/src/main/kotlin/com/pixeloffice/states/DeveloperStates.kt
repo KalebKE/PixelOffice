@@ -19,6 +19,7 @@ object DeveloperStateNames {
     const val MERGING = "merging"
     const val CI_FAILED = "ci_failed"
     const val TESTS_FAILING = "tests_failing"
+    const val WAITING = "waiting"
     const val BEING_INTERRUPTED = "being_interrupted"
 }
 
@@ -52,22 +53,13 @@ class IdleState : State<Developer>(DeveloperStateNames.IDLE) {
 /**
  * Developer is thinking, showing thought bubble.
  */
-class ThinkingState(private val timeout: Float = 4.0f) : State<Developer>(DeveloperStateNames.THINKING) {
-    private var timer = 0f
-
+class ThinkingState : State<Developer>(DeveloperStateNames.THINKING) {
     override fun enter(entity: Developer, prevState: State<Developer>?) {
         entity.setAnimation("idle")
         entity.showBubbleOfType("thinking")
-        timer = 0f
     }
 
-    override fun update(entity: Developer, dt: Float): String? {
-        timer += dt
-        if (timer >= timeout) {
-            return DeveloperStateNames.IDLE
-        }
-        return null
-    }
+    override fun update(entity: Developer, dt: Float): String? = null
 
     override fun exit(entity: Developer, nextState: State<Developer>?) {
         entity.showThoughtBubble(false)
@@ -75,7 +67,7 @@ class ThinkingState(private val timeout: Float = 4.0f) : State<Developer>(Develo
 
     override fun onEvent(entity: Developer, event: String, data: Any?): String? {
         return when (event) {
-            "thinking_started" -> { timer = 0f; null }
+            "thinking_started" -> null
             "done_thinking" -> DeveloperStateNames.IDLE
             "researching_started" -> DeveloperStateNames.RESEARCHING
             "code_writing_started" -> DeveloperStateNames.WRITING_CODE
@@ -152,16 +144,31 @@ class AtWhiteboardState : State<Developer>(DeveloperStateNames.AT_WHITEBOARD) {
     override fun onEvent(entity: Developer, event: String, data: Any?): String? {
         return when (event) {
             "planning_started" -> null
-            "code_writing_started" -> DeveloperStateNames.WALKING_TO_DESK
-            "command_started" -> DeveloperStateNames.WALKING_TO_DESK
+            "code_writing_started" -> {
+                entity.setDeskArrivalState(DeveloperStateNames.WRITING_CODE)
+                DeveloperStateNames.WALKING_TO_DESK
+            }
+            "command_started" -> {
+                entity.setDeskArrivalState(DeveloperStateNames.RUNNING_COMMAND)
+                DeveloperStateNames.WALKING_TO_DESK
+            }
             "thinking_started" -> {
                 entity.showBubbleOfType("thinking")
                 null
             }
             "researching_started" -> null
-            "tests_failed" -> DeveloperStateNames.WALKING_TO_DESK
-            "command_succeeded" -> DeveloperStateNames.WALKING_TO_DESK
-            "done" -> DeveloperStateNames.WALKING_TO_DESK
+            "tests_failed" -> {
+                entity.setDeskArrivalState(DeveloperStateNames.TESTS_FAILING)
+                DeveloperStateNames.WALKING_TO_DESK
+            }
+            "command_succeeded" -> {
+                entity.setDeskArrivalState(DeveloperStateNames.CELEBRATING)
+                DeveloperStateNames.WALKING_TO_DESK
+            }
+            "done" -> {
+                entity.setDeskArrivalState(DeveloperStateNames.IDLE)
+                DeveloperStateNames.WALKING_TO_DESK
+            }
             "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
             else -> null
         }
@@ -188,7 +195,7 @@ class WalkingToDeskState : State<Developer>(DeveloperStateNames.WALKING_TO_DESK)
     override fun update(entity: Developer, dt: Float): String? {
         if (!pathSet) return DeveloperStateNames.IDLE
         if (entity.hasReachedTarget()) {
-            return DeveloperStateNames.WRITING_CODE
+            return entity.consumeDeskArrivalState()
         }
         return null
     }
@@ -198,6 +205,30 @@ class WalkingToDeskState : State<Developer>(DeveloperStateNames.WALKING_TO_DESK)
     override fun onEvent(entity: Developer, event: String, data: Any?): String? {
         return when (event) {
             "planning_started" -> DeveloperStateNames.WALKING_TO_WHITEBOARD
+            "thinking_started" -> {
+                entity.setDeskArrivalState(DeveloperStateNames.THINKING)
+                null
+            }
+            "researching_started" -> {
+                entity.setDeskArrivalState(DeveloperStateNames.RESEARCHING)
+                null
+            }
+            "code_writing_started" -> {
+                entity.setDeskArrivalState(DeveloperStateNames.WRITING_CODE)
+                null
+            }
+            "command_started" -> {
+                entity.setDeskArrivalState(DeveloperStateNames.RUNNING_COMMAND)
+                null
+            }
+            "command_succeeded" -> {
+                entity.setDeskArrivalState(DeveloperStateNames.CELEBRATING)
+                null
+            }
+            "tests_failed" -> {
+                entity.setDeskArrivalState(DeveloperStateNames.TESTS_FAILING)
+                null
+            }
             "arrived" -> DeveloperStateNames.WRITING_CODE
             "interrupted" -> DeveloperStateNames.BEING_INTERRUPTED
             else -> null
@@ -354,8 +385,8 @@ class BuildingState : State<Developer>(DeveloperStateNames.BUILDING) {
 }
 
 /**
- * Tests passed or build succeeded — brief moment of triumph.
- * Auto-transitions to IDLE after 1.5 seconds. Any new work event cuts it short.
+ * Tests passed or build succeeded — brief moment of triumph before the
+ * developer returns to thinking. Any new work event cuts it short.
  */
 class CelebratingState(private val duration: Float = 1.5f) : State<Developer>(DeveloperStateNames.CELEBRATING) {
     private var timer = 0f
@@ -369,7 +400,7 @@ class CelebratingState(private val duration: Float = 1.5f) : State<Developer>(De
     override fun update(entity: Developer, dt: Float): String? {
         timer += dt
         if (timer >= duration) {
-            return DeveloperStateNames.IDLE
+            return DeveloperStateNames.THINKING
         }
         return null
     }
@@ -483,7 +514,36 @@ class TestsFailingState(private val duration: Float = 2.0f) : State<Developer>(D
 }
 
 /**
- * Developer is being interrupted by PM or PO.
+ * Agent is waiting for permission or user input.
+ */
+class WaitingState : State<Developer>(DeveloperStateNames.WAITING) {
+    override fun enter(entity: Developer, prevState: State<Developer>?) {
+        entity.setAnimation("idle")
+        entity.showBubbleOfType("annoyed")
+    }
+
+    override fun update(entity: Developer, dt: Float): String? = null
+
+    override fun exit(entity: Developer, nextState: State<Developer>?) {
+        entity.showThoughtBubble(false)
+    }
+
+    override fun onEvent(entity: Developer, event: String, data: Any?): String? {
+        return when (event) {
+            "thinking_started" -> DeveloperStateNames.THINKING
+            "planning_started" -> DeveloperStateNames.WALKING_TO_WHITEBOARD
+            "researching_started" -> DeveloperStateNames.RESEARCHING
+            "code_writing_started" -> DeveloperStateNames.WRITING_CODE
+            "command_started" -> DeveloperStateNames.RUNNING_COMMAND
+            "command_succeeded" -> DeveloperStateNames.CELEBRATING
+            "tests_failed" -> DeveloperStateNames.TESTS_FAILING
+            else -> null
+        }
+    }
+}
+
+/**
+ * Developer is being interrupted by another developer's idle conversation.
  */
 class BeingInterruptedState(private val duration: Float = 3.0f) : State<Developer>(DeveloperStateNames.BEING_INTERRUPTED) {
     private var timer = 0f
@@ -493,7 +553,7 @@ class BeingInterruptedState(private val duration: Float = 3.0f) : State<Develope
         entity.setAnimation("idle")
         timer = 0f
         previousState = prevState?.name ?: DeveloperStateNames.IDLE
-        // Show annoyed bubble when PM interrupts
+        // Show an annoyed bubble while a coworker interrupts.
         entity.showAnnoyedBubble()
     }
 
@@ -541,6 +601,7 @@ class DeveloperStateMachine(
         addState(MergingState())
         addState(CiFailedState())
         addState(TestsFailingState(despairDuration))
+        addState(WaitingState())
         addState(BeingInterruptedState(interruptDuration))
     }
 }

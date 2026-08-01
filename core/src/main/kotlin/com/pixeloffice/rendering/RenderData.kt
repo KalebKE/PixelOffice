@@ -1,6 +1,7 @@
 package com.pixeloffice.rendering
 
 import com.pixeloffice.world.DeskColumn
+import kotlin.random.Random
 
 /**
  * Typed render data for a desk.
@@ -51,10 +52,9 @@ sealed class EffectRenderInfo {
 }
 
 /**
- * Typed render data for a character (developer, PM, or PO).
+ * Typed render data for a developer character.
  */
 data class CharacterRenderInfo(
-    val type: String,         // "developer", "project_manager", "product_owner"
     val entityId: String,
     val x: Float,
     val y: Float,
@@ -67,6 +67,43 @@ data class CharacterRenderInfo(
     val children: List<EffectRenderInfo> = emptyList()
 )
 
+enum class PetType {
+    CAT,
+    DOG
+}
+
+data class PetRenderInfo(
+    val entityId: String,
+    val type: PetType,
+    val x: Float,
+    val y: Float,
+    val facing: String,
+    val moving: Boolean,
+    val restingAnchorId: String?,
+    val visible: Boolean,
+    val showBubble: Boolean
+)
+
+/** Coordinated lounge and lava-lamp colors, selected stably per project. */
+enum class OfficeAccentPalette(
+    val couchSprite: String,
+    val trashCanSprite: String
+) {
+    SUNSET("couch_orange", "red_trash_can"),
+    FOREST("couch_green", "green_trash_can"),
+    OCEAN("couch_blue", "blue_trash_can"),
+    SLATE("couch_gray", "blue_trash_can");
+
+    companion object {
+        private const val PROJECT_SEED_SALT = 0x0FF1CE
+
+        fun forProject(projectId: String): OfficeAccentPalette {
+            val random = Random(31 * projectId.hashCode() + PROJECT_SEED_SALT)
+            return entries[random.nextInt(entries.size)]
+        }
+    }
+}
+
 /**
  * Complete typed render data passed from Office to Renderer each frame.
  * Replaces the previous Map<String, Any> with compile-time type safety.
@@ -75,8 +112,8 @@ data class RenderData(
     val desks: List<DeskRenderInfo>,
     val whiteboards: List<WhiteboardRenderInfo>,
     val developers: List<CharacterRenderInfo>,
+    val pets: List<PetRenderInfo>,
     val effects: List<EffectRenderInfo>,
     val deskColumns: List<DeskColumn>,
-    val projectManager: CharacterRenderInfo?,
-    val productOwner: CharacterRenderInfo?
+    val accentPalette: OfficeAccentPalette
 )
